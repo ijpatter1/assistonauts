@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 
-from assistonauts.agents.base import LLMClientProtocol
+from assistonauts.agents.base import Agent, LLMClientProtocol
 
 
 class MissionStatus(Enum):
@@ -60,7 +60,7 @@ def _resolve_agent(
     agent_name: str,
     workspace_root: Path,
     llm_client: LLMClientProtocol,
-) -> object:
+) -> Agent:
     """Create an agent instance by name."""
     if agent_name == "compiler":
         from assistonauts.agents.compiler import CompilerAgent
@@ -123,7 +123,7 @@ class MissionRunner:
         # Execute with retry logic
         while True:
             try:
-                agent_output = agent.run_mission(mission.params)  # type: ignore[union-attr]
+                agent_output = agent.run_mission(mission.params)
                 mission.status = MissionStatus.COMPLETED
                 result = MissionResult(
                     success=True,
@@ -206,7 +206,7 @@ class MissionRunner:
                 capture_output=True,
             )
             title = mission.params.get("title", "article")
-            msg = f"[mission-{mission.mission_id}] {mission.agent}: compile {title}"
+            msg = f"[mission-{mission.mission_id}] {mission.agent}: process {title}"
             subprocess.run(
                 ["git", "commit", "-m", msg],
                 cwd=self._workspace_root,

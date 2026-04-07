@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -149,7 +150,7 @@ class CompilerAgent(Agent):
         # Check for existing article (recompilation)
         existing_content = ""
         if output_path.exists():
-            existing_content = output_path.read_text()
+            existing_content = self.read_file(output_path)
 
         # Render template scaffold
         sources = [source_path.name]
@@ -162,14 +163,27 @@ class CompilerAgent(Agent):
 
         # Build compilation prompt
         if existing_content:
-            diff = generate_diff(existing_content, source_content)
+            # For recompilation, provide the existing article and updated
+            # source. The LLM reasons about what changed and updates the
+            # article accordingly. We diff the article structures to give
+            # the LLM a summary of the current article's shape.
+            article_diff = generate_diff("", existing_content)
             compile_msg = (
-                f"Recompile this wiki article based on updated source material.\n\n"
-                f"Changes detected: {diff.summary}\n\n"
-                f"Current article:\n```markdown\n{existing_content}\n```\n\n"
-                f"Updated source material:\n```markdown\n{source_content}\n```\n\n"
-                f"Template structure to follow:\n```markdown\n{template}\n```\n\n"
-                f"Output the complete updated article including frontmatter."
+                f"Recompile this wiki article based on updated source "
+                f"material. The source has changed since the last "
+                f"compilation.\n\n"
+                f"Current article structure: "
+                f"{article_diff.summary}\n\n"
+                f"Current article:\n"
+                f"```markdown\n{existing_content}\n```\n\n"
+                f"Updated source material:\n"
+                f"```markdown\n{source_content}\n```\n\n"
+                f"Template structure to follow:\n"
+                f"```markdown\n{template}\n```\n\n"
+                f"Update the article to reflect the new source material. "
+                f"Preserve existing content where it is still accurate. "
+                f"Output the complete updated article including "
+                f"frontmatter."
             )
         else:
             compile_msg = (
@@ -188,18 +202,27 @@ class CompilerAgent(Agent):
         # Write article
         self.write_file(output_path, article_content)
 
-        # Generate content summary
+        # Generate content summary using dedicated summary prompt
         summary_msg = (
             f"Summarize this wiki article:\n\n```markdown\n{article_content}\n```"
         )
-        content_summary = self.call_llm(
+        summary_response = self.llm_client.complete(
             messages=[{"role": "user", "content": summary_msg}],
+            system=_SUMMARY_SYSTEM_PROMPT,
         )
-        # Override system prompt for summary call — use the base call_llm
-        # which uses self.system_prompt. We'll store the raw response.
-        # In practice the summary prompt is self-contained enough.
+        content_summary = summary_response.content
 
-        # Update manifest
+        # Persist content summary alongside the article
+        summary_path = output_path.with_suffix(".summary.json")
+        summary_data = {
+            "summary": content_summary,
+            "article_path": str(output_path),
+            "manifest_key": manifest_key,
+            "generated_at": datetime.now(UTC).isoformat(),
+        }
+        self.write_file(summary_path, json.dumps(summary_data, indent=2))
+
+        # Update manifest with downstream tracking
         now = datetime.now(UTC).isoformat()
         content_hash = hash_content(source_path)
         manifest.set(
@@ -210,6 +233,11 @@ class CompilerAgent(Agent):
                 processed_by="compiler",
             ),
         )
+        # Track source→wiki dependency in the source's manifest entry
+        source_key = str(source_path.relative_to(self._workspace_root))
+        source_entry = manifest.get(source_key)
+        if source_entry and manifest_key not in source_entry.downstream:
+            source_entry.downstream.append(manifest_key)
         manifest.save()
 
         return CompilationResult(

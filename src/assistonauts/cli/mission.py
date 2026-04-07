@@ -8,13 +8,13 @@ from pathlib import Path
 import click
 from rich.console import Console
 
+from assistonauts.llm.client import LLMClient
+
 console = Console()
 
 
-def _create_llm_client() -> object:
+def _create_llm_client() -> LLMClient:
     """Create a default LLM client. Extracted for test mocking."""
-    from assistonauts.llm.client import LLMClient
-
     return LLMClient(provider_config={}, mode="live")
 
 

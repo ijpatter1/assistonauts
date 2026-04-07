@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from assistonauts.agents.compiler import CompilationResult, CompilerAgent
+from assistonauts.agents.compiler import (
+    CompilationResult,
+    CompilerAgent,
+    _slugify,
+)
 from assistonauts.models.schema import ArticleType
 
 # --- Fake LLM responses ---
@@ -138,6 +142,31 @@ def workspace(tmp_path: Path) -> Path:
     return root
 
 
+class TestSlugify:
+    """Test the _slugify helper function."""
+
+    def test_basic_slugify(self) -> None:
+        assert _slugify("Machine Learning") == "machine-learning"
+
+    def test_special_characters_removed(self) -> None:
+        assert _slugify("What's New?") == "whats-new"
+
+    def test_max_length_enforced(self) -> None:
+        long_title = "a" * 100
+        result = _slugify(long_title, max_length=20)
+        assert len(result) == 20
+
+    def test_empty_string(self) -> None:
+        assert _slugify("") == ""
+
+    def test_custom_separator(self) -> None:
+        assert _slugify("Hello World", separator="_") == "hello_world"
+
+    def test_unicode_preserved(self) -> None:
+        result = _slugify("Résumé of Work")
+        assert "résumé" in result
+
+
 class TestCompilerAgent:
     """Test the Compiler agent compilation pipeline."""
 
@@ -186,6 +215,27 @@ class TestCompilerAgent:
         )
         assert "machine learning" in result.content_summary.lower()
 
+    def test_compile_persists_summary_to_disk(self, workspace: Path) -> None:
+        llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
+        compiler = CompilerAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+        )
+        result = compiler.compile(
+            source_path=workspace / "raw" / "articles" / "test-source.md",
+            article_type=ArticleType.CONCEPT,
+            title="Test Concept",
+        )
+        assert result.output_path is not None
+        summary_path = result.output_path.with_suffix(".summary.json")
+        assert summary_path.exists()
+        import json
+
+        data = json.loads(summary_path.read_text())
+        assert "summary" in data
+        assert len(data["summary"]) > 0
+        assert "article_path" in data
+
     def test_compile_updates_manifest(self, workspace: Path) -> None:
         llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
         compiler = CompilerAgent(
@@ -221,6 +271,21 @@ class TestCompilerAgent:
         # First call should include source content in the message
         first_msg = str(llm.calls[0]["messages"])
         assert "Machine Learning Basics" in first_msg
+
+    def test_summary_uses_dedicated_system_prompt(self, workspace: Path) -> None:
+        llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
+        compiler = CompilerAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+        )
+        compiler.compile(
+            source_path=workspace / "raw" / "articles" / "test-source.md",
+            article_type=ArticleType.CONCEPT,
+            title="Test Concept",
+        )
+        # Second call (summary) should use summary system prompt
+        summary_call = llm.calls[1]
+        assert "summarizer" in str(summary_call["system"]).lower()
 
     def test_compile_skips_unchanged(self, workspace: Path) -> None:
         llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
@@ -306,6 +371,15 @@ class TestCompilerAgent:
         assert result.output_path is not None
         # Output should be under wiki/
         assert "wiki" in str(result.output_path)
+
+    def test_expedition_scope_in_system_prompt(self, workspace: Path) -> None:
+        llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
+        compiler = CompilerAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+            expedition_scope="Focus on machine learning algorithms",
+        )
+        assert "machine learning algorithms" in compiler.system_prompt
 
     def test_ownership_enforced(self, workspace: Path) -> None:
         from assistonauts.agents.base import OwnershipError
