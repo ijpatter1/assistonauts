@@ -6,6 +6,7 @@ All functions are pure/deterministic (no LLM calls) and independently testable.
 from __future__ import annotations
 
 import hashlib
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -62,8 +63,6 @@ def clip_web(url: str, output_dir: Path) -> tuple[str, list[Path]]:
 
     Returns a tuple of (markdown_content, list_of_downloaded_asset_paths).
     """
-    import urllib.request
-
     from markitdown import MarkItDown
 
     # Download the page to a temp file

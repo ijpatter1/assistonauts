@@ -1,10 +1,12 @@
 """Tests for Scout toolkit functions."""
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from assistonauts.tools.scout import (
     check_dedup,
     check_relevance_keywords,
+    clip_web,
     convert_text_file,
     hash_content,
 )
@@ -141,3 +143,61 @@ class TestCheckDedup:
         existing = {"raw/papers/test.md": content}
         matches = check_dedup(content, existing)
         assert matches[0].key == "raw/papers/test.md"
+
+
+class TestClipWeb:
+    """Test web clipping (with mocked network)."""
+
+    @patch("assistonauts.tools.scout.urllib.request.urlretrieve")
+    def test_clip_web_returns_markdown(
+        self, mock_urlretrieve: MagicMock, tmp_path: Path
+    ) -> None:
+        """clip_web fetches a URL and returns markdown content."""
+
+        # Write a fake HTML file where urlretrieve would save it
+        def fake_retrieve(url: str, dest: str) -> None:
+            Path(dest).write_text(
+                "<html><body><h1>Title</h1><p>Content here.</p></body></html>"
+            )
+
+        mock_urlretrieve.side_effect = fake_retrieve
+
+        content, assets = clip_web("https://example.com/article", tmp_path)
+
+        assert isinstance(content, str)
+        assert len(content) > 0
+        assert isinstance(assets, list)
+        mock_urlretrieve.assert_called_once()
+
+    @patch("assistonauts.tools.scout.urllib.request.urlretrieve")
+    def test_clip_web_cleans_up_temp_file(
+        self, mock_urlretrieve: MagicMock, tmp_path: Path
+    ) -> None:
+        """clip_web removes the temp HTML file after conversion."""
+
+        def fake_retrieve(url: str, dest: str) -> None:
+            Path(dest).write_text("<html><body>Test</body></html>")
+
+        mock_urlretrieve.side_effect = fake_retrieve
+
+        clip_web("https://example.com/page", tmp_path)
+
+        # No _web_*.html files should remain
+        html_files = list(tmp_path.glob("_web_*.html"))
+        assert len(html_files) == 0
+
+    @patch("assistonauts.tools.scout.urllib.request.urlretrieve")
+    def test_clip_web_creates_output_dir(
+        self, mock_urlretrieve: MagicMock, tmp_path: Path
+    ) -> None:
+        """clip_web creates the output directory if it doesn't exist."""
+        output = tmp_path / "new_dir"
+
+        def fake_retrieve(url: str, dest: str) -> None:
+            Path(dest).write_text("<html><body>Test</body></html>")
+
+        mock_urlretrieve.side_effect = fake_retrieve
+
+        clip_web("https://example.com", output)
+
+        assert output.is_dir()

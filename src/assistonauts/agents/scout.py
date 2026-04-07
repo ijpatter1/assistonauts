@@ -9,7 +9,9 @@ from pathlib import Path
 from assistonauts.agents.base import Agent, LLMClientProtocol
 from assistonauts.cache.content import Manifest, hash_content
 from assistonauts.tools.scout import (
+    check_dedup,
     check_relevance_keywords,
+    clip_web,
     convert_document,
     convert_text_file,
 )
@@ -62,6 +64,8 @@ class ScoutAgent(Agent):
                 "check_relevance_keywords": check_relevance_keywords,
                 "convert_text_file": convert_text_file,
                 "convert_document": convert_document,
+                "clip_web": clip_web,
+                "check_dedup": check_dedup,
             },
         )
         self._workspace_root = workspace_root

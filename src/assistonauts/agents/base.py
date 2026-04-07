@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from assistonauts.tools.shared import StructuredLogger
+
 
 class OwnershipError(PermissionError):
     """Raised when an agent tries to access a path outside its boundaries."""
@@ -54,6 +56,12 @@ class Agent:
     owned_dirs: list[Path]
     readable_dirs: list[Path]
     toolkit: dict[str, Callable[..., object]] = field(default_factory=dict)
+    logger: StructuredLogger | None = None
+
+    def __post_init__(self) -> None:
+        """Create a default logger if none was provided."""
+        if self.logger is None:
+            self.logger = StructuredLogger(role=self.role)
 
     def run_mission(self, mission: object) -> object:
         """Execute a mission. Subclasses must override."""
@@ -74,6 +82,8 @@ class Agent:
             raise OwnershipError(self.role, path, self.owned_dirs)
         resolved.parent.mkdir(parents=True, exist_ok=True)
         resolved.write_text(content)
+        assert self.logger is not None
+        self.logger.log_file_write(str(resolved))
 
     def call_llm(self, messages: list[dict[str, str]], **kwargs: object) -> str:
         """Call LLM via the injected client with this agent's system prompt."""
@@ -81,6 +91,15 @@ class Agent:
             messages=messages,
             system=self.system_prompt,
             **kwargs,
+        )
+        assert self.logger is not None
+        usage = getattr(response, "usage", {})
+        p_tokens = usage.get("prompt_tokens", 0) if isinstance(usage, dict) else 0
+        c_tokens = usage.get("completion_tokens", 0) if isinstance(usage, dict) else 0
+        self.logger.log_llm_call(
+            model=getattr(response, "model", "unknown"),
+            prompt_tokens=p_tokens,
+            completion_tokens=c_tokens,
         )
         return response.content
 

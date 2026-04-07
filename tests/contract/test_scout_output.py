@@ -5,8 +5,6 @@ These tests validate the structural contract of Scout output:
 - Required frontmatter fields
 - Content is valid markdown
 - Assets referenced correctly (when applicable)
-
-Uses the replay LLM client with recorded fixtures for determinism.
 """
 
 from pathlib import Path
@@ -14,28 +12,7 @@ from pathlib import Path
 import yaml
 
 from assistonauts.agents.scout import ScoutAgent
-
-
-class FakeResponse:
-    """Minimal fake LLM response."""
-
-    def __init__(self, content: str) -> None:
-        self.content = content
-        self.model = "fake"
-        self.usage = {"prompt_tokens": 5, "completion_tokens": 3}
-
-
-class FakeLLMClient:
-    """Fake LLM client for contract tests."""
-
-    def complete(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        system: str | None = None,
-        **kwargs: object,
-    ) -> FakeResponse:
-        return FakeResponse("relevant")
+from tests.conftest import FakeLLMClient
 
 
 def _setup_workspace(tmp_path: Path) -> Path:

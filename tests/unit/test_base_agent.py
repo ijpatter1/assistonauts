@@ -5,36 +5,8 @@ from pathlib import Path
 import pytest
 
 from assistonauts.agents.base import Agent, OwnershipError
-
-
-class FakeResponse:
-    """Minimal fake LLM response for testing."""
-
-    def __init__(self, content: str) -> None:
-        self.content = content
-        self.model = "fake-model"
-        self.usage = {"prompt_tokens": 10, "completion_tokens": 5}
-
-
-class FakeLLMClient:
-    """Fake LLM client that returns canned responses."""
-
-    def __init__(self, responses: list[str] | None = None) -> None:
-        self._responses = list(responses or ["default response"])
-        self._call_count = 0
-        self.calls: list[dict[str, object]] = []
-
-    def complete(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        system: str | None = None,
-        **kwargs: object,
-    ) -> FakeResponse:
-        self.calls.append({"messages": messages, "model": model, "system": system})
-        idx = min(self._call_count, len(self._responses) - 1)
-        self._call_count += 1
-        return FakeResponse(self._responses[idx])
+from assistonauts.tools.shared import StructuredLogger
+from tests.conftest import FakeLLMClient
 
 
 class TestAgentConstruction:
@@ -88,6 +60,30 @@ class TestAgentConstruction:
             readable_dirs=[],
         )
         assert agent.toolkit == {}
+
+    def test_default_logger_created(self) -> None:
+        """Agent creates a default StructuredLogger if none provided."""
+        agent = Agent(
+            role="scout",
+            system_prompt="Test",
+            llm_client=FakeLLMClient(),
+            owned_dirs=[],
+            readable_dirs=[],
+        )
+        assert isinstance(agent.logger, StructuredLogger)
+
+    def test_custom_logger_preserved(self, tmp_path: Path) -> None:
+        """Agent preserves a custom logger when provided."""
+        custom_logger = StructuredLogger(role="scout", log_dir=tmp_path)
+        agent = Agent(
+            role="scout",
+            system_prompt="Test",
+            llm_client=FakeLLMClient(),
+            owned_dirs=[],
+            readable_dirs=[],
+            logger=custom_logger,
+        )
+        assert agent.logger is custom_logger
 
 
 class TestOwnershipEnforcement:
@@ -266,3 +262,49 @@ class TestRunMission:
 
         with pytest.raises(NotImplementedError):
             agent.run_mission({})  # type: ignore[arg-type]
+
+
+class TestLogging:
+    """Test that agent operations produce structured log entries."""
+
+    def test_write_file_logs(self, tmp_path: Path) -> None:
+        """write_file logs to the structured logger."""
+        log_dir = tmp_path / "logs"
+        logger = StructuredLogger(role="scout", log_dir=log_dir)
+        owned = tmp_path / "raw"
+        owned.mkdir()
+
+        agent = Agent(
+            role="scout",
+            system_prompt="Test",
+            llm_client=FakeLLMClient(),
+            owned_dirs=[owned],
+            readable_dirs=[],
+            logger=logger,
+        )
+
+        agent.write_file(owned / "test.md", "content")
+
+        log_file = log_dir / "scout.jsonl"
+        assert log_file.exists()
+        assert "file_write" in log_file.read_text()
+
+    def test_call_llm_logs(self, tmp_path: Path) -> None:
+        """call_llm logs the LLM call."""
+        log_dir = tmp_path / "logs"
+        logger = StructuredLogger(role="scout", log_dir=log_dir)
+
+        agent = Agent(
+            role="scout",
+            system_prompt="Test",
+            llm_client=FakeLLMClient(["response"]),
+            owned_dirs=[],
+            readable_dirs=[],
+            logger=logger,
+        )
+
+        agent.call_llm([{"role": "user", "content": "hello"}])
+
+        log_file = log_dir / "scout.jsonl"
+        assert log_file.exists()
+        assert "llm_call" in log_file.read_text()

@@ -4,36 +4,7 @@ from pathlib import Path
 
 from assistonauts.agents.scout import ScoutAgent
 from assistonauts.cache.content import Manifest
-
-
-class FakeResponse:
-    """Minimal fake LLM response."""
-
-    def __init__(self, content: str) -> None:
-        self.content = content
-        self.model = "fake"
-        self.usage = {"prompt_tokens": 5, "completion_tokens": 3}
-
-
-class FakeLLMClient:
-    """Fake LLM client for testing."""
-
-    def __init__(self, responses: list[str] | None = None) -> None:
-        self._responses = list(responses or ["relevant"])
-        self._idx = 0
-        self.calls: list[dict[str, object]] = []
-
-    def complete(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        system: str | None = None,
-        **kwargs: object,
-    ) -> FakeResponse:
-        self.calls.append({"messages": messages, "system": system})
-        idx = min(self._idx, len(self._responses) - 1)
-        self._idx += 1
-        return FakeResponse(self._responses[idx])
+from tests.conftest import FakeLLMClient
 
 
 class TestScoutAgentCreation:
@@ -62,7 +33,7 @@ class TestScoutAgentCreation:
         assert any(str(d).endswith("raw") for d in agent.owned_dirs)
 
     def test_has_toolkit_functions(self, tmp_path: Path) -> None:
-        """Scout agent registers toolkit functions."""
+        """Scout agent registers all toolkit functions."""
         raw_dir = tmp_path / "raw"
         raw_dir.mkdir()
 
@@ -73,6 +44,9 @@ class TestScoutAgentCreation:
         assert "hash_content" in agent.toolkit
         assert "check_relevance_keywords" in agent.toolkit
         assert "convert_text_file" in agent.toolkit
+        assert "convert_document" in agent.toolkit
+        assert "clip_web" in agent.toolkit
+        assert "check_dedup" in agent.toolkit
 
 
 class TestScoutIngest:
@@ -190,3 +164,44 @@ class TestScoutIngest:
         assert content.startswith("---\n")
         assert "source:" in content
         assert "ingested_by: scout" in content
+
+
+class TestScoutRunMission:
+    """Test run_mission delegates to ingest."""
+
+    def test_run_mission_ingests_source(self, tmp_path: Path) -> None:
+        """run_mission with source_path delegates to ingest."""
+        (tmp_path / "raw" / "articles").mkdir(parents=True)
+        (tmp_path / "index").mkdir(parents=True)
+        (tmp_path / "index" / "manifest.json").write_text("{}\n")
+
+        source = tmp_path / "mission-doc.txt"
+        source.write_text("Mission document content.")
+
+        agent = ScoutAgent(
+            llm_client=FakeLLMClient(),
+            workspace_root=tmp_path,
+        )
+
+        result = agent.run_mission({"source_path": str(source)})
+        assert result.success is True
+        assert result.output_path is not None
+        assert result.output_path.exists()
+
+    def test_run_mission_with_category(self, tmp_path: Path) -> None:
+        """run_mission passes category to ingest."""
+        (tmp_path / "raw" / "papers").mkdir(parents=True)
+        (tmp_path / "index").mkdir(parents=True)
+        (tmp_path / "index" / "manifest.json").write_text("{}\n")
+
+        source = tmp_path / "paper.md"
+        source.write_text("# Paper")
+
+        agent = ScoutAgent(
+            llm_client=FakeLLMClient(),
+            workspace_root=tmp_path,
+        )
+
+        result = agent.run_mission({"source_path": str(source), "category": "papers"})
+        assert result.success is True
+        assert "papers" in str(result.output_path)

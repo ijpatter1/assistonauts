@@ -40,6 +40,9 @@ def _call_litellm(
         **kwargs,
     )
 
+    # litellm.completion() returns ModelResponse | CustomStreamWrapper.
+    # We never stream, so it's always ModelResponse — but the type union
+    # prevents mypy from narrowing .choices, .model, .usage attributes.
     choice = response.choices[0]  # type: ignore[union-attr]
     return LLMResponse(
         content=choice.message.content,  # type: ignore[union-attr]

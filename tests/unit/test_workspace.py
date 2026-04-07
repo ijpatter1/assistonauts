@@ -160,3 +160,76 @@ class TestInitCLI:
         result = runner.invoke(cli, ["init"])
         assert result.exit_code == 0
         assert (tmp_path / "raw").is_dir()
+
+
+class TestScoutIngestCLI:
+    """Test the `assistonauts scout ingest` CLI command."""
+
+    def _init_workspace(self, path: Path) -> Path:
+        """Initialize a workspace for CLI tests."""
+        from assistonauts.storage.workspace import init_workspace
+
+        return init_workspace(path)
+
+    def test_ingest_file_success(self, tmp_path: Path) -> None:
+        """CLI scout ingest successfully ingests a local file."""
+        ws = self._init_workspace(tmp_path / "ws")
+        source = tmp_path / "doc.md"
+        source.write_text("# Test Document\n\nContent.")
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["scout", "ingest", str(source), "-w", str(ws)])
+        assert result.exit_code == 0
+        assert "Ingested" in result.output
+
+    def test_ingest_missing_file(self, tmp_path: Path) -> None:
+        """CLI scout ingest errors on missing file."""
+        ws = self._init_workspace(tmp_path / "ws")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["scout", "ingest", str(tmp_path / "nonexistent.md"), "-w", str(ws)],
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower() or "Error" in result.output
+
+    def test_ingest_not_workspace(self, tmp_path: Path) -> None:
+        """CLI scout ingest errors when workspace is not initialized."""
+        source = tmp_path / "doc.md"
+        source.write_text("content")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["scout", "ingest", str(source), "-w", str(tmp_path)]
+        )
+        assert result.exit_code != 0
+        assert "workspace" in result.output.lower() or "init" in result.output.lower()
+
+    def test_ingest_with_category(self, tmp_path: Path) -> None:
+        """CLI scout ingest respects --category flag."""
+        ws = self._init_workspace(tmp_path / "ws")
+        source = tmp_path / "paper.md"
+        source.write_text("# Paper")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["scout", "ingest", str(source), "-w", str(ws), "-c", "papers"],
+        )
+        assert result.exit_code == 0
+        assert (ws / "raw" / "papers" / "paper.md").exists()
+
+    def test_ingest_skip_unchanged(self, tmp_path: Path) -> None:
+        """CLI scout ingest reports skip for unchanged files."""
+        ws = self._init_workspace(tmp_path / "ws")
+        source = tmp_path / "doc.md"
+        source.write_text("# Doc")
+
+        runner = CliRunner()
+        # First ingest
+        runner.invoke(cli, ["scout", "ingest", str(source), "-w", str(ws)])
+        # Second ingest — should skip
+        result = runner.invoke(cli, ["scout", "ingest", str(source), "-w", str(ws)])
+        assert result.exit_code == 0
+        assert "Skipped" in result.output
