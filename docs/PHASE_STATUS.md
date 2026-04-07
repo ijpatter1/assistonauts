@@ -1,7 +1,7 @@
 # Phase Status Tracker
 
 > **Current Phase: 2 — Compiler + Mission Runner**
-> Last updated: 2026-04-07, session-2026-04-07-002
+> Last updated: 2026-04-07, session-2026-04-07-003
 > Phase 1 merged to main 2026-04-07
 
 ---
@@ -28,15 +28,15 @@ _Goal: Establish the foundation that every subsequent phase builds on — worksp
 
 _Goal: Build the compilation pipeline — the Compiler agent that transforms raw sources into structured wiki articles, and the mission runner that executes and tracks agent work._
 
-- ⬜ Wiki schema definition (`_schema.md`) — article templates per type (concept, entity, log, exploration), required frontmatter fields, categorization taxonomy, naming conventions, backlink formatting rules
-- ⬜ Template engine — apply schema templates to new articles so the LLM fills structured sections rather than generating format from scratch
-- ⬜ Compiler agent — role implementation with system prompt incorporating expedition scope as editorial lens, compilation pipeline for new sources and diff-oriented recompilation for updates
-- ⬜ Compiler toolkit — diff generator (structured diff for LLM reasoning), article stats (word count, reading time, source count)
-- ⬜ Compiler content summary generation — each compilation produces a content summary as a deliverable, optimized for downstream triage by Curator and Explorer
-- ⬜ Mission runner — single mission execution with YAML audit trail, failure classification (transient vs deterministic), retry logic for transient errors, fail-fast for deterministic errors
-- ⬜ Mission-level git commits — mission runner commits after each completed mission with mission ID and agent in commit message
-- ⬜ Compiler contract tests and recorded fixtures — structural validation (valid frontmatter, schema-conformant sections, content summary present, source citations included)
-- ⬜ CLI: `assistonauts mission run --agent compiler` — execute a single Compiler mission from the command line
+- ✅ 2026-04-07, session-2026-04-07-003 — Wiki schema definition — article types (concept, entity, log, exploration), required frontmatter fields, section templates, naming conventions, backlink formatting rules. Implemented as `models/schema.py`
+- ✅ 2026-04-07, session-2026-04-07-003 — Template engine — renders structured markdown scaffolds with YAML frontmatter and section headings with guidance placeholders
+- ✅ 2026-04-07, session-2026-04-07-003 — Compiler agent — compilation pipeline for new sources, diff-oriented recompilation for updates, expedition scope as editorial lens in system prompt
+- ✅ 2026-04-07, session-2026-04-07-003 — Compiler toolkit — structured diff generator (section-level), article stats (word count, reading time, source count)
+- ✅ 2026-04-07, session-2026-04-07-003 — Compiler content summary generation — each compilation produces summary via dedicated LLM prompt, persisted as `.summary.json` alongside article
+- ✅ 2026-04-07, session-2026-04-07-003 — Mission runner — single mission execution with YAML audit trail, transient error retry, deterministic error fail-fast, agent resolution by name
+- ✅ 2026-04-07, session-2026-04-07-003 — Mission-level git commits — auto_commit option, commit after each completed mission with `[mission-<id>] <agent>: process <title>` format
+- ✅ 2026-04-07, session-2026-04-07-003 — Compiler contract tests and recorded fixtures — 16 contract tests validating frontmatter, schema sections, content summary, source citations
+- ✅ 2026-04-07, session-2026-04-07-003 — CLI: `assistonauts mission run --agent compiler` — execute single mission with --source, --title, --article-type, --commit options
 
 ---
 
