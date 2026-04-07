@@ -1,5 +1,6 @@
 """Workspace initialization and directory management."""
 
+import subprocess
 from pathlib import Path
 
 # Default config template written on first init
@@ -93,5 +94,14 @@ def init_workspace(root: Path) -> Path:
     gitignore = root / ".gitignore"
     if not gitignore.exists():
         gitignore.write_text(_GITIGNORE)
+
+    # Initialize git repo if not already one
+    if not (root / ".git").exists():
+        subprocess.run(
+            ["git", "init"],
+            cwd=root,
+            capture_output=True,
+            check=True,
+        )
 
     return root

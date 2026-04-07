@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from assistonauts.tools.scout import (
+    check_dedup,
     check_relevance_keywords,
     convert_text_file,
     hash_content,
@@ -84,3 +85,59 @@ class TestConvertTextFile:
         content = convert_text_file(f)
         assert "# Title" in content
         assert "- bullet one" in content
+
+
+class TestCheckDedup:
+    """Test near-duplicate detection."""
+
+    def test_identical_content_matches(self) -> None:
+        """Identical content returns high similarity."""
+        content = "This is a test document about machine learning."
+        existing = {"raw/doc1.md": content}
+        matches = check_dedup(content, existing)
+        assert len(matches) == 1
+        assert matches[0].similarity == 1.0
+
+    def test_similar_content_matches(self) -> None:
+        """Very similar content is detected as near-duplicate."""
+        base = (
+            "Machine learning approaches to cryptocurrency price prediction "
+            "using deep neural networks and reinforcement learning techniques "
+            "for automated trading systems."
+        )
+        # Same text with one word changed — high shingle overlap
+        variant = (
+            "Machine learning approaches to cryptocurrency price prediction "
+            "using deep neural networks and reinforcement learning methods "
+            "for automated trading systems."
+        )
+        existing = {"raw/doc1.md": base}
+        matches = check_dedup(variant, existing)
+        assert len(matches) >= 1
+        assert matches[0].similarity >= 0.8
+
+    def test_different_content_no_match(self) -> None:
+        """Completely different content has no matches."""
+        content = "The weather today is sunny and warm."
+        existing = {
+            "raw/doc1.md": "Quantum physics explains subatomic particle behavior."
+        }
+        matches = check_dedup(content, existing)
+        assert len(matches) == 0
+
+    def test_empty_content(self) -> None:
+        """Empty content returns no matches."""
+        matches = check_dedup("", {"raw/doc.md": "some content"})
+        assert len(matches) == 0
+
+    def test_empty_existing(self) -> None:
+        """Empty existing dict returns no matches."""
+        matches = check_dedup("some content", {})
+        assert len(matches) == 0
+
+    def test_match_returns_key(self) -> None:
+        """Match result contains the key of the matching entry."""
+        content = "Identical content here for testing dedup detection."
+        existing = {"raw/papers/test.md": content}
+        matches = check_dedup(content, existing)
+        assert matches[0].key == "raw/papers/test.md"

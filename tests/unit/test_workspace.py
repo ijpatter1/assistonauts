@@ -121,6 +121,17 @@ class TestInitWorkspace:
 
         assert config.read_text() == "custom: true\n"
 
+    def test_initializes_git_repo(self, tmp_workspace: Path) -> None:
+        """init creates a git repository."""
+        init_workspace(tmp_workspace)
+        assert (tmp_workspace / ".git").is_dir()
+
+    def test_idempotent_git_repo(self, tmp_workspace: Path) -> None:
+        """Running init twice does not break existing git repo."""
+        init_workspace(tmp_workspace)
+        init_workspace(tmp_workspace)
+        assert (tmp_workspace / ".git").is_dir()
+
     def test_returns_workspace_path(self, tmp_workspace: Path) -> None:
         """init returns the workspace root path."""
         result = init_workspace(tmp_workspace)
