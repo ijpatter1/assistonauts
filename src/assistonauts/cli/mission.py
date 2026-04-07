@@ -13,9 +13,26 @@ from assistonauts.llm.client import LLMClient
 console = Console()
 
 
-def _create_llm_client() -> LLMClient:
-    """Create a default LLM client. Extracted for test mocking."""
-    return LLMClient(provider_config={}, mode="live")
+def _create_llm_client(
+    workspace: Path,
+    agent_role: str,
+) -> LLMClient:
+    """Create an LLM client configured from workspace config.
+
+    Loads .assistonauts/config.yaml, resolves the provider for the
+    agent role, and returns a client with the correct model and base_url.
+    """
+    from assistonauts.config.loader import load_config
+    from assistonauts.config.resolver import resolve_llm_for_role
+
+    config = load_config(workspace)
+    model, base_url = resolve_llm_for_role(config, agent_role)
+    return LLMClient(
+        provider_config={},
+        mode="live",
+        default_model=model,
+        base_url=base_url,
+    )
 
 
 @click.group()
@@ -90,7 +107,7 @@ def run(
     missions_dir = workspace / ".assistonauts" / "missions"
     missions_dir.mkdir(parents=True, exist_ok=True)
 
-    llm_client = _create_llm_client()
+    llm_client = _create_llm_client(workspace, agent)
 
     runner = MissionRunner(
         workspace_root=workspace,
