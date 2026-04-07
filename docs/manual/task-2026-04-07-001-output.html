@@ -1,0 +1,478 @@
+(base) ipatterson@mac assistonauts % git checkout -b phase/1-core-infrastructure-scout 
+Switched to a new branch 'phase/1-core-infrastructure-scout'
+(base) ipatterson@mac assistonauts % python3 -m venv .venv
+(base) ipatterson@mac assistonauts % source .venv/bin/activate
+(.venv) (base) ipatterson@mac assistonauts % pip install -e ".[dev]"
+zsh: /Users/ipatterson/dev/assistonauts/.venv/bin/pip: bad interpreter: /workspace/.venv/bin/python3: no such file or directory
+Obtaining file:///Users/ipatterson/dev/assistonauts
+  Installing build dependencies ... done
+  Checking if build backend supports build_editable ... done
+  Getting requirements to build editable ... done
+  Installing backend dependencies ... done
+  Preparing editable metadata (pyproject.toml) ... done
+Requirement already satisfied: click in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from assistonauts==0.1.0) (8.2.1)
+Collecting litellm (from assistonauts==0.1.0)
+  Downloading litellm-1.83.4-py3-none-any.whl.metadata (30 kB)
+Collecting markitdown (from assistonauts==0.1.0)
+  Downloading markitdown-0.1.5-py3-none-any.whl.metadata (4.1 kB)
+Collecting pyyaml (from assistonauts==0.1.0)
+  Downloading pyyaml-6.0.3-cp313-cp313-macosx_11_0_arm64.whl.metadata (2.4 kB)
+Requirement already satisfied: rich in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from assistonauts==0.1.0) (14.2.0)
+Requirement already satisfied: pytest in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from assistonauts==0.1.0) (9.0.2)
+Collecting pytest-cov (from assistonauts==0.1.0)
+  Downloading pytest_cov-7.1.0-py3-none-any.whl.metadata (32 kB)
+Collecting ruff (from assistonauts==0.1.0)
+  Downloading ruff-0.15.9-py3-none-macosx_11_0_arm64.whl.metadata (26 kB)
+Collecting aiohttp==3.13.5 (from litellm->assistonauts==0.1.0)
+  Downloading aiohttp-3.13.5-cp313-cp313-macosx_11_0_arm64.whl.metadata (8.1 kB)
+Collecting click (from assistonauts==0.1.0)
+  Downloading click-8.1.8-py3-none-any.whl.metadata (2.3 kB)
+Collecting fastuuid==0.14.0 (from litellm->assistonauts==0.1.0)
+  Downloading fastuuid-0.14.0-cp313-cp313-macosx_11_0_arm64.whl.metadata (1.1 kB)
+Collecting httpx==0.28.1 (from litellm->assistonauts==0.1.0)
+  Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+Collecting importlib-metadata==8.5.0 (from litellm->assistonauts==0.1.0)
+  Downloading importlib_metadata-8.5.0-py3-none-any.whl.metadata (4.8 kB)
+Collecting jinja2==3.1.6 (from litellm->assistonauts==0.1.0)
+  Using cached jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+Collecting jsonschema==4.23.0 (from litellm->assistonauts==0.1.0)
+  Downloading jsonschema-4.23.0-py3-none-any.whl.metadata (7.9 kB)
+Collecting openai==2.30.0 (from litellm->assistonauts==0.1.0)
+  Downloading openai-2.30.0-py3-none-any.whl.metadata (29 kB)
+Collecting pydantic==2.12.5 (from litellm->assistonauts==0.1.0)
+  Downloading pydantic-2.12.5-py3-none-any.whl.metadata (90 kB)
+Collecting python-dotenv==1.0.1 (from litellm->assistonauts==0.1.0)
+  Downloading python_dotenv-1.0.1-py3-none-any.whl.metadata (23 kB)
+Collecting tiktoken==0.12.0 (from litellm->assistonauts==0.1.0)
+  Downloading tiktoken-0.12.0-cp313-cp313-macosx_11_0_arm64.whl.metadata (6.7 kB)
+Collecting tokenizers==0.22.2 (from litellm->assistonauts==0.1.0)
+  Downloading tokenizers-0.22.2-cp39-abi3-macosx_11_0_arm64.whl.metadata (7.3 kB)
+Collecting aiohappyeyeballs>=2.5.0 (from aiohttp==3.13.5->litellm->assistonauts==0.1.0)
+  Using cached aiohappyeyeballs-2.6.1-py3-none-any.whl.metadata (5.9 kB)
+Collecting aiosignal>=1.4.0 (from aiohttp==3.13.5->litellm->assistonauts==0.1.0)
+  Using cached aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
+Collecting attrs>=17.3.0 (from aiohttp==3.13.5->litellm->assistonauts==0.1.0)
+  Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+Collecting frozenlist>=1.1.1 (from aiohttp==3.13.5->litellm->assistonauts==0.1.0)
+  Downloading frozenlist-1.8.0-cp313-cp313-macosx_11_0_arm64.whl.metadata (20 kB)
+Collecting multidict<7.0,>=4.5 (from aiohttp==3.13.5->litellm->assistonauts==0.1.0)
+  Downloading multidict-6.7.1-cp313-cp313-macosx_11_0_arm64.whl.metadata (5.3 kB)
+Collecting propcache>=0.2.0 (from aiohttp==3.13.5->litellm->assistonauts==0.1.0)
+  Downloading propcache-0.4.1-cp313-cp313-macosx_11_0_arm64.whl.metadata (13 kB)
+Collecting yarl<2.0,>=1.17.0 (from aiohttp==3.13.5->litellm->assistonauts==0.1.0)
+  Downloading yarl-1.23.0-cp313-cp313-macosx_11_0_arm64.whl.metadata (79 kB)
+Collecting anyio (from httpx==0.28.1->litellm->assistonauts==0.1.0)
+  Downloading anyio-4.13.0-py3-none-any.whl.metadata (4.5 kB)
+Requirement already satisfied: certifi in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from httpx==0.28.1->litellm->assistonauts==0.1.0) (2025.11.12)
+Collecting httpcore==1.* (from httpx==0.28.1->litellm->assistonauts==0.1.0)
+  Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+Requirement already satisfied: idna in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from httpx==0.28.1->litellm->assistonauts==0.1.0) (3.11)
+Collecting zipp>=3.20 (from importlib-metadata==8.5.0->litellm->assistonauts==0.1.0)
+  Using cached zipp-3.23.0-py3-none-any.whl.metadata (3.6 kB)
+Collecting MarkupSafe>=2.0 (from jinja2==3.1.6->litellm->assistonauts==0.1.0)
+  Downloading markupsafe-3.0.3-cp313-cp313-macosx_11_0_arm64.whl.metadata (2.7 kB)
+Collecting jsonschema-specifications>=2023.03.6 (from jsonschema==4.23.0->litellm->assistonauts==0.1.0)
+  Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
+Collecting referencing>=0.28.4 (from jsonschema==4.23.0->litellm->assistonauts==0.1.0)
+  Using cached referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
+Collecting rpds-py>=0.7.1 (from jsonschema==4.23.0->litellm->assistonauts==0.1.0)
+  Downloading rpds_py-0.30.0-cp313-cp313-macosx_11_0_arm64.whl.metadata (4.1 kB)
+Requirement already satisfied: distro<2,>=1.7.0 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from openai==2.30.0->litellm->assistonauts==0.1.0) (1.9.0)
+Collecting jiter<1,>=0.10.0 (from openai==2.30.0->litellm->assistonauts==0.1.0)
+  Downloading jiter-0.13.0-cp313-cp313-macosx_11_0_arm64.whl.metadata (5.2 kB)
+Collecting sniffio (from openai==2.30.0->litellm->assistonauts==0.1.0)
+  Using cached sniffio-1.3.1-py3-none-any.whl.metadata (3.9 kB)
+Requirement already satisfied: tqdm>4 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from openai==2.30.0->litellm->assistonauts==0.1.0) (4.67.1)
+Requirement already satisfied: typing-extensions<5,>=4.11 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from openai==2.30.0->litellm->assistonauts==0.1.0) (4.15.0)
+Requirement already satisfied: annotated-types>=0.6.0 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from pydantic==2.12.5->litellm->assistonauts==0.1.0) (0.6.0)
+Requirement already satisfied: pydantic-core==2.41.5 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from pydantic==2.12.5->litellm->assistonauts==0.1.0) (2.41.5)
+Requirement already satisfied: typing-inspection>=0.4.2 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from pydantic==2.12.5->litellm->assistonauts==0.1.0) (0.4.2)
+Collecting regex>=2022.1.18 (from tiktoken==0.12.0->litellm->assistonauts==0.1.0)
+  Downloading regex-2026.4.4-cp313-cp313-macosx_11_0_arm64.whl.metadata (40 kB)
+Requirement already satisfied: requests>=2.26.0 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from tiktoken==0.12.0->litellm->assistonauts==0.1.0) (2.32.5)
+Collecting huggingface-hub<2.0,>=0.16.4 (from tokenizers==0.22.2->litellm->assistonauts==0.1.0)
+  Downloading huggingface_hub-1.9.1-py3-none-any.whl.metadata (14 kB)
+Collecting h11>=0.16 (from httpcore==1.*->httpx==0.28.1->litellm->assistonauts==0.1.0)
+  Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+Collecting filelock>=3.10.0 (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.22.2->litellm->assistonauts==0.1.0)
+  Downloading filelock-3.25.2-py3-none-any.whl.metadata (2.0 kB)
+Collecting fsspec>=2023.5.0 (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.22.2->litellm->assistonauts==0.1.0)
+  Downloading fsspec-2026.3.0-py3-none-any.whl.metadata (10 kB)
+Collecting hf-xet<2.0.0,>=1.4.3 (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.22.2->litellm->assistonauts==0.1.0)
+  Downloading hf_xet-1.4.3-cp37-abi3-macosx_11_0_arm64.whl.metadata (4.9 kB)
+Requirement already satisfied: packaging>=20.9 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.22.2->litellm->assistonauts==0.1.0) (25.0)
+Requirement already satisfied: typer in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.22.2->litellm->assistonauts==0.1.0) (0.20.0)
+Requirement already satisfied: charset_normalizer<4,>=2 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from requests>=2.26.0->tiktoken==0.12.0->litellm->assistonauts==0.1.0) (3.4.4)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from requests>=2.26.0->tiktoken==0.12.0->litellm->assistonauts==0.1.0) (2.6.1)
+Collecting beautifulsoup4 (from markitdown->assistonauts==0.1.0)
+  Downloading beautifulsoup4-4.14.3-py3-none-any.whl.metadata (3.8 kB)
+Collecting defusedxml (from markitdown->assistonauts==0.1.0)
+  Using cached defusedxml-0.7.1-py2.py3-none-any.whl.metadata (32 kB)
+Collecting magika~=0.6.1 (from markitdown->assistonauts==0.1.0)
+  Downloading magika-0.6.3-py3-none-macosx_11_0_arm64.whl.metadata (10 kB)
+Collecting markdownify (from markitdown->assistonauts==0.1.0)
+  Downloading markdownify-1.2.2-py3-none-any.whl.metadata (9.9 kB)
+Collecting onnxruntime>=1.17.0 (from magika~=0.6.1->markitdown->assistonauts==0.1.0)
+  Downloading onnxruntime-1.24.4-cp313-cp313-macosx_14_0_arm64.whl.metadata (5.2 kB)
+Collecting numpy>=2.1.0 (from magika~=0.6.1->markitdown->assistonauts==0.1.0)
+  Downloading numpy-2.4.4-cp313-cp313-macosx_14_0_arm64.whl.metadata (6.6 kB)
+Collecting flatbuffers (from onnxruntime>=1.17.0->magika~=0.6.1->markitdown->assistonauts==0.1.0)
+  Downloading flatbuffers-25.12.19-py2.py3-none-any.whl.metadata (1.0 kB)
+Collecting protobuf (from onnxruntime>=1.17.0->magika~=0.6.1->markitdown->assistonauts==0.1.0)
+  Downloading protobuf-7.34.1-cp310-abi3-macosx_10_9_universal2.whl.metadata (595 bytes)
+Collecting sympy (from onnxruntime>=1.17.0->magika~=0.6.1->markitdown->assistonauts==0.1.0)
+  Using cached sympy-1.14.0-py3-none-any.whl.metadata (12 kB)
+Collecting soupsieve>=1.6.1 (from beautifulsoup4->markitdown->assistonauts==0.1.0)
+  Downloading soupsieve-2.8.3-py3-none-any.whl.metadata (4.6 kB)
+Collecting six<2,>=1.15 (from markdownify->markitdown->assistonauts==0.1.0)
+  Using cached six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+Requirement already satisfied: iniconfig>=1.0.1 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from pytest->assistonauts==0.1.0) (2.3.0)
+Requirement already satisfied: pluggy<2,>=1.5 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from pytest->assistonauts==0.1.0) (1.5.0)
+Requirement already satisfied: pygments>=2.7.2 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from pytest->assistonauts==0.1.0) (2.19.2)
+Collecting coverage>=7.10.6 (from coverage[toml]>=7.10.6->pytest-cov->assistonauts==0.1.0)
+  Downloading coverage-7.13.5-cp313-cp313-macosx_11_0_arm64.whl.metadata (8.5 kB)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from rich->assistonauts==0.1.0) (4.0.0)
+Requirement already satisfied: mdurl~=0.1 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from markdown-it-py>=2.2.0->rich->assistonauts==0.1.0) (0.1.2)
+Collecting mpmath<1.4,>=1.1.0 (from sympy->onnxruntime>=1.17.0->magika~=0.6.1->markitdown->assistonauts==0.1.0)
+  Using cached mpmath-1.3.0-py3-none-any.whl.metadata (8.6 kB)
+Requirement already satisfied: shellingham>=1.3.0 in /Users/ipatterson/miniconda3/lib/python3.13/site-packages (from typer->huggingface-hub<2.0,>=0.16.4->tokenizers==0.22.2->litellm->assistonauts==0.1.0) (1.5.4)
+Downloading litellm-1.83.4-py3-none-any.whl (16.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.0/16.0 MB 42.0 MB/s  0:00:00
+Downloading aiohttp-3.13.5-cp313-cp313-macosx_11_0_arm64.whl (497 kB)
+Downloading click-8.1.8-py3-none-any.whl (98 kB)
+Downloading fastuuid-0.14.0-cp313-cp313-macosx_11_0_arm64.whl (251 kB)
+Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+Downloading importlib_metadata-8.5.0-py3-none-any.whl (26 kB)
+Using cached jinja2-3.1.6-py3-none-any.whl (134 kB)
+Downloading jsonschema-4.23.0-py3-none-any.whl (88 kB)
+Downloading openai-2.30.0-py3-none-any.whl (1.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.1/1.1 MB 28.0 MB/s  0:00:00
+Downloading pydantic-2.12.5-py3-none-any.whl (463 kB)
+Downloading python_dotenv-1.0.1-py3-none-any.whl (19 kB)
+Downloading tiktoken-0.12.0-cp313-cp313-macosx_11_0_arm64.whl (993 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 994.0/994.0 kB 33.1 MB/s  0:00:00
+Downloading tokenizers-0.22.2-cp39-abi3-macosx_11_0_arm64.whl (3.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.0/3.0 MB 41.2 MB/s  0:00:00
+Downloading anyio-4.13.0-py3-none-any.whl (114 kB)
+Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+Downloading huggingface_hub-1.9.1-py3-none-any.whl (637 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 637.4/637.4 kB 25.9 MB/s  0:00:00
+Downloading hf_xet-1.4.3-cp37-abi3-macosx_11_0_arm64.whl (3.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.6/3.6 MB 43.9 MB/s  0:00:00
+Downloading jiter-0.13.0-cp313-cp313-macosx_11_0_arm64.whl (317 kB)
+Downloading multidict-6.7.1-cp313-cp313-macosx_11_0_arm64.whl (43 kB)
+Downloading yarl-1.23.0-cp313-cp313-macosx_11_0_arm64.whl (85 kB)
+Using cached aiohappyeyeballs-2.6.1-py3-none-any.whl (15 kB)
+Using cached aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
+Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+Downloading filelock-3.25.2-py3-none-any.whl (26 kB)
+Downloading frozenlist-1.8.0-cp313-cp313-macosx_11_0_arm64.whl (49 kB)
+Downloading fsspec-2026.3.0-py3-none-any.whl (202 kB)
+Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+Downloading markupsafe-3.0.3-cp313-cp313-macosx_11_0_arm64.whl (12 kB)
+Downloading propcache-0.4.1-cp313-cp313-macosx_11_0_arm64.whl (46 kB)
+Downloading pyyaml-6.0.3-cp313-cp313-macosx_11_0_arm64.whl (173 kB)
+Using cached referencing-0.37.0-py3-none-any.whl (26 kB)
+Downloading regex-2026.4.4-cp313-cp313-macosx_11_0_arm64.whl (289 kB)
+Downloading rpds_py-0.30.0-cp313-cp313-macosx_11_0_arm64.whl (358 kB)
+Using cached zipp-3.23.0-py3-none-any.whl (10 kB)
+Downloading markitdown-0.1.5-py3-none-any.whl (63 kB)
+Downloading magika-0.6.3-py3-none-macosx_11_0_arm64.whl (13.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 13.4/13.4 MB 42.1 MB/s  0:00:00
+Downloading numpy-2.4.4-cp313-cp313-macosx_14_0_arm64.whl (5.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 38.7 MB/s  0:00:00
+Downloading onnxruntime-1.24.4-cp313-cp313-macosx_14_0_arm64.whl (17.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 17.3/17.3 MB 41.4 MB/s  0:00:00
+Downloading beautifulsoup4-4.14.3-py3-none-any.whl (107 kB)
+Downloading soupsieve-2.8.3-py3-none-any.whl (37 kB)
+Using cached defusedxml-0.7.1-py2.py3-none-any.whl (25 kB)
+Downloading flatbuffers-25.12.19-py2.py3-none-any.whl (26 kB)
+Downloading markdownify-1.2.2-py3-none-any.whl (15 kB)
+Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
+Downloading protobuf-7.34.1-cp310-abi3-macosx_10_9_universal2.whl (429 kB)
+Downloading pytest_cov-7.1.0-py3-none-any.whl (22 kB)
+Downloading coverage-7.13.5-cp313-cp313-macosx_11_0_arm64.whl (219 kB)
+Downloading ruff-0.15.9-py3-none-macosx_11_0_arm64.whl (10.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.3/10.3 MB 42.5 MB/s  0:00:00
+Using cached sniffio-1.3.1-py3-none-any.whl (10 kB)
+Using cached sympy-1.14.0-py3-none-any.whl (6.3 MB)
+Using cached mpmath-1.3.0-py3-none-any.whl (536 kB)
+Building wheels for collected packages: assistonauts
+  Building editable for assistonauts (pyproject.toml) ... done
+  Created wheel for assistonauts: filename=assistonauts-0.1.0-py3-none-any.whl size=1378 sha256=62ff5220bf1c9ed4341d8c44839caea251ce3be6f108df23a2c58ec5435ad1a0
+  Stored in directory: /private/var/folders/vv/985kq82n7szfy_6tz97w0bksgd50p_/T/pip-ephem-wheel-cache-9q__3mz_/wheels/a0/89/88/98d881a89e1d1cf662ed2db8261bb309e10b19a13794d91025
+Successfully built assistonauts
+Installing collected packages: mpmath, flatbuffers, zipp, sympy, soupsieve, sniffio, six, ruff, rpds-py, regex, pyyaml, python-dotenv, protobuf, propcache, numpy, multidict, MarkupSafe, jiter, hf-xet, h11, fsspec, frozenlist, filelock, fastuuid, defusedxml, coverage, click, attrs, anyio, aiohappyeyeballs, yarl, tiktoken, referencing, pydantic, onnxruntime, jinja2, importlib-metadata, httpcore, beautifulsoup4, aiosignal, pytest-cov, markdownify, magika, jsonschema-specifications, httpx, aiohttp, openai, markitdown, jsonschema, huggingface-hub, tokenizers, litellm, assistonauts
+  Attempting uninstall: python-dotenv
+    Found existing installation: python-dotenv 1.1.0
+    Uninstalling python-dotenv-1.1.0:
+      Successfully uninstalled python-dotenv-1.1.0
+  Attempting uninstall: click
+    Found existing installation: click 8.2.1
+    Uninstalling click-8.2.1:
+      Successfully uninstalled click-8.2.1
+  Attempting uninstall: pydantic
+    Found existing installation: pydantic 2.12.4
+    Uninstalling pydantic-2.12.4:
+      Successfully uninstalled pydantic-2.12.4
+Successfully installed MarkupSafe-3.0.3 aiohappyeyeballs-2.6.1 aiohttp-3.13.5 aiosignal-1.4.0 anyio-4.13.0 assistonauts-0.1.0 attrs-26.1.0 beautifulsoup4-4.14.3 click-8.1.8 coverage-7.13.5 defusedxml-0.7.1 fastuuid-0.14.0 filelock-3.25.2 flatbuffers-25.12.19 frozenlist-1.8.0 fsspec-2026.3.0 h11-0.16.0 hf-xet-1.4.3 httpcore-1.0.9 httpx-0.28.1 huggingface-hub-1.9.1 importlib-metadata-8.5.0 jinja2-3.1.6 jiter-0.13.0 jsonschema-4.23.0 jsonschema-specifications-2025.9.1 litellm-1.83.4 magika-0.6.3 markdownify-1.2.2 markitdown-0.1.5 mpmath-1.3.0 multidict-6.7.1 numpy-2.4.4 onnxruntime-1.24.4 openai-2.30.0 propcache-0.4.1 protobuf-7.34.1 pydantic-2.12.5 pytest-cov-7.1.0 python-dotenv-1.0.1 pyyaml-6.0.3 referencing-0.37.0 regex-2026.4.4 rpds-py-0.30.0 ruff-0.15.9 six-1.17.0 sniffio-1.3.1 soupsieve-2.8.3 sympy-1.14.0 tiktoken-0.12.0 tokenizers-0.22.2 yarl-1.23.0 zipp-3.23.0
+(.venv) (base) ipatterson@mac assistonauts % pytest -v
+zsh: /Users/ipatterson/dev/assistonauts/.venv/bin/pytest: bad interpreter: /workspace/.venv/bin/python3: no such file or directory
+======================================================================================= test session starts ========================================================================================
+platform darwin -- Python 3.13.11, pytest-9.0.2, pluggy-1.5.0 -- /Users/ipatterson/miniconda3/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/ipatterson/dev/assistonauts
+configfile: pyproject.toml
+testpaths: tests
+plugins: cov-7.1.0, anyio-4.13.0
+collected 109 items                                                                                                                                                                                
+
+tests/contract/test_scout_output.py::TestScoutOutputContract::test_output_has_yaml_frontmatter PASSED                                                                                        [  0%]
+tests/contract/test_scout_output.py::TestScoutOutputContract::test_frontmatter_has_required_fields PASSED                                                                                    [  1%]
+tests/contract/test_scout_output.py::TestScoutOutputContract::test_frontmatter_ingested_by_is_scout PASSED                                                                                   [  2%]
+tests/contract/test_scout_output.py::TestScoutOutputContract::test_output_contains_source_content PASSED                                                                                     [  3%]
+tests/contract/test_scout_output.py::TestScoutOutputContract::test_output_is_markdown_file PASSED                                                                                            [  4%]
+tests/contract/test_scout_output.py::TestScoutOutputContract::test_output_in_raw_directory PASSED                                                                                            [  5%]
+tests/unit/test_base_agent.py::TestAgentConstruction::test_create_agent PASSED                                                                                                               [  6%]
+tests/unit/test_base_agent.py::TestAgentConstruction::test_toolkit_registration PASSED                                                                                                       [  7%]
+tests/unit/test_base_agent.py::TestAgentConstruction::test_default_toolkit_is_empty PASSED                                                                                                   [  8%]
+tests/unit/test_base_agent.py::TestAgentConstruction::test_default_logger_created PASSED                                                                                                     [  9%]
+tests/unit/test_base_agent.py::TestAgentConstruction::test_custom_logger_preserved PASSED                                                                                                    [ 10%]
+tests/unit/test_base_agent.py::TestOwnershipEnforcement::test_write_to_owned_dir PASSED                                                                                                      [ 11%]
+tests/unit/test_base_agent.py::TestOwnershipEnforcement::test_write_to_owned_subdir PASSED                                                                                                   [ 11%]
+tests/unit/test_base_agent.py::TestOwnershipEnforcement::test_write_outside_owned_raises PASSED                                                                                              [ 12%]
+tests/unit/test_base_agent.py::TestOwnershipEnforcement::test_read_from_readable_dir PASSED                                                                                                  [ 13%]
+tests/unit/test_base_agent.py::TestOwnershipEnforcement::test_read_from_owned_dir PASSED                                                                                                     [ 14%]
+tests/unit/test_base_agent.py::TestOwnershipEnforcement::test_read_outside_allowed_raises PASSED                                                                                             [ 15%]
+tests/unit/test_base_agent.py::TestLLMCalls::test_call_llm_returns_content PASSED                                                                                                            [ 16%]
+tests/unit/test_base_agent.py::TestLLMCalls::test_call_llm_passes_system_prompt PASSED                                                                                                       [ 17%]
+tests/unit/test_base_agent.py::TestLLMCalls::test_call_llm_records_calls PASSED                                                                                                              [ 18%]
+tests/unit/test_base_agent.py::TestRunMission::test_run_mission_not_implemented PASSED                                                                                                       [ 19%]
+tests/unit/test_base_agent.py::TestLogging::test_write_file_logs PASSED                                                                                                                      [ 20%]
+tests/unit/test_base_agent.py::TestLogging::test_call_llm_logs PASSED                                                                                                                        [ 21%]
+tests/unit/test_config_loader.py::TestLoadConfig::test_loads_valid_config PASSED                                                                                                             [ 22%]
+tests/unit/test_config_loader.py::TestLoadConfig::test_missing_config_returns_defaults PASSED                                                                                                [ 22%]
+tests/unit/test_config_loader.py::TestLoadConfig::test_partial_config_fills_defaults PASSED                                                                                                  [ 23%]
+tests/unit/test_config_loader.py::TestLoadConfig::test_unknown_keys_are_ignored PASSED                                                                                                       [ 24%]
+tests/unit/test_config_loader.py::TestLoadConfig::test_provider_config_fields PASSED                                                                                                         [ 25%]
+tests/unit/test_config_loader.py::TestLoadExpeditionConfig::test_loads_expedition_config PASSED                                                                                              [ 26%]
+tests/unit/test_config_loader.py::TestLoadExpeditionConfig::test_missing_expedition_file_raises PASSED                                                                                       [ 27%]
+tests/unit/test_config_loader.py::TestLoadExpeditionConfig::test_expedition_minimal_config PASSED                                                                                            [ 28%]
+tests/unit/test_llm_client.py::TestLLMResponse::test_response_fields PASSED                                                                                                                  [ 29%]
+tests/unit/test_llm_client.py::TestReplayMode::test_replay_returns_recorded_response PASSED                                                                                                  [ 30%]
+tests/unit/test_llm_client.py::TestReplayMode::test_replay_missing_fixture_raises PASSED                                                                                                     [ 31%]
+tests/unit/test_llm_client.py::TestReplayMode::test_fixture_key_is_deterministic PASSED                                                                                                      [ 32%]
+tests/unit/test_llm_client.py::TestReplayMode::test_fixture_key_differs_by_system PASSED                                                                                                     [ 33%]
+tests/unit/test_llm_client.py::TestRecordMode::test_record_saves_fixture PASSED                                                                                                              [ 33%]
+tests/unit/test_llm_client.py::TestRecordMode::test_record_calls_litellm PASSED                                                                                                              [ 34%]
+tests/unit/test_llm_client.py::TestLiveMode::test_live_calls_litellm PASSED                                                                                                                  [ 35%]
+tests/unit/test_llm_client.py::TestLiveMode::test_live_does_not_save_fixture PASSED                                                                                                          [ 36%]
+tests/unit/test_llm_client.py::TestProviderConfig::test_invalid_mode_raises PASSED                                                                                                           [ 37%]
+tests/unit/test_llm_client.py::TestProviderConfig::test_replay_without_fixture_dir_raises PASSED                                                                                             [ 38%]
+tests/unit/test_llm_client.py::TestProviderConfig::test_record_without_fixture_dir_raises PASSED                                                                                             [ 39%]
+tests/unit/test_manifest.py::TestHashContent::test_hash_returns_hex_string PASSED                                                                                                            [ 40%]
+tests/unit/test_manifest.py::TestHashContent::test_hash_is_deterministic PASSED                                                                                                              [ 41%]
+tests/unit/test_manifest.py::TestHashContent::test_hash_differs_for_different_content PASSED                                                                                                 [ 42%]
+tests/unit/test_manifest.py::TestManifest::test_load_empty_manifest PASSED                                                                                                                   [ 43%]
+tests/unit/test_manifest.py::TestManifest::test_load_nonexistent_creates_empty PASSED                                                                                                        [ 44%]
+tests/unit/test_manifest.py::TestManifest::test_get_entry PASSED                                                                                                                             [ 44%]
+tests/unit/test_manifest.py::TestManifest::test_get_missing_returns_none PASSED                                                                                                              [ 45%]
+tests/unit/test_manifest.py::TestManifest::test_has_changed_detects_new_file PASSED                                                                                                          [ 46%]
+tests/unit/test_manifest.py::TestManifest::test_has_changed_detects_modified_file PASSED                                                                                                     [ 47%]
+tests/unit/test_manifest.py::TestManifest::test_has_changed_returns_false_for_unchanged PASSED                                                                                               [ 48%]
+tests/unit/test_manifest.py::TestManifest::test_save_writes_json PASSED                                                                                                                      [ 49%]
+tests/unit/test_manifest.py::TestManifest::test_save_is_atomic PASSED                                                                                                                        [ 50%]
+tests/unit/test_manifest.py::TestManifest::test_roundtrip_save_load PASSED                                                                                                                   [ 51%]
+tests/unit/test_manifest.py::TestManifest::test_downstream_tracking PASSED                                                                                                                   [ 52%]
+tests/unit/test_scout_agent.py::TestScoutAgentCreation::test_creates_with_correct_role PASSED                                                                                                [ 53%]
+tests/unit/test_scout_agent.py::TestScoutAgentCreation::test_owns_raw_directory PASSED                                                                                                       [ 54%]
+tests/unit/test_scout_agent.py::TestScoutAgentCreation::test_has_toolkit_functions PASSED                                                                                                    [ 55%]
+tests/unit/test_scout_agent.py::TestScoutIngest::test_ingest_text_file PASSED                                                                                                                [ 55%]
+tests/unit/test_scout_agent.py::TestScoutIngest::test_ingest_markdown_file PASSED                                                                                                            [ 56%]
+tests/unit/test_scout_agent.py::TestScoutIngest::test_ingest_updates_manifest PASSED                                                                                                         [ 57%]
+tests/unit/test_scout_agent.py::TestScoutIngest::test_ingest_skips_unchanged_file PASSED                                                                                                     [ 58%]
+tests/unit/test_scout_agent.py::TestScoutIngest::test_ingest_with_category PASSED                                                                                                            [ 59%]
+tests/unit/test_scout_agent.py::TestScoutIngest::test_ingest_adds_frontmatter PASSED                                                                                                         [ 60%]
+tests/unit/test_scout_agent.py::TestScoutRunMission::test_run_mission_ingests_source PASSED                                                                                                  [ 61%]
+tests/unit/test_scout_agent.py::TestScoutRunMission::test_run_mission_with_category PASSED                                                                                                   [ 62%]
+tests/unit/test_scout_tools.py::TestHashContent::test_hash_returns_sha256_hex PASSED                                                                                                         [ 63%]
+tests/unit/test_scout_tools.py::TestHashContent::test_same_content_same_hash PASSED                                                                                                          [ 64%]
+tests/unit/test_scout_tools.py::TestCheckRelevanceKeywords::test_full_match PASSED                                                                                                           [ 65%]
+tests/unit/test_scout_tools.py::TestCheckRelevanceKeywords::test_partial_match PASSED                                                                                                        [ 66%]
+tests/unit/test_scout_tools.py::TestCheckRelevanceKeywords::test_no_match PASSED                                                                                                             [ 66%]
+tests/unit/test_scout_tools.py::TestCheckRelevanceKeywords::test_case_insensitive PASSED                                                                                                     [ 67%]
+tests/unit/test_scout_tools.py::TestCheckRelevanceKeywords::test_empty_keywords PASSED                                                                                                       [ 68%]
+tests/unit/test_scout_tools.py::TestConvertTextFile::test_reads_text_file PASSED                                                                                                             [ 69%]
+tests/unit/test_scout_tools.py::TestConvertTextFile::test_reads_markdown_file PASSED                                                                                                         [ 70%]
+tests/unit/test_scout_tools.py::TestCheckDedup::test_identical_content_matches PASSED                                                                                                        [ 71%]
+tests/unit/test_scout_tools.py::TestCheckDedup::test_similar_content_matches PASSED                                                                                                          [ 72%]
+tests/unit/test_scout_tools.py::TestCheckDedup::test_different_content_no_match PASSED                                                                                                       [ 73%]
+tests/unit/test_scout_tools.py::TestCheckDedup::test_empty_content PASSED                                                                                                                    [ 74%]
+tests/unit/test_scout_tools.py::TestCheckDedup::test_empty_existing PASSED                                                                                                                   [ 75%]
+tests/unit/test_scout_tools.py::TestCheckDedup::test_match_returns_key PASSED                                                                                                                [ 76%]
+tests/unit/test_shared_tools.py::TestStructuredLogger::test_creates_log_file PASSED                                                                                                          [ 77%]
+tests/unit/test_shared_tools.py::TestStructuredLogger::test_log_entry_has_required_fields PASSED                                                                                             [ 77%]
+tests/unit/test_shared_tools.py::TestStructuredLogger::test_log_with_mission_id PASSED                                                                                                       [ 78%]
+tests/unit/test_shared_tools.py::TestStructuredLogger::test_log_llm_call PASSED                                                                                                              [ 79%]
+tests/unit/test_shared_tools.py::TestStructuredLogger::test_log_tool_invoke PASSED                                                                                                           [ 80%]
+tests/unit/test_shared_tools.py::TestStructuredLogger::test_multiple_entries_appended PASSED                                                                                                 [ 81%]
+tests/unit/test_shared_tools.py::TestStructuredLogger::test_no_log_dir_does_not_error PASSED                                                                                                 [ 82%]
+tests/unit/test_smoke.py::test_version_is_set PASSED                                                                                                                                         [ 83%]
+tests/unit/test_smoke.py::test_cli_help PASSED                                                                                                                                               [ 84%]
+tests/unit/test_smoke.py::test_cli_version PASSED                                                                                                                                            [ 85%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_creates_top_level_directories PASSED                                                                                                   [ 86%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_creates_raw_subdirectories PASSED                                                                                                      [ 87%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_creates_wiki_subdirectories PASSED                                                                                                     [ 88%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_creates_audits_subdirectories PASSED                                                                                                   [ 88%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_creates_assistonauts_subdirectories PASSED                                                                                             [ 89%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_creates_empty_manifest PASSED                                                                                                          [ 90%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_creates_default_config PASSED                                                                                                          [ 91%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_creates_gitignore PASSED                                                                                                               [ 92%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_idempotent PASSED                                                                                                                      [ 93%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_idempotent_preserves_manifest PASSED                                                                                                   [ 94%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_idempotent_preserves_config PASSED                                                                                                     [ 95%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_initializes_git_repo PASSED                                                                                                            [ 96%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_idempotent_git_repo PASSED                                                                                                             [ 97%]
+tests/unit/test_workspace.py::TestInitWorkspace::test_returns_workspace_path PASSED                                                                                                          [ 98%]
+tests/unit/test_workspace.py::TestInitCLI::test_init_command_creates_workspace PASSED                                                                                                        [ 99%]
+tests/unit/test_workspace.py::TestInitCLI::test_init_command_default_cwd PASSED                                                                                                              [100%]
+
+======================================================================================= 109 passed in 0.55s ========================================================================================
+(.venv) (base) ipatterson@mac assistonauts % ruff check src/ tests/
+E501 Line too long (90 > 88)
+   --> src/assistonauts/agents/base.py:99:89
+    |
+ 97 |         self.logger.log_llm_call(
+ 98 |             model=getattr(response, "model", "unknown"),
+ 99 |             prompt_tokens=usage.get("prompt_tokens", 0) if isinstance(usage, dict) else 0,
+    |                                                                                         ^^
+100 |             completion_tokens=usage.get("completion_tokens", 0) if isinstance(usage, dict) else 0,
+101 |         )
+    |
+
+E501 Line too long (98 > 88)
+   --> src/assistonauts/agents/base.py:100:89
+    |
+ 98 |             model=getattr(response, "model", "unknown"),
+ 99 |             prompt_tokens=usage.get("prompt_tokens", 0) if isinstance(usage, dict) else 0,
+100 |             completion_tokens=usage.get("completion_tokens", 0) if isinstance(usage, dict) else 0,
+    |                                                                                         ^^^^^^^^^^
+101 |         )
+102 |         return response.content
+    |
+
+E501 Line too long (96 > 88)
+  --> src/assistonauts/cli/scout.py:92:89
+   |
+90 |         elif result.success:
+91 |             console.print(
+92 |                 f"[green]✓[/green] Ingested [bold]{display_name}[/bold] → {result.manifest_key}"
+   |                                                                                         ^^^^^^^^
+93 |             )
+94 |         else:
+   |
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/contract/test_scout_output.py:10:1
+   |
+ 8 |   """
+ 9 |
+10 | / from pathlib import Path
+11 | |
+12 | | import yaml
+13 | |
+14 | | from assistonauts.agents.scout import ScoutAgent
+15 | |
+16 | | from tests.conftest import FakeLLMClient
+   | |________________________________________^
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/unit/test_base_agent.py:3:1
+   |
+ 1 |   """Tests for the base agent class."""
+ 2 |
+ 3 | / from pathlib import Path
+ 4 | |
+ 5 | | import pytest
+ 6 | |
+ 7 | | from assistonauts.agents.base import Agent, OwnershipError
+ 8 | | from assistonauts.tools.shared import StructuredLogger
+ 9 | |
+10 | | from tests.conftest import FakeLLMClient
+   | |________________________________________^
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+ --> tests/unit/test_scout_agent.py:3:1
+  |
+1 |   """Tests for the Scout agent."""
+2 |
+3 | / from pathlib import Path
+4 | |
+5 | | from assistonauts.agents.scout import ScoutAgent
+6 | | from assistonauts.cache.content import Manifest
+7 | |
+8 | | from tests.conftest import FakeLLMClient
+  | |________________________________________^
+  |
+help: Organize imports
+
+Found 6 errors.
+[*] 3 fixable with the `--fix` option.
+(.venv) (base) ipatterson@mac assistonauts % ruff format --check src/ tests/
+Would reformat: src/assistonauts/agents/base.py
+Would reformat: tests/unit/test_scout_agent.py
+Would reformat: tests/unit/test_scout_tools.py
+3 files would be reformatted, 32 files already formatted
+(.venv) (base) ipatterson@mac assistonauts % assistonauts --help
+zsh: /Users/ipatterson/dev/assistonauts/.venv/bin/assistonauts: bad interpreter: /workspace/.venv/bin/python3: no such file or directory
+Usage: assistonauts [OPTIONS] COMMAND [ARGS]...
+
+  Assistonauts — LLM-powered knowledge base framework.
+
+Options:
+  --version  Show the version and exit.
+  --help     Show this message and exit.
+
+Commands:
+  init   Initialize an Assistonauts workspace.
+  scout  Scout agent commands — ingest source material.
+(.venv) (base) ipatterson@mac assistonauts % assistonauts --version
+zsh: /Users/ipatterson/dev/assistonauts/.venv/bin/assistonauts: bad interpreter: /workspace/.venv/bin/python3: no such file or directory
+assistonauts, version 0.1.0
+(.venv) (base) ipatterson@mac assistonauts % mkdir /tmp/test-kb && assistonauts init /tmp/test-kb
+zsh: /Users/ipatterson/dev/assistonauts/.venv/bin/assistonauts: bad interpreter: /workspace/.venv/bin/python3: no such file or directory
+✓ Workspace initialized at /private/tmp/test-kb
+(.venv) (base) ipatterson@mac assistonauts % ls -la /tmp/test-kb/
+total 8
+drwxr-xr-x   11 ipatterson  wheel   352 Apr  7 15:15 .
+drwxrwxrwt  172 root        wheel  5504 Apr  7 15:15 ..
+drwxr-xr-x    6 ipatterson  wheel   192 Apr  7 15:15 .assistonauts
+drwxr-xr-x    9 ipatterson  wheel   288 Apr  7 15:15 .git
+-rw-r--r--    1 ipatterson  wheel    67 Apr  7 15:15 .gitignore
+drwxr-xr-x    3 ipatterson  wheel    96 Apr  7 15:15 audits
+drwxr-xr-x    2 ipatterson  wheel    64 Apr  7 15:15 expeditions
+drwxr-xr-x    3 ipatterson  wheel    96 Apr  7 15:15 index
+drwxr-xr-x    7 ipatterson  wheel   224 Apr  7 15:15 raw
+drwxr-xr-x    2 ipatterson  wheel    64 Apr  7 15:15 station-logs
+drwxr-xr-x    6 ipatterson  wheel   192 Apr  7 15:15 wiki
+(.venv) (base) ipatterson@mac assistonauts % echo "# Test doc" > /tmp/test-source.md
+(.venv) (base) ipatterson@mac assistonauts % assistonauts scout ingest /tmp/test-source.md --workspace /tmp/test-kb
+zsh: /Users/ipatterson/dev/assistonauts/.venv/bin/assistonauts: bad interpreter: /workspace/.venv/bin/python3: no such file or directory
+✓ Ingested /tmp/test-source.md → raw/articles/test-source.md
+(.venv) (base) ipatterson@mac assistonauts % cat /tmp/test-kb/raw/articles/test-source.md
+---
+source: test-source.md
+source_path: /private/tmp/test-source.md
+ingested_by: scout
+ingested_at: 2026-04-07T19:16:07.235596+00:00
+category: articles
+---
+
+# Test doc
+(.venv) (base) ipatterson@mac assistonauts % rm -rf /tmp/test-kb /tmp/test-source.md
+(.venv) (base) ipatterson@mac assistonauts % 
