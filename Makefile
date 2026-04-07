@@ -1,8 +1,8 @@
 # ═══════════════════════════════════════════════════════════
 # PROJECT CONFIGURATION — change these for each project
 # ═══════════════════════════════════════════════════════════
-IMAGE_NAME      := my-project-sandbox
-CONTAINER_NAME  := my-project-claude
+IMAGE_NAME      := assistonauts-sandbox
+CONTAINER_NAME  := assistonauts-claude
 # ═══════════════════════════════════════════════════════════
 
 #
