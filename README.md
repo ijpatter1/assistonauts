@@ -1,178 +1,93 @@
-# Claude Code Development Environment
+# Assistonauts
 
-A ready-to-use development environment for autonomous Claude Code sessions with built-in QA evaluation, session management, and Docker sandboxing.
+A framework for building and maintaining LLM-powered knowledge bases using specialized AI agents. Raw source material — papers, articles, repos, datasets, images — is ingested, compiled into a structured interlinked markdown wiki, indexed for hybrid retrieval, quality-checked for integrity, and continuously maintained by a team of stationed agents.
 
-Based on patterns from [Anthropic's harness design research](https://www.anthropic.com/engineering/harness-design-long-running-apps) and [Simon Willison's Agentic Engineering Patterns](https://simonwillison.net/guides/agentic-engineering-patterns/).
+## Core Idea
 
-## What's Included
+Traditional RAG rediscovers knowledge from scratch on every query. Assistonauts compiles knowledge once, keeps it current, and uses RAG only for routing — finding which compiled articles are relevant — while the LLM reasons over full, structured documents.
 
-**Session workflow** — Commands that encode a Planner → Generator → Evaluator loop:
-- `/start-phase N` — Load context, run tests, present a plan for approval
-- `/evaluate` — Trigger independent QA evaluation mid-session
-- `/handoff` — End session with full QA + handoff artifact for continuity
-- `/status` — Quick 10-line project orientation
+## Architecture
 
-**QA evaluator subagent** — An independent, skeptical reviewer that grades work on five criteria (Functionality, Test Quality, Code Quality, Completeness, Integration). Runs in its own context window with read-only enforcement. Auto-invoked before every session handoff.
+Six specialized agents supported by a deterministic knowledge base operating system:
 
-**Docker sandbox** — Isolated container for `--dangerously-skip-permissions` mode with iptables firewall, non-root execution, and domain allowlisting. Optional — works without Docker too.
+| Agent         | Role                                                      | Scalable  |
+| ------------- | --------------------------------------------------------- | --------- |
+| **Captain**   | Expedition planning, mission orchestration, triage        | Singleton |
+| **Scout**     | Source ingestion — PDF, HTML, web, RSS, repos to markdown | Yes       |
+| **Compiler**  | Synthesis — raw sources into structured wiki articles     | Yes       |
+| **Curator**   | Cross-referencing, backlinks, structural stewardship      | Singleton |
+| **Inspector** | Quality validation, contradiction detection, audits       | Singleton |
+| **Explorer**  | Query synthesis, interactive Q&A, research missions       | Yes       |
 
-**Safety hooks** — Deterministic enforcement of dangerous command blocking (bash-guard), auto-formatting (auto-format), and session reminder (stop-check).
+The **Archivist** is not an agent — it's the deterministic operating system of the knowledge base: embedding generation, FTS indexing, hybrid retrieval, manifest tracking. No LLM inference.
 
-**Session continuity** — Handoff artifacts and phase status tracking that carry context across sessions and context resets.
+## Tech Stack
 
-## Quick Start
+- **Python 3.12+** with strict typing
+- **litellm** for provider-agnostic LLM calls (Claude, OpenAI, Ollama, Vertex)
+- **SQLite** — FTS5 for keyword search, sqlite-vec for vector similarity, mission ledger
+- **Click + Rich** for CLI
+- **No heavyweight frameworks** — no LangChain, no LlamaIndex
 
-### 1. Create a new repo from this template
+## Development Phases
 
-Click **"Use this template"** on GitHub, or:
+| Phase | Name                                    | Status      |
+| ----- | --------------------------------------- | ----------- |
+| 1     | Core Infrastructure + Scout             | Not started |
+| 2     | Compiler + Mission Runner               | Not started |
+| 3     | Archivist System + Curator + Hybrid RAG | Not started |
+| 4     | Explorer + Interactive Mode             | Not started |
+| 5     | Captain + Expedition Orchestration      | Not started |
+| 6     | Inspector + Quality + Review            | Not started |
+| 7     | Stationed Mode                          | Not started |
 
-```bash
-git clone https://github.com/YOUR_USERNAME/claude-code-env.git my-project
-cd my-project
-rm -rf .git && git init
-```
+See `docs/REQUIREMENTS.md` for the full development plan and `docs/assistonauts-spec.md` for the product spec.
 
-### 2. Configure for your project
-
-The fastest path — give Claude Code your spec:
-
-```bash
-# Start Claude Code (native or sandbox)
-claude
-# or: make sandbox
-
-# Point it at your PRD/spec
-/init-project path/to/your-spec.md
-```
-
-This reads your spec and generates all four project-specific files:
-- `CLAUDE.md` — project identity, tech stack, coding standards
-- `docs/REQUIREMENTS.md` — phases and deliverables extracted from your spec
-- `docs/ARCHITECTURE.md` — Phase 1 detailed architecture, later phases stubbed
-- `docs/PHASE_STATUS.md` — deliverable tracker matching REQUIREMENTS.md
-
-Review the generated files, adjust anything that needs it, then commit and start building.
-
-**Manual alternative** — edit the four template files directly:
-- **`CLAUDE.md`** — Fill in tech stack, project identity, coding standards, bootstrapping
-- **`docs/REQUIREMENTS.md`** — Define your phases and deliverables
-- **`docs/ARCHITECTURE.md`** — Document your technical architecture
-- **`docs/PHASE_STATUS.md`** — Copy deliverables from REQUIREMENTS.md with ⬜ markers
-
-Either way, also update:
-- **`Makefile`** — Change `IMAGE_NAME` and `CONTAINER_NAME` at the top (two lines)
-
-Optionally customize:
-
-- **`sandbox/init-firewall.sh`** — Add project-specific domains to `PROJECT_DOMAINS`
-- **`.claude/settings.json`** — Add project-specific Write/Edit paths if your directory structure differs from `src/`, `tests/`, `docs/`, `public/`
-
-### 3. Set your API key
+## Getting Started
 
 ```bash
-echo 'export ANTHROPIC_API_KEY=sk-ant-...' >> ~/.zshrc
-source ~/.zshrc
-```
+# Install dependencies
+uv pip install -e ".[dev]"
 
-### 4. Start coding
+# Run tests
+pytest
 
-```bash
-# Option A: Docker sandbox (autonomous, no permission prompts)
-make sandbox
-
-# Option B: Native Claude Code (interactive, with Remote Control)
-claude
-```
-
-Then inside Claude Code:
-
-```
+# Start Phase 1 development (in Claude Code)
 /start-phase 1
 ```
 
-### 5. Daily workflow
+## Development Environment
 
-```bash
-# Terminal 1: Claude Code
-make sandbox
-# /start-phase 1
+This repo includes a Docker sandbox for autonomous Claude Code sessions, session management commands, and a QA evaluator subagent. See the `sandbox/` directory and `.claude/` configuration for details.
 
-# Terminal 2: Dev server on your Mac
-make dev
+| Command        | Description                              |
+| -------------- | ---------------------------------------- |
+| `make sandbox` | Build + start Claude Code in Docker      |
+| `make attach`  | Reattach to running sandbox after crash  |
+| `make shell`   | Bash shell in sandbox for debugging      |
+| `make dev`     | Run dev server on host                   |
+| `make clean`   | Remove container + image (keeps volumes) |
 
-# Terminal 3: Your tools (VS Code, git, tests)
-code .
-```
-
-## File Structure
+## Project Structure
 
 ```
-├── CLAUDE.md                          # Project context (YOU EDIT THIS)
-├── Makefile                           # Container lifecycle
-├── .gitignore                         # Git exclusions
-├── .claude/
-│   ├── settings.json                  # Permissions + hooks
-│   ├── settings.local.json            # Personal overrides (gitignored)
-│   ├── agents/
-│   │   └── evaluator.md               # QA evaluator subagent
-│   ├── commands/
-│   │   ├── init-project.md            # Scaffold docs from a PRD/spec
-│   │   ├── start-phase.md             # Session initialization
-│   │   ├── evaluate.md                # Manual evaluation trigger
-│   │   ├── handoff.md                 # Session end + QA + handoff
-│   │   └── status.md                  # Quick status check
-│   ├── hooks/
-│   │   ├── bash-guard.sh              # Blocks dangerous commands
-│   │   ├── auto-format.sh             # Auto-formats on write
-│   │   └── stop-check.sh              # Reminds about evaluation
-│   └── skills/
-│       └── session-management/
-│           └── SKILL.md               # Context continuity conventions
+├── CLAUDE.md                    # Project context for Claude Code
 ├── docs/
-│   ├── REQUIREMENTS.md                # Development plan (YOU EDIT THIS)
-│   ├── ARCHITECTURE.md                # Technical architecture (YOU EDIT THIS)
-│   ├── PHASE_STATUS.md                # Phase tracker (YOU EDIT THIS)
-│   └── sessions/
-│       └── .gitkeep
-└── sandbox/
-    ├── Dockerfile                     # Sandbox image
-    ├── init-firewall.sh               # Domain allowlist firewall
-    ├── entrypoint.sh                  # Privilege drop + Claude start
-    └── README.md                      # Sandbox documentation
+│   ├── assistonauts-spec.md     # Product spec (source of truth)
+│   ├── REQUIREMENTS.md          # Development plan — 7 phases, 67 deliverables
+│   ├── ARCHITECTURE.md          # Technical architecture
+│   ├── PHASE_STATUS.md          # Deliverable tracker
+│   └── sessions/                # Session handoff artifacts
+├── src/
+│   └── assistonauts/            # Core engine
+│       ├── agents/              # Agent implementations
+│       ├── tools/               # Deterministic agent toolkits
+│       ├── llm/                 # litellm wrapper with record/replay
+│       ├── archivist/           # Knowledge base OS
+│       ├── rag/                 # Multi-pass retrieval
+│       ├── missions/            # Mission runner + state machine
+│       └── cli/                 # Click commands
+├── tests/                       # pytest suite
+├── .claude/                     # Claude Code config, hooks, commands
+└── sandbox/                     # Docker sandbox for autonomous mode
 ```
-
-Files marked **(YOU EDIT THIS)** are project-specific templates. Everything else works out of the box.
-
-## GCP Access (Optional)
-
-If your project uses Google Cloud:
-
-```bash
-make gcp-setup    # Prints step-by-step instructions
-```
-
-## Commands Reference
-
-| Command | Description |
-|---------|-------------|
-| `make sandbox` | Build + start Claude Code in Docker |
-| `make attach` | Reattach to running sandbox after crash |
-| `make shell` | Bash shell in sandbox for debugging |
-| `make prompt P="..."` | Run a one-shot headless prompt |
-| `make resume S="name"` | Resume a named session |
-| `make dev` | Run dev server on host |
-| `make stop` | Stop the sandbox container |
-| `make clean` | Remove container + image (keeps volumes) |
-| `make clean-all` | Full reset including auth and sessions |
-| `make gcp-setup` | Print GCP service account instructions |
-| `make test-fw` | Verify firewall blocks correctly |
-
-## Origins
-
-This environment encodes three key patterns:
-
-1. **Separated evaluation** (from [Anthropic's harness research](https://www.anthropic.com/engineering/harness-design-long-running-apps)) — The evaluator subagent runs in its own context with read-only access, preventing the self-praise problem where agents rate their own work too generously.
-
-2. **Test-first anchoring** (from [Simon Willison's Agentic Engineering Patterns](https://simonwillison.net/guides/agentic-engineering-patterns/)) — Every session starts by running the test suite. Every feature uses red/green TDD. Tests are the regression safety net across phases.
-
-3. **Structured handoffs** (from both sources) — Session artifacts carry enough context for a clean restart, avoiding the quality degradation that comes from context window growth and compaction.
