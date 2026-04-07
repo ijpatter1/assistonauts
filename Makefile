@@ -113,9 +113,11 @@ resume: build
 		--resume "$(S)"
 
 ## Run the dev server on the HOST machine (not in Docker).
-## Override this command in your project if you use something other than npm run dev.
+## Override this for your project's dev command.
 dev:
-	npm run dev
+	@echo "Configure the 'dev' target in the Makefile for your project."
+	@echo "Examples: npm run dev, python -m flask run, cargo watch"
+	@exit 1
 
 ## Stop the running sandbox container
 stop:

@@ -45,6 +45,9 @@ PROJECT_DOMAINS=(
     # "api.vercel.com"
     # "netlify.com"
     # "api.netlify.com"
+    # Embedding Models
+    "huggingface.co"
+    "cdn-lfs.huggingface.co"
 )
 
 # ─────────────────────────────────────────────
