@@ -1,7 +1,8 @@
 # Phase Status Tracker
 
-> **Current Phase: 1 — Core Infrastructure + Scout**
+> **Current Phase: 2 — Compiler + Mission Runner**
 > Last updated: 2026-04-07, session-2026-04-07-002
+> Phase 1 merged to main 2026-04-07
 
 ---
 
