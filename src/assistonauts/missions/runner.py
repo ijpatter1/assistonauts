@@ -6,6 +6,7 @@ deterministic (fail-fast). Writes YAML audit trail for each mission.
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
@@ -87,10 +88,12 @@ class MissionRunner:
         workspace_root: Path,
         missions_dir: Path,
         max_retries: int = 3,
+        auto_commit: bool = False,
     ) -> None:
         self._workspace_root = workspace_root
         self._missions_dir = missions_dir
         self._max_retries = max_retries
+        self._auto_commit = auto_commit
 
     def run(
         self,
@@ -129,6 +132,8 @@ class MissionRunner:
                     agent_output=agent_output,
                 )
                 self._write_audit(mission, started_at, result)
+                if self._auto_commit:
+                    self._git_commit(mission)
                 return result
 
             except self._TRANSIENT_EXCEPTIONS as e:
@@ -190,3 +195,24 @@ class MissionRunner:
             audit["retry_count"] = result.retry_count
 
         audit_path.write_text(yaml.dump(audit, default_flow_style=False))
+
+    def _git_commit(self, mission: Mission) -> None:
+        """Create a git commit for a completed mission."""
+        try:
+            subprocess.run(
+                ["git", "add", "-A"],
+                cwd=self._workspace_root,
+                check=True,
+                capture_output=True,
+            )
+            title = mission.params.get("title", "article")
+            msg = f"[mission-{mission.mission_id}] {mission.agent}: compile {title}"
+            subprocess.run(
+                ["git", "commit", "-m", msg],
+                cwd=self._workspace_root,
+                check=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError:
+            # Non-critical — log but don't fail the mission
+            pass
