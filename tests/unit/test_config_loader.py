@@ -68,9 +68,7 @@ class TestLoadConfig:
         assert config.embedding.active == "ollama"
         assert config.cache.llm_responses.enabled is True
 
-    def test_missing_config_returns_defaults(
-        self, tmp_workspace: Path
-    ) -> None:
+    def test_missing_config_returns_defaults(self, tmp_workspace: Path) -> None:
         """Returns default config when config.yaml doesn't exist."""
         config = load_config(tmp_workspace)
 
@@ -79,9 +77,7 @@ class TestLoadConfig:
         assert isinstance(config.embedding, EmbeddingConfig)
         assert isinstance(config.cache, CacheConfig)
 
-    def test_partial_config_fills_defaults(
-        self, tmp_workspace: Path
-    ) -> None:
+    def test_partial_config_fills_defaults(self, tmp_workspace: Path) -> None:
         """Missing sections are filled with defaults."""
         config_dir = tmp_workspace / ".assistonauts"
         config_dir.mkdir(parents=True)
@@ -174,9 +170,7 @@ class TestLoadExpeditionConfig:
         assert config.scope.keywords == ["test", "demo"]
         assert len(config.sources.local) == 1
 
-    def test_missing_expedition_file_raises(
-        self, tmp_workspace: Path
-    ) -> None:
+    def test_missing_expedition_file_raises(self, tmp_workspace: Path) -> None:
         """Raises FileNotFoundError for missing expedition.yaml."""
         with pytest.raises(FileNotFoundError):
             load_expedition_config(

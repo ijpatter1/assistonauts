@@ -33,9 +33,7 @@ class EmbeddingConfig:
     """Embedding model configuration."""
 
     active: str = ""
-    providers: dict[str, EmbeddingProviderConfig] = field(
-        default_factory=dict
-    )
+    providers: dict[str, EmbeddingProviderConfig] = field(default_factory=dict)
 
 
 @dataclass
