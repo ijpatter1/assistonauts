@@ -1,0 +1,107 @@
+# ─────────────────────────────────────────────
+# Dependencies
+# ─────────────────────────────────────────────
+node_modules/
+.pnp.*
+.yarn/
+
+# ─────────────────────────────────────────────
+# Build output
+# ─────────────────────────────────────────────
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# ─────────────────────────────────────────────
+# Environment & secrets
+# ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# ─────────────────────────────────────────────
+# Claude Code
+# ─────────────────────────────────────────────
+# Local settings — personal overrides, not committed
+.claude/settings.local.json
+# Auto-generated agent memory (project-scoped, can be committed if desired)
+# .claude/agent-memory/
+
+# ─────────────────────────────────────────────
+# Testing
+# ─────────────────────────────────────────────
+coverage/
+test-results/
+playwright-report/
+blob-report/
+
+# ─────────────────────────────────────────────
+# IDE & editors
+# ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.code-workspace
+
+# ─────────────────────────────────────────────
+# OS files
+# ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ─────────────────────────────────────────────
+# Logs
+# ─────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─────────────────────────────────────────────
+# Vercel
+# ─────────────────────────────────────────────
+.vercel/
+
+# ─────────────────────────────────────────────
+# Google Cloud
+# ─────────────────────────────────────────────
+# Service account keys — never commit these
+*-service-account.json
+*-credentials.json
+# Terraform state (if used for IaC)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# ─────────────────────────────────────────────
+# Python (background data generator, Phase 4+)
+# ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+
+# ─────────────────────────────────────────────
+# Docker sandbox
+# ─────────────────────────────────────────────
+sandbox/*.log
+sandbox/tmp/
+
+# ─────────────────────────────────────────────
+# Misc
+# ─────────────────────────────────────────────
+*.bak
+*.tmp
+*.temp
+docs/tag_assistant_*.json
+docs/input_artifacts/
