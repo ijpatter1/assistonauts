@@ -35,10 +35,13 @@ secrets/
 # ─────────────────────────────────────────────
 # Testing
 # ─────────────────────────────────────────────
+.coverage
 coverage/
+htmlcov/
 test-results/
 playwright-report/
 blob-report/
+.pytest_cache/
 
 # ─────────────────────────────────────────────
 # IDE & editors
