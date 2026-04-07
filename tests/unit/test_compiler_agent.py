@@ -35,7 +35,7 @@ This is a test concept about machine learning fundamentals.
 
 ## Details
 
-Deep learning uses multiple layers of neural networks to learn hierarchical representations.
+Deep learning uses multiple layers of neural networks to learn representations.
 
 ## Related Work
 
@@ -205,9 +205,7 @@ class TestCompilerAgent:
         wiki_keys = [k for k in keys if k.startswith("wiki/")]
         assert len(wiki_keys) > 0
 
-    def test_compile_llm_called_with_source_content(
-        self, workspace: Path
-    ) -> None:
+    def test_compile_llm_called_with_source_content(self, workspace: Path) -> None:
         llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
         compiler = CompilerAgent(
             llm_client=llm,
@@ -248,12 +246,14 @@ class TestCompilerAgent:
         assert result2.skipped is True
 
     def test_recompile_on_source_change(self, workspace: Path) -> None:
-        llm = FakeLLMClient([
-            _FAKE_COMPILED_ARTICLE,
-            _FAKE_CONTENT_SUMMARY,
-            _FAKE_RECOMPILED_ARTICLE,
-            _FAKE_CONTENT_SUMMARY,
-        ])
+        llm = FakeLLMClient(
+            [
+                _FAKE_COMPILED_ARTICLE,
+                _FAKE_CONTENT_SUMMARY,
+                _FAKE_RECOMPILED_ARTICLE,
+                _FAKE_CONTENT_SUMMARY,
+            ]
+        )
         compiler = CompilerAgent(
             llm_client=llm,
             workspace_root=workspace,
@@ -284,9 +284,7 @@ class TestCompilerAgent:
             workspace_root=workspace,
         )
         mission = {
-            "source_path": str(
-                workspace / "raw" / "articles" / "test-source.md"
-            ),
+            "source_path": str(workspace / "raw" / "articles" / "test-source.md"),
             "article_type": "concept",
             "title": "Test Concept",
         }
@@ -294,9 +292,7 @@ class TestCompilerAgent:
         assert isinstance(result, CompilationResult)
         assert result.success is True
 
-    def test_compile_result_has_article_path_under_wiki(
-        self, workspace: Path
-    ) -> None:
+    def test_compile_result_has_article_path_under_wiki(self, workspace: Path) -> None:
         llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
         compiler = CompilerAgent(
             llm_client=llm,

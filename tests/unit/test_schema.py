@@ -6,7 +6,6 @@ from assistonauts.models.schema import (
     ArticleType,
     FrontmatterSpec,
     SectionSpec,
-    WikiSchema,
     get_default_schema,
 )
 
@@ -112,7 +111,9 @@ class TestWikiSchema:
         schema = get_default_schema()
         for article_type, template in schema.article_types.items():
             headings = [s.heading for s in template.sections]
-            assert "Sources" in headings, f"{article_type.value} missing Sources section"
+            assert "Sources" in headings, (
+                f"{article_type.value} missing Sources section"
+            )
 
     def test_naming_convention(self) -> None:
         schema = get_default_schema()
@@ -135,5 +136,9 @@ class TestWikiSchema:
         for article_type, template in schema.article_types.items():
             required = [f for f in template.frontmatter if f.required]
             required_names = {f.name for f in required}
-            assert "title" in required_names, f"{article_type.value} missing required 'title'"
-            assert "type" in required_names, f"{article_type.value} missing required 'type'"
+            assert "title" in required_names, (
+                f"{article_type.value} missing required 'title'"
+            )
+            assert "type" in required_names, (
+                f"{article_type.value} missing required 'type'"
+            )

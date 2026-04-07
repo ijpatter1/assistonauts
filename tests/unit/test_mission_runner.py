@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -11,10 +9,13 @@ import yaml
 
 from assistonauts.missions.runner import (
     Mission,
-    MissionResult,
     MissionRunner,
     MissionStatus,
     TransientError,
+)
+
+_FAKE_ARTICLE = (
+    "---\ntitle: Test\ntype: concept\n---\n\n# Test\n\n## Overview\n\nContent."
 )
 
 
@@ -94,10 +95,12 @@ class TestMissionRunner:
     """Test mission execution lifecycle."""
 
     def test_run_mission_success(self, workspace: Path, missions_dir: Path) -> None:
-        llm = FakeLLMClient([
-            "---\ntitle: Test\ntype: concept\n---\n\n# Test\n\n## Overview\n\nContent.",
-            "A summary of the test article.",
-        ])
+        llm = FakeLLMClient(
+            [
+                _FAKE_ARTICLE,
+                "A summary of the test article.",
+            ]
+        )
         runner = MissionRunner(workspace_root=workspace, missions_dir=missions_dir)
         mission = Mission(
             mission_id="m-001",
@@ -115,10 +118,12 @@ class TestMissionRunner:
     def test_run_mission_writes_audit_trail(
         self, workspace: Path, missions_dir: Path
     ) -> None:
-        llm = FakeLLMClient([
-            "---\ntitle: Test\ntype: concept\n---\n\n# Test\n\n## Overview\n\nContent.",
-            "Summary.",
-        ])
+        llm = FakeLLMClient(
+            [
+                _FAKE_ARTICLE,
+                "Summary.",
+            ]
+        )
         runner = MissionRunner(workspace_root=workspace, missions_dir=missions_dir)
         mission = Mission(
             mission_id="m-002",
@@ -141,10 +146,12 @@ class TestMissionRunner:
     def test_run_mission_status_transitions(
         self, workspace: Path, missions_dir: Path
     ) -> None:
-        llm = FakeLLMClient([
-            "---\ntitle: Test\ntype: concept\n---\n\n# Test\n\n## Overview\n\nContent.",
-            "Summary.",
-        ])
+        llm = FakeLLMClient(
+            [
+                _FAKE_ARTICLE,
+                "Summary.",
+            ]
+        )
         runner = MissionRunner(workspace_root=workspace, missions_dir=missions_dir)
         mission = Mission(
             mission_id="m-003",
@@ -155,7 +162,7 @@ class TestMissionRunner:
                 "title": "Test Topic",
             },
         )
-        result = runner.run(mission, llm_client=llm)
+        runner.run(mission, llm_client=llm)
         assert mission.status == MissionStatus.COMPLETED
 
     def test_run_mission_deterministic_failure(
@@ -263,10 +270,12 @@ class TestMissionRunner:
     def test_mission_result_includes_agent_output(
         self, workspace: Path, missions_dir: Path
     ) -> None:
-        llm = FakeLLMClient([
-            "---\ntitle: Test\ntype: concept\n---\n\n# Test\n\n## Overview\n\nContent.",
-            "Summary of test.",
-        ])
+        llm = FakeLLMClient(
+            [
+                _FAKE_ARTICLE,
+                "Summary of test.",
+            ]
+        )
         runner = MissionRunner(workspace_root=workspace, missions_dir=missions_dir)
         mission = Mission(
             mission_id="m-007",

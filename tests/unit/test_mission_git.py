@@ -10,7 +10,10 @@ import pytest
 from assistonauts.missions.runner import (
     Mission,
     MissionRunner,
-    MissionStatus,
+)
+
+_FAKE_ARTICLE = (
+    "---\ntitle: Test\ntype: concept\n---\n\n# Test\n\n## Overview\n\nContent."
 )
 
 
@@ -96,13 +99,13 @@ def git_workspace(tmp_path: Path) -> Path:
 class TestMissionGitCommits:
     """Test that completed missions produce git commits."""
 
-    def test_successful_mission_creates_commit(
-        self, git_workspace: Path
-    ) -> None:
-        llm = FakeLLMClient([
-            "---\ntitle: Git Test\ntype: concept\n---\n\n# Git Test\n\n## Overview\n\nContent.",
-            "Summary of git test.",
-        ])
+    def test_successful_mission_creates_commit(self, git_workspace: Path) -> None:
+        llm = FakeLLMClient(
+            [
+                _FAKE_ARTICLE,
+                "Summary of git test.",
+            ]
+        )
         missions_dir = git_workspace / ".assistonauts" / "missions"
         missions_dir.mkdir(parents=True, exist_ok=True)
         runner = MissionRunner(
@@ -172,10 +175,12 @@ class TestMissionGitCommits:
         assert before.stdout.strip() == after.stdout.strip()
 
     def test_commit_message_format(self, git_workspace: Path) -> None:
-        llm = FakeLLMClient([
-            "---\ntitle: Msg Test\ntype: concept\n---\n\n# Msg Test\n\n## Overview\n\nC.",
-            "Summary.",
-        ])
+        llm = FakeLLMClient(
+            [
+                _FAKE_ARTICLE,
+                "Summary.",
+            ]
+        )
         missions_dir = git_workspace / ".assistonauts" / "missions"
         missions_dir.mkdir(parents=True, exist_ok=True)
         runner = MissionRunner(
@@ -207,14 +212,14 @@ class TestMissionGitCommits:
         assert msg.startswith("[mission-m-git-003]")
         assert "compiler:" in msg
 
-    def test_auto_commit_disabled_by_default(
-        self, git_workspace: Path
-    ) -> None:
+    def test_auto_commit_disabled_by_default(self, git_workspace: Path) -> None:
         """When auto_commit is False (default), no commit is made."""
-        llm = FakeLLMClient([
-            "---\ntitle: No Commit\ntype: concept\n---\n\n# No Commit\n\n## Overview\n\nC.",
-            "Summary.",
-        ])
+        llm = FakeLLMClient(
+            [
+                _FAKE_ARTICLE,
+                "Summary.",
+            ]
+        )
         missions_dir = git_workspace / ".assistonauts" / "missions"
         missions_dir.mkdir(parents=True, exist_ok=True)
         runner = MissionRunner(

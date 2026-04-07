@@ -25,7 +25,9 @@ class TestGenerateDiff:
 
     def test_added_section_detected(self) -> None:
         old = "# Title\n\n## Overview\n\nOld overview."
-        new = "# Title\n\n## Overview\n\nOld overview.\n\n## New Section\n\nNew content."
+        new = (
+            "# Title\n\n## Overview\n\nOld overview.\n\n## New Section\n\nNew content."
+        )
         diff = generate_diff(old, new)
         assert diff.has_changes is True
         assert "New Section" in diff.added_sections
