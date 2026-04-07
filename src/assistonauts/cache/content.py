@@ -87,9 +87,7 @@ class Manifest:
         self._path.parent.mkdir(parents=True, exist_ok=True)
 
         # Atomic write: write to temp file in same directory, then rename
-        fd, tmp_path = tempfile.mkstemp(
-            dir=self._path.parent, suffix=".tmp"
-        )
+        fd, tmp_path = tempfile.mkstemp(dir=self._path.parent, suffix=".tmp")
         try:
             with open(fd, "w") as f:
                 json.dump(data, f, indent=2)
