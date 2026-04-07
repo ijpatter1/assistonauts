@@ -29,6 +29,10 @@ ALLOWED_DOMAINS=(
     "github.com"
     "raw.githubusercontent.com"
     "objects.githubusercontent.com"
+
+    # PyPI
+    "pypi.org"
+    "files.pythonhosted.org"
 )
 
 # ─────────────────────────────────────────────
@@ -41,6 +45,9 @@ PROJECT_DOMAINS=(
     # "api.vercel.com"
     # "netlify.com"
     # "api.netlify.com"
+    # Embedding Models
+    "huggingface.co"
+    "cdn-lfs.huggingface.co"
 )
 
 # ─────────────────────────────────────────────

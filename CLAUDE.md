@@ -6,7 +6,7 @@ Assistonauts is a framework for building and maintaining LLM-powered knowledge b
 
 ## Tech Stack
 
-- **Language:** Python 3.12+, strict typing (no `Any` without justification)
+- **Language:** Python 3.11+, strict typing (no `Any` without justification)
 - **CLI Framework:** Click + Rich
 - **LLM:** litellm (provider-agnostic — Claude, OpenAI, Ollama, Vertex)
 - **Database:** SQLite (FTS5 for keyword search, sqlite-vec for vector similarity, mission ledger, LLM cache)
@@ -36,7 +36,7 @@ If this is the very first session and no `pyproject.toml` exists yet, the projec
 - `pytest`, `ruff check`, and `ruff format --check` will fail — this is expected
 - Skip the "Run the Tests" step in `/start-phase` and note that scaffolding is the first deliverable
 - During scaffolding, configure the following:
-  - **Python 3.12+** with `pyproject.toml` (uv-compatible)
+  - **Python 3.11+** with `pyproject.toml` (uv-compatible)
   - **pytest** with pytest-cov for test coverage
   - **ruff** for linting and formatting (the auto-format hook depends on ruff being installed)
   - `src/assistonauts/` package layout with `__init__.py` and `__main__.py`

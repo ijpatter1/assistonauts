@@ -23,7 +23,7 @@ The **Archivist** is not an agent — it's the deterministic operating system of
 
 ## Tech Stack
 
-- **Python 3.12+** with strict typing
+- **Python 3.11+** with strict typing
 - **litellm** for provider-agnostic LLM calls (Claude, OpenAI, Ollama, Vertex)
 - **SQLite** — FTS5 for keyword search, sqlite-vec for vector similarity, mission ledger
 - **Click + Rich** for CLI

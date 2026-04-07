@@ -22,7 +22,21 @@ Read these files in order:
 3. `docs/ARCHITECTURE.md` — read the sections relevant to Phase $ARGUMENTS
 4. The most recent file in `docs/sessions/` — the last session's handoff artifact
 
-## Step 3 — Review Recent Git History
+## Step 3 — Check Manual Tasks
+
+Check if `docs/manual/` exists and contains any task cards:
+
+```
+ls docs/manual/task-*.md 2>/dev/null
+```
+
+If manual tasks exist, read each one and check the **Status** field:
+
+- **`pending`** — the human hasn't done this yet. Note it in the status summary. If it blocks a deliverable, do not plan work on that deliverable.
+- **`done`** — the human completed it. Read the **Notes** field for any information the agent needs (configuration values, URLs, unexpected outcomes). If the task was blocking a deliverable, that deliverable is now unblocked.
+- **`blocked`** — the human tried but hit a problem. Read the Notes for details. Flag this in the status summary.
+
+## Step 4 — Review Recent Git History
 
 ```
 git log --oneline -15
@@ -30,16 +44,17 @@ git log --oneline -15
 
 Use this to understand what was worked on recently and what state the codebase is in.
 
-## Step 4 — Assess Current State
+## Step 5 — Assess Current State
 
 Based on what you've read, produce a brief status summary:
 
 - **Phase $ARGUMENTS progress:** what deliverables are complete, what remains
 - **Test baseline:** X passing, Y failing, Z skipped
 - **Last session:** what was done, what was left in progress or blocked
+- **Manual tasks:** any pending or blocked manual tasks, and what they affect
 - **Codebase state:** clean build? any outstanding issues?
 
-## Step 5 — Plan This Session
+## Step 6 — Plan This Session
 
 Identify the next feature or deliverable to work on within Phase $ARGUMENTS. State:
 

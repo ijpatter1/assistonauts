@@ -1,7 +1,7 @@
 # Phase Status Tracker
 
 > **Current Phase: 1 — Core Infrastructure + Scout**
-> Last updated: 2026-04-07, pre-scaffold
+> Last updated: 2026-04-07, session-2026-04-07-002
 
 ---
 
@@ -9,17 +9,17 @@
 
 _Goal: Establish the foundation that every subsequent phase builds on — workspace management, config system, base agent class, LLM client, shared toolkit, and the first working agent (Scout)._
 
-- ⬜ Workspace initialization (`assistonauts init`) — creates the full directory structure (`raw/`, `wiki/`, `index/`, `audits/`, `expeditions/`, `station-logs/`, `.assistonauts/`), initializes git repo, writes `.gitignore` for derived data
-- ⬜ Config loading system — YAML parser for expedition configs, agent configs, and global settings with validation and sensible defaults
-- ⬜ Base agent class with toolkit integration — `Agent` base class with injectable LLM client, toolkit registration, owned/readable directory enforcement, and structured logging. Designed for testability (see Testing Strategy in spec)
-- ⬜ LLM client wrapper (litellm) — provider-agnostic inference calls with record/replay mode for test fixtures, configurable role-to-provider mapping
-- ⬜ Shared toolkit — logger (structured, to mission log files), config reader, cache interface, file I/O with ownership boundary enforcement
-- ⬜ Content hash cache (manifest) — SHA-256 content tracking in `index/manifest.json`, skip-if-unchanged logic, downstream dependency tracking
-- ⬜ Scout agent — role implementation with system prompt, relevance filtering (keyword match + optional LLM check), source ingestion pipeline
-- ⬜ Scout toolkit — format converters (PDF/HTML/DOCX to markdown via markitdown), web clipper (fetch + extract + download assets), content hasher, deduplication checker (simhash/minhash)
-- ⬜ Contract test infrastructure — pytest fixtures, LLM client replay mode integration, assertion helpers for agent output structure validation
-- ⬜ Scout contract tests and recorded fixtures — structural validation of Scout output (valid markdown, assets referenced correctly, frontmatter present)
-- ⬜ CLI entry point — `assistonauts init` and `assistonauts scout ingest <path-or-url>` commands via Click + Rich
+- ✅ 2026-04-07, session-2026-04-07-002 — Workspace initialization (`assistonauts init`) — creates the full directory structure, initializes git repo, writes `.gitignore` for derived data
+- ✅ 2026-04-07, session-2026-04-07-002 — Config loading system — YAML parser for expedition configs, agent configs, and global settings with validation and sensible defaults
+- ✅ 2026-04-07, session-2026-04-07-002 — Base agent class with toolkit integration — `Agent` base class with injectable LLM client, toolkit registration, owned/readable directory enforcement
+- ✅ 2026-04-07, session-2026-04-07-002 — LLM client wrapper (litellm) — provider-agnostic inference calls with record/replay mode for test fixtures
+- ✅ 2026-04-07, session-2026-04-07-002 — Shared toolkit — structured logger (JSON-lines), config reader, cache interface, file I/O with ownership boundary enforcement
+- ✅ 2026-04-07, session-2026-04-07-002 — Content hash cache (manifest) — SHA-256 content tracking in `index/manifest.json`, skip-if-unchanged logic, downstream dependency tracking
+- ✅ 2026-04-07, session-2026-04-07-002 — Scout agent — role implementation with system prompt, source ingestion pipeline with frontmatter injection
+- ✅ 2026-04-07, session-2026-04-07-002 — Scout toolkit — format converters (markitdown), web clipper, content hasher, deduplication checker (Jaccard shingle similarity)
+- ✅ 2026-04-07, session-2026-04-07-002 — Contract test infrastructure — shared conftest fixtures (FakeLLMClient, replay_llm_client, initialized_workspace), fixture directory
+- ✅ 2026-04-07, session-2026-04-07-002 — Scout contract tests and recorded fixtures — 6 structural validation tests, recorded fixture file
+- ✅ 2026-04-07, session-2026-04-07-002 — CLI entry point — `assistonauts init` and `assistonauts scout ingest <path>` commands via Click + Rich
 
 ---
 
