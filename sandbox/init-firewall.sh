@@ -29,6 +29,10 @@ ALLOWED_DOMAINS=(
     "github.com"
     "raw.githubusercontent.com"
     "objects.githubusercontent.com"
+
+    # PyPI
+    "pypi.org"
+    "files.pythonhosted.org"
 )
 
 # ─────────────────────────────────────────────
