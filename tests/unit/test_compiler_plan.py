@@ -166,6 +166,51 @@ class TestCompilerPlan:
         assert len(llm.calls) == 0
 
 
+class TestCompilationPlanPersistence:
+    """Test plan artifact persistence."""
+
+    def test_save_creates_yaml_file(self, workspace: Path) -> None:
+        from assistonauts.agents.compiler import CompilationPlan, PlannedArticle
+
+        plan = CompilationPlan(
+            articles=[
+                PlannedArticle(
+                    title="Test Article",
+                    article_type=ArticleType.CONCEPT,
+                    source_paths=[workspace / "raw/articles/test.md"],
+                    rationale="Test rationale.",
+                ),
+            ]
+        )
+        plans_dir = workspace / ".assistonauts" / "plans"
+        path = plan.save(plans_dir)
+        assert path.exists()
+        assert path.suffix == ".yaml"
+        assert plans_dir.exists()
+
+    def test_save_contains_article_data(self, workspace: Path) -> None:
+        import yaml as pyyaml
+
+        from assistonauts.agents.compiler import CompilationPlan, PlannedArticle
+
+        plan = CompilationPlan(
+            articles=[
+                PlannedArticle(
+                    title="My Article",
+                    article_type=ArticleType.ENTITY,
+                    source_paths=[workspace / "raw/articles/a.md"],
+                    rationale="Some reason.",
+                ),
+            ]
+        )
+        path = plan.save(workspace / ".assistonauts" / "plans")
+        data = pyyaml.safe_load(path.read_text())
+        assert data["article_count"] == 1
+        assert data["articles"][0]["title"] == "My Article"
+        assert data["articles"][0]["type"] == "entity"
+        assert "created_at" in data
+
+
 class TestCompilerPlanCLI:
     """Test CLI for plan mode."""
 

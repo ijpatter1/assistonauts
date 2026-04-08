@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 import click
@@ -30,7 +31,8 @@ def plan(workspace: Path, execute: bool) -> None:
 
     Reads all raw/articles/*.md files, asks the Compiler to propose
     article groupings, types, and titles. Shows the plan for review.
-    With --execute, compiles all proposed articles after showing the plan.
+    With --execute, compiles all proposed articles via the task runner.
+    Plans are saved to .assistonauts/plans/ for audit trail.
     """
     from assistonauts.agents.compiler import CompilerAgent
     from assistonauts.cli.task import _create_llm_client
@@ -62,6 +64,11 @@ def plan(workspace: Path, execute: bool) -> None:
         console.print("[yellow]No articles proposed.[/yellow]")
         return
 
+    # Persist the plan
+    plans_dir = workspace / ".assistonauts" / "plans"
+    plan_path = compilation_plan.save(plans_dir)
+    console.print(f"[dim]Plan saved: {plan_path.name}[/dim]")
+
     # Display the plan
     table = Table(title="Compilation Plan")
     table.add_column("Article", style="bold")
@@ -80,8 +87,8 @@ def plan(workspace: Path, execute: bool) -> None:
 
     console.print(table)
     console.print(
-        f"\n[bold]{len(compilation_plan.articles)} articles proposed[/bold] "
-        f"from {len(sources)} sources."
+        f"\n[bold]{len(compilation_plan.articles)} articles proposed"
+        f"[/bold] from {len(sources)} sources."
     )
 
     if not execute:
@@ -90,21 +97,38 @@ def plan(workspace: Path, execute: bool) -> None:
         )
         return
 
-    # Execute the plan
-    console.print("\nCompiling...")
+    # Execute the plan via task runner
+    from assistonauts.tasks.runner import Task, TaskRunner
+
+    tasks_dir = workspace / ".assistonauts" / "tasks"
+    runner = TaskRunner(
+        workspace_root=workspace,
+        tasks_dir=tasks_dir,
+    )
+
+    console.print("\nCompiling via task runner...")
     for article in compilation_plan.articles:
-        console.print(
-            f"  Compiling [bold]{article.title}[/bold] "
-            f"({article.article_type.value})..."
+        task_id = f"t-{uuid.uuid4().hex[:8]}"
+        task = Task(
+            task_id=task_id,
+            agent="compiler",
+            params={
+                "source_paths": ",".join(str(p) for p in article.source_paths),
+                "article_type": article.article_type.value,
+                "title": article.title,
+            },
         )
-        result = compiler.compile_multi(
-            source_paths=article.source_paths,
-            article_type=article.article_type,
-            title=article.title,
-        )
+        result = runner.run(task, llm_client=llm_client)
         if result.success:
-            console.print(f"    [green]done[/green] → {result.manifest_key}")
+            output = ""
+            if result.agent_output and result.agent_output.output_path:
+                output = f" → {result.agent_output.output_path}"
+            console.print(f"  [green]done[/green] [{task_id}] {article.title}{output}")
         else:
-            console.print(f"    [red]failed[/red] {result.message}")
+            console.print(
+                f"  [red]failed[/red] [{task_id}] "
+                f"{article.title}: {result.error_message}"
+            )
 
     console.print(f"\n[bold]Compiled {len(compilation_plan.articles)} articles.[/bold]")
+    console.print(f"[dim]Task audit trails: {tasks_dir}/[/dim]")

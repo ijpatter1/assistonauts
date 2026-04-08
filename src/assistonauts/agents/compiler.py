@@ -101,6 +101,30 @@ class CompilationPlan:
 
     articles: list[PlannedArticle] = field(default_factory=list)
 
+    def save(self, plans_dir: Path) -> Path:
+        """Persist the plan as a YAML artifact.
+
+        Writes to plans_dir/plan-<timestamp>.yaml. Returns the path.
+        """
+        plans_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        plan_path = plans_dir / f"plan-{timestamp}.yaml"
+        data = {
+            "created_at": datetime.now(UTC).isoformat(),
+            "article_count": len(self.articles),
+            "articles": [
+                {
+                    "title": a.title,
+                    "type": a.article_type.value,
+                    "sources": [str(p) for p in a.source_paths],
+                    "rationale": a.rationale,
+                }
+                for a in self.articles
+            ],
+        }
+        plan_path.write_text(yaml.dump(data, default_flow_style=False))
+        return plan_path
+
 
 def _parse_plan_yaml(
     response: str,
