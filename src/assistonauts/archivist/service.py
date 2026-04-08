@@ -12,6 +12,11 @@ import re
 from pathlib import Path
 
 from assistonauts.archivist.database import ArchivistDB
+from assistonauts.archivist.embeddings import (
+    EmbeddingClient,
+    chunk_text,
+    generate_retrieval_keywords,
+)
 from assistonauts.cache.content import Manifest
 
 
@@ -44,6 +49,19 @@ def _word_count(text: str) -> int:
 def _content_hash(text: str) -> str:
     """SHA-256 hash of text content."""
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _average_embeddings(embeddings: list[list[float]]) -> list[float]:
+    """Average multiple embeddings into a single representative vector."""
+    if not embeddings:
+        return []
+    dims = len(embeddings[0])
+    avg = [0.0] * dims
+    for emb in embeddings:
+        for i in range(dims):
+            avg[i] += emb[i]
+    n = len(embeddings)
+    return [v / n for v in avg]
 
 
 class Archivist:
@@ -148,6 +166,55 @@ class Archivist:
             }
 
         return {"is_stale": False, "reason": "up_to_date"}
+
+    def index_with_embeddings(
+        self,
+        rel_path: str,
+        embedding_client: EmbeddingClient,
+    ) -> bool:
+        """Index an article with full-text search AND vector embeddings.
+
+        Combines index() with embedding generation and summary extraction.
+        Returns True if the article was (re)indexed, False if unchanged.
+        """
+        full_path = self.workspace / rel_path
+        content = full_path.read_text()
+        new_hash = _content_hash(content)
+
+        # Check if content has changed since last embedding
+        existing = self.db.get_article(rel_path)
+        if existing and existing["content_hash"] == new_hash:
+            return False
+
+        # Run standard index (metadata + FTS)
+        self.index(rel_path)
+
+        # Strip frontmatter for embedding
+        body = re.sub(r"^---\n.*?\n---\n?", "", content, count=1, flags=re.DOTALL)
+
+        # Generate and store embedding (average of chunk embeddings)
+        chunks = chunk_text(body)
+        if chunks:
+            chunk_embeddings = embedding_client.embed_batch(chunks)
+            avg_embedding = _average_embeddings(chunk_embeddings)
+            self.db.upsert_embedding(rel_path, avg_embedding)
+
+        # Generate and store retrieval keywords
+        keywords = generate_retrieval_keywords(body)
+        keyword_str = ", ".join(keywords)
+
+        # Load content summary from .summary.json if it exists
+        summary_path = full_path.with_suffix(".summary.json")
+        content_summary = ""
+        if summary_path.exists():
+            import json
+
+            data = json.loads(summary_path.read_text())
+            content_summary = data.get("summary", "")
+
+        self.db.upsert_summary(rel_path, content_summary, keyword_str)
+
+        return True
 
     def get_downstream(self, rel_path: str) -> list[str]:
         """Get downstream dependencies from the content manifest.
