@@ -36,6 +36,8 @@ def scout() -> None:
 def ingest(source: str, category: str, workspace: Path) -> None:
     """Ingest a source file or URL into the knowledge base."""
     from assistonauts.agents.scout import ScoutAgent
+    from assistonauts.config.loader import load_config
+    from assistonauts.config.resolver import resolve_llm_for_role
     from assistonauts.llm.client import LLMClient
     from assistonauts.tools.scout import clip_web
 
@@ -49,8 +51,15 @@ def ingest(source: str, category: str, workspace: Path) -> None:
         )
         raise SystemExit(1)
 
-    # Create a minimal LLM client (Scout mostly uses toolkit, not LLM)
-    llm_client = LLMClient(provider_config={}, mode="live")
+    # Create LLM client from workspace config (needed for image vision)
+    config = load_config(workspace)
+    model, base_url = resolve_llm_for_role(config, "scout")
+    llm_client = LLMClient(
+        provider_config={},
+        mode="live",
+        default_model=model,
+        base_url=base_url,
+    )
 
     agent = ScoutAgent(
         llm_client=llm_client,
