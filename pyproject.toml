@@ -13,6 +13,8 @@ dependencies = [
     "click",
     "rich",
     "markitdown",
+    "sqlite-vec",
+    "numpy",
 ]
 
 [project.optional-dependencies]
