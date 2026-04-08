@@ -84,11 +84,17 @@ _IMAGE_MIME_TYPES: dict[str, str] = {
 }
 
 _VISION_SYSTEM_PROMPT = """\
-You are a text extraction agent. Given an image (typically a page from a book,
-paper, or document), extract ALL text content and convert it to well-structured
-markdown. Preserve headings, paragraphs, lists, and emphasis where visible.
-If the image contains diagrams or figures, describe them briefly in brackets.
-Output ONLY the extracted markdown, no commentary or wrapping.
+You are a precise text transcription agent. Your job is to faithfully transcribe
+all visible text from the provided image into clean markdown.
+
+Rules:
+- Transcribe ALL text exactly as it appears — do not paraphrase or summarize.
+- Preserve the original structure: headings, paragraphs, lists, emphasis.
+- Use markdown headings (#, ##, ###) for titles and section headers.
+- If the image shows two pages side by side, transcribe left page first, then right.
+- For images or photos, insert a brief description: [Image: description].
+- Do NOT add commentary, introductions, or explanations.
+- Output ONLY the transcribed text.
 """
 
 
@@ -134,7 +140,9 @@ def convert_image(
             "content": [
                 {
                     "type": "text",
-                    "text": "Extract all text from this image and convert to markdown.",
+                    "text": "Transcribe all visible text from this "
+                    "image into markdown. Preserve the exact "
+                    "wording, structure, and formatting.",
                 },
                 {
                     "type": "image_url",

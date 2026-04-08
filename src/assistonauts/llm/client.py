@@ -20,7 +20,7 @@ class LLMResponse:
 
 
 def _call_litellm(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, object]],
     model: str | None = None,
     system: str | None = None,
     **kwargs: object,
@@ -28,10 +28,12 @@ def _call_litellm(
     """Call litellm.completion and wrap the response.
 
     Separated as a module-level function for easy mocking in tests.
+    Messages can contain multimodal content blocks (image_url, etc.)
+    for vision model calls.
     """
     import litellm
 
-    litellm_messages: list[dict[str, str]] = []
+    litellm_messages: list[dict[str, object]] = []
     if system:
         litellm_messages.append({"role": "system", "content": system})
     litellm_messages.extend(messages)
@@ -102,7 +104,7 @@ class LLMClient:
 
     def complete(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, object]],
         model: str | None = None,
         system: str | None = None,
         **kwargs: object,
