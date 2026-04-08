@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import struct
 from pathlib import Path
@@ -167,6 +168,10 @@ class ArchivistDB:
 
     def search_fts(self, query: str, limit: int = 50) -> list[dict[str, object]]:
         """Search articles via FTS5. Returns results ranked by BM25."""
+        # Sanitize query: remove FTS5 special characters
+        sanitized = re.sub(r"[^\w\s]", " ", query).strip()
+        if not sanitized:
+            return []
         rows = self._conn.execute(
             """
             SELECT path, rank
@@ -175,7 +180,7 @@ class ArchivistDB:
             ORDER BY rank
             LIMIT ?
             """,
-            (query, limit),
+            (sanitized, limit),
         ).fetchall()
         return [dict(r) for r in rows]
 

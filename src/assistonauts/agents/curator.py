@@ -190,6 +190,26 @@ class CuratorAgent(Agent):
             message=f"Added {len(new_links)} cross-references.",
         )
 
+    def retroactive_cross_reference(self) -> list[CuratorResult]:
+        """Run cross-referencing over all indexed articles.
+
+        Used after the Archivist index is first built to add backlinks
+        and "See also" sections to articles from Phases 1-2 that were
+        compiled before the index existed.
+        """
+        arch = self._archivist
+        emb = self._embedding_client
+        if arch is None or emb is None:
+            return []
+
+        all_articles = arch.db.list_articles()
+        results: list[CuratorResult] = []
+        for article in all_articles:
+            path = str(article["path"])
+            result = self.cross_reference(path)
+            results.append(result)
+        return results
+
     def run_mission(self, mission: dict[str, str]) -> CuratorResult:
         """Execute a Curator mission.
 

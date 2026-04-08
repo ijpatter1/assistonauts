@@ -167,6 +167,19 @@ class Archivist:
 
         return {"is_stale": False, "reason": "up_to_date"}
 
+    def get_stale_articles(self) -> list[str]:
+        """Get all indexed articles whose content has changed on disk.
+
+        Returns a list of article paths that need reindexing.
+        """
+        stale: list[str] = []
+        for article in self.db.list_articles():
+            path = str(article["path"])
+            staleness = self.get_staleness(path)
+            if staleness["is_stale"]:
+                stale.append(path)
+        return stale
+
     def index_with_embeddings(
         self,
         rel_path: str,
