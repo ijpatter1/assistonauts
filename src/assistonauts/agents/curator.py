@@ -8,6 +8,7 @@ articles and LLM inference to determine which connections to add.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -15,7 +16,7 @@ from assistonauts.agents.base import Agent, LLMClientProtocol
 from assistonauts.archivist.embeddings import EmbeddingClient
 from assistonauts.archivist.retrieval import hybrid_search
 from assistonauts.archivist.service import Archivist
-from assistonauts.tools.curator import parse_links, scan_backlink_targets
+from assistonauts.tools.curator import analyze_graph, parse_links, scan_backlink_targets
 
 _CURATOR_SYSTEM_PROMPT = """\
 You are Curator, a cross-referencing agent for the Assistonauts knowledge base.
@@ -50,7 +51,14 @@ class CuratorAgent(Agent):
 
     Owns: wiki/ (link sections only — does not modify article content)
     Reads: index/, wiki/
+
+    Singleton enforcement: only one CuratorAgent instance may be active
+    at a time. Creating a second instance while one is alive raises
+    RuntimeError.
     """
+
+    _lock: threading.Lock = threading.Lock()
+    _active_instance: CuratorAgent | None = None
 
     def __init__(
         self,
@@ -59,6 +67,14 @@ class CuratorAgent(Agent):
         archivist: Archivist | None = None,
         embedding_client: EmbeddingClient | None = None,
     ) -> None:
+        with CuratorAgent._lock:
+            if CuratorAgent._active_instance is not None:
+                raise RuntimeError(
+                    "A CuratorAgent instance is already active. "
+                    "Call close() on the existing instance before creating a new one."
+                )
+            CuratorAgent._active_instance = self
+
         wiki_dir = workspace_root / "wiki"
         index_dir = workspace_root / "index"
 
@@ -76,6 +92,12 @@ class CuratorAgent(Agent):
         self._workspace_root = workspace_root
         self._archivist = archivist
         self._embedding_client = embedding_client
+
+    def close(self) -> None:
+        """Release the singleton lock so a new instance can be created."""
+        with CuratorAgent._lock:
+            if CuratorAgent._active_instance is self:
+                CuratorAgent._active_instance = None
 
     def cross_reference(
         self,
@@ -209,6 +231,63 @@ class CuratorAgent(Agent):
             result = self.cross_reference(path)
             results.append(result)
         return results
+
+    def generate_proposals(self) -> list[dict[str, str]]:
+        """Detect structural issues and generate improvement proposals.
+
+        Uses the graph analyzer from the toolkit to detect orphans,
+        low connectivity, and structural gaps. Returns a list of
+        proposal dicts with 'type', 'target', and 'reason' keys.
+        """
+        arch = self._archivist
+        if arch is None:
+            return []
+
+        wiki_dir = self._workspace_root / "wiki"
+        all_articles = [str(a["path"]) for a in arch.db.list_articles()]
+        if not all_articles:
+            return []
+
+        # Build link graph from wiki directory
+        backlink_targets = scan_backlink_targets(wiki_dir)
+        links: dict[str, list[str]] = {a: [] for a in all_articles}
+        for bt in backlink_targets:
+            # Map source_path back to relative path
+            try:
+                rel = str(bt.source_path.relative_to(self._workspace_root))
+            except ValueError:
+                continue
+            if rel in links:
+                links[rel].append(bt.target_slug)
+
+        metrics = analyze_graph(links, all_articles)
+
+        proposals: list[dict[str, str]] = []
+
+        # Orphan proposals
+        for orphan in metrics.orphans:
+            proposals.append(
+                {
+                    "type": "orphan",
+                    "target": orphan,
+                    "reason": "Article has no incoming or outgoing links.",
+                }
+            )
+
+        # Low connectivity proposal
+        if metrics.density < 0.1 and metrics.total_articles > 3:
+            proposals.append(
+                {
+                    "type": "low_connectivity",
+                    "target": "knowledge_base",
+                    "reason": (
+                        f"Graph density is {metrics.density:.3f} — "
+                        "consider adding more cross-references."
+                    ),
+                }
+            )
+
+        return proposals
 
     def run_mission(self, mission: dict[str, str]) -> CuratorResult:
         """Execute a Curator mission.

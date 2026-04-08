@@ -14,7 +14,6 @@ dependencies = [
     "rich",
     "markitdown",
     "sqlite-vec",
-    "numpy",
 ]
 
 [project.optional-dependencies]

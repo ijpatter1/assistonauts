@@ -12,10 +12,23 @@ Short-circuit mode bypasses multi-pass for small knowledge bases.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Protocol
 
 from assistonauts.archivist.embeddings import EmbeddingClient
 from assistonauts.archivist.retrieval import hybrid_search
 from assistonauts.archivist.service import Archivist
+
+
+class LLMClientProtocol(Protocol):
+    """Protocol for injectable LLM clients used by multi-pass retrieval."""
+
+    def complete(
+        self,
+        messages: list[dict[str, str]],
+        model: str | None = None,
+        system: str | None = None,
+        **kwargs: object,
+    ) -> object: ...
 
 
 @dataclass
@@ -26,7 +39,9 @@ class MultiPassConfig:
     short_circuit_word_threshold: int = 50000
     pass_1_limit: int = 50
     pass_2_limit: int = 20
+    pass_3_limit: int = 10
     relevance_floor: float = 0.0
+    triage_confidence_threshold: float = 0.5
 
 
 @dataclass
@@ -49,10 +64,12 @@ class MultiPassRetriever:
         archivist: Archivist,
         embedding_client: EmbeddingClient,
         config: MultiPassConfig | None = None,
+        llm_client: LLMClientProtocol | None = None,
     ) -> None:
         self._archivist = archivist
         self._embedding_client = embedding_client
         self._config = config or MultiPassConfig()
+        self._llm_client = llm_client
 
     def retrieve(self, query: str) -> RetrievalResult:
         """Execute multi-pass retrieval for a query.
@@ -82,12 +99,27 @@ class MultiPassRetriever:
                 passes_executed=passes_executed,
             )
 
-        # Pass 2: Triage on summaries (cheap — keyword match on summaries)
-        triaged = self._pass_2_triage(candidates)
+        # Pass 2: Triage on summaries (cheap LLM inference or deterministic)
+        triaged = self._pass_2_triage(candidates, query)
         passes_executed.append("pass_2_triage")
 
+        if not triaged:
+            return RetrievalResult(
+                articles=[],
+                short_circuited=False,
+                passes_executed=passes_executed,
+            )
+
+        # Pass 3: Deep read — full article content for top candidates
+        deep_read = self._pass_3_deep_read(triaged, query)
+        passes_executed.append("pass_3_deep_read")
+
+        # Pass 4: Weak match resolution — resolve borderline matches
+        resolved = self._pass_4_weak_match(deep_read, query)
+        passes_executed.append("pass_4_weak_match")
+
         return RetrievalResult(
-            articles=triaged,
+            articles=resolved,
             short_circuited=False,
             passes_executed=passes_executed,
         )
@@ -125,13 +157,15 @@ class MultiPassRetriever:
         return enriched
 
     def _pass_2_triage(
-        self, candidates: list[dict[str, object]]
+        self,
+        candidates: list[dict[str, object]],
+        query: str,
     ) -> list[dict[str, object]]:
         """Pass 2: Triage candidates using summaries.
 
-        Deterministic for now — enrich with summary data and sort by
-        hybrid score. LLM-based triage deferred to when Curator/Explorer
-        agents consume this module.
+        When an LLM client is available, uses cheap inference to score
+        each candidate's summary against the query. Without an LLM
+        client, falls back to deterministic sorting by hybrid score.
         """
         triaged: list[dict[str, object]] = []
         for candidate in candidates:
@@ -142,9 +176,179 @@ class MultiPassRetriever:
                 candidate["retrieval_keywords"] = summary["retrieval_keywords"]
             triaged.append(candidate)
 
-        # Sort by hybrid score (highest first)
-        triaged.sort(
-            key=lambda a: float(a.get("hybrid_score", 0)),
+        if self._llm_client is not None and triaged:
+            # Use LLM to score relevance of summaries
+            triaged = self._llm_triage_summaries(triaged, query)
+        else:
+            # Deterministic fallback — sort by hybrid score
+            triaged.sort(
+                key=lambda a: float(a.get("hybrid_score", 0)),
+                reverse=True,
+            )
+
+        return triaged[: self._config.pass_2_limit]
+
+    def _llm_triage_summaries(
+        self,
+        candidates: list[dict[str, object]],
+        query: str,
+    ) -> list[dict[str, object]]:
+        """Use cheap LLM inference to triage candidates by summary relevance.
+
+        Asks the LLM to rate each candidate 0.0-1.0 for query relevance.
+        """
+        assert self._llm_client is not None
+        summaries_text = ""
+        for i, c in enumerate(candidates):
+            title = c.get("title", c.get("path", f"article_{i}"))
+            summary = c.get("content_summary", "No summary available.")
+            summaries_text += f"{i}. {title}: {summary}\n"
+
+        prompt = (
+            f"Query: {query}\n\n"
+            f"Rate each article's relevance to the query (0.0 to 1.0).\n"
+            f"Return ONLY lines in format: INDEX SCORE\n\n"
+            f"{summaries_text}"
+        )
+        response = self._llm_client.complete(
+            messages=[{"role": "user", "content": prompt}],
+            system="You are a relevance scorer. Output only index-score pairs.",
+        )
+        content = getattr(response, "content", str(response))
+
+        # Parse scores from response
+        scores: dict[int, float] = {}
+        for line in content.strip().splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                try:
+                    idx = int(parts[0].rstrip("."))
+                    score = float(parts[1])
+                    scores[idx] = score
+                except (ValueError, IndexError):
+                    continue
+
+        # Annotate candidates with triage scores and sort
+        for i, c in enumerate(candidates):
+            c["triage_score"] = scores.get(i, 0.0)
+
+        candidates.sort(
+            key=lambda a: float(a.get("triage_score", 0)),
             reverse=True,
         )
-        return triaged[: self._config.pass_2_limit]
+        return candidates
+
+    def _pass_3_deep_read(
+        self,
+        candidates: list[dict[str, object]],
+        query: str,
+    ) -> list[dict[str, object]]:
+        """Pass 3: Deep read — read full article content for top candidates.
+
+        For high-confidence candidates, reads the full article and uses
+        targeted LLM inference to produce a final relevance assessment.
+        Without an LLM client, passes through the top candidates unchanged.
+        """
+        top = candidates[: self._config.pass_3_limit]
+
+        if self._llm_client is None:
+            # Deterministic fallback — tag all as confirmed
+            for c in top:
+                c["deep_read"] = True
+                c["relevance"] = "confirmed"
+            return top
+
+        confirmed: list[dict[str, object]] = []
+        for candidate in top:
+            path = str(candidate["path"])
+            full_path = self._archivist.workspace / path
+            if not full_path.exists():
+                candidate["deep_read"] = True
+                candidate["relevance"] = "unreadable"
+                confirmed.append(candidate)
+                continue
+
+            content = full_path.read_text()[:2000]  # First 2000 chars
+            prompt = (
+                f"Query: {query}\n\n"
+                f"Article content:\n{content}\n\n"
+                f"Is this article relevant to the query? "
+                f"Answer YES or NO, then a brief reason."
+            )
+            response = self._llm_client.complete(
+                messages=[{"role": "user", "content": prompt}],
+                system="You are a relevance assessor. Be concise.",
+            )
+            answer = getattr(response, "content", str(response)).strip()
+            candidate["deep_read"] = True
+            candidate["relevance"] = (
+                "confirmed" if answer.upper().startswith("YES") else "rejected"
+            )
+            candidate["deep_read_reason"] = answer
+            confirmed.append(candidate)
+
+        return [c for c in confirmed if c.get("relevance") != "rejected"]
+
+    def _pass_4_weak_match(
+        self,
+        candidates: list[dict[str, object]],
+        query: str,
+    ) -> list[dict[str, object]]:
+        """Pass 4: Weak match resolution — resolve borderline/ambiguous matches.
+
+        Re-evaluates any candidates that had borderline scores or ambiguous
+        relevance assessments. Without an LLM client, passes through unchanged.
+        """
+        if self._llm_client is None or not candidates:
+            for c in candidates:
+                c["final_pass"] = True
+            return candidates
+
+        # Identify borderline candidates (triage_score between thresholds)
+        threshold = self._config.triage_confidence_threshold
+        strong: list[dict[str, object]] = []
+        borderline: list[dict[str, object]] = []
+
+        for c in candidates:
+            score = float(c.get("triage_score", 1.0))
+            if score >= threshold:
+                c["final_pass"] = True
+                strong.append(c)
+            else:
+                borderline.append(c)
+
+        if not borderline:
+            return strong
+
+        # Ask LLM to resolve borderline matches collectively
+        descriptions = ""
+        for i, c in enumerate(borderline):
+            title = c.get("title", c.get("path", f"article_{i}"))
+            reason = c.get("deep_read_reason", "No assessment.")
+            descriptions += f"{i}. {title}: {reason}\n"
+
+        prompt = (
+            f"Query: {query}\n\n"
+            f"These articles had ambiguous relevance. "
+            f"For each, answer INCLUDE or EXCLUDE:\n\n"
+            f"{descriptions}"
+        )
+        response = self._llm_client.complete(
+            messages=[{"role": "user", "content": prompt}],
+            system="You are a relevance resolver. Output only index-decision pairs.",
+        )
+        content = getattr(response, "content", str(response))
+
+        for line in content.strip().splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                try:
+                    idx = int(parts[0].rstrip("."))
+                    decision = parts[1].upper()
+                    if 0 <= idx < len(borderline) and decision == "INCLUDE":
+                        borderline[idx]["final_pass"] = True
+                        strong.append(borderline[idx])
+                except (ValueError, IndexError):
+                    continue
+
+        return strong

@@ -98,7 +98,11 @@ class LLMResponseCache:
         agent: str | None = None,
         expedition: str | None = None,
     ) -> None:
-        """Store a response in the cache."""
+        """Store a response in the cache.
+
+        If the cache exceeds max_size_mb after insertion, the oldest
+        entries are evicted until the size is within bounds.
+        """
         key = _cache_key(model, system, messages)
         self._conn.execute(
             """
@@ -109,6 +113,34 @@ class LLMResponseCache:
             (key, model, content, json.dumps(usage), agent, expedition),
         )
         self._conn.commit()
+        self._enforce_max_size()
+
+    def _enforce_max_size(self) -> None:
+        """Evict oldest entries if cache exceeds max_size_mb."""
+        max_bytes = self._max_size_mb * 1024 * 1024
+        page_info = self._conn.execute("PRAGMA page_count").fetchone()
+        page_size_info = self._conn.execute("PRAGMA page_size").fetchone()
+        page_count = page_info[0] if page_info else 0
+        page_size = page_size_info[0] if page_size_info else 4096
+        current_size = page_count * page_size
+
+        if current_size <= max_bytes:
+            return
+
+        # Delete oldest entries until under limit
+        rows = self._conn.execute(
+            "SELECT cache_key FROM llm_cache ORDER BY created_at ASC"
+        ).fetchall()
+        for row in rows:
+            self._conn.execute(
+                "DELETE FROM llm_cache WHERE cache_key = ?", (row["cache_key"],)
+            )
+            self._conn.commit()
+            # Recheck size
+            page_info = self._conn.execute("PRAGMA page_count").fetchone()
+            page_count = page_info[0] if page_info else 0
+            if page_count * page_size <= max_bytes:
+                break
 
     def flush(
         self,

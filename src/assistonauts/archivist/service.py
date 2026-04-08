@@ -212,6 +212,12 @@ class Archivist:
             avg_embedding = _average_embeddings(chunk_embeddings)
             self.db.upsert_embedding(rel_path, avg_embedding)
 
+            # Store embedding hash so we can detect when re-embedding is needed
+            embedding_hash = hashlib.sha256(str(avg_embedding).encode()).hexdigest()[
+                :16
+            ]
+            self.db.set_embedding_hash(rel_path, embedding_hash)
+
         # Generate and store retrieval keywords
         keywords = generate_retrieval_keywords(body)
         keyword_str = ", ".join(keywords)

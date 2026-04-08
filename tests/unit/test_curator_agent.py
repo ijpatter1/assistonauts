@@ -2,34 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import pytest
 
 from assistonauts.agents.curator import CuratorAgent
-from assistonauts.archivist.embeddings import EmbeddingClient
 from assistonauts.archivist.service import Archivist
-from tests.helpers import FakeLLMClient
-
-
-class FakeEmbeddingClient(EmbeddingClient):
-    """Deterministic embedding client for testing."""
-
-    def __init__(self, dimensions: int = 4) -> None:
-        self._dimensions = dimensions
-
-    @property
-    def dimensions(self) -> int:
-        return self._dimensions
-
-    def embed(self, text: str) -> list[float]:
-        h = hashlib.sha256(text.encode()).digest()
-        return [b / 255.0 for b in h[: self._dimensions]]
-
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed(t) for t in texts]
-
+from tests.helpers import FakeEmbeddingClient, FakeLLMClient
 
 _ARTICLE_SPECTRAL = """\
 ---
@@ -74,6 +53,14 @@ Closely related to spectral analysis methods.
 
 - raw/papers/signals.md
 """
+
+
+@pytest.fixture(autouse=True)
+def _reset_curator_singleton() -> None:  # type: ignore[misc]
+    """Reset the CuratorAgent singleton between tests."""
+    CuratorAgent._active_instance = None
+    yield  # type: ignore[misc]
+    CuratorAgent._active_instance = None
 
 
 @pytest.fixture
@@ -198,3 +185,92 @@ class TestCuratorCrossReference:
             {"article_path": "wiki/concepts/spectral-analysis.md"}
         )
         assert result.success is True
+
+
+class TestCuratorSingleton:
+    """Test singleton enforcement for CuratorAgent."""
+
+    def test_second_instance_raises(self, workspace: Path) -> None:
+        """Creating a second CuratorAgent while one is active raises."""
+        llm = FakeLLMClient()
+        curator1 = CuratorAgent(llm_client=llm, workspace_root=workspace)
+        with pytest.raises(RuntimeError, match="already active"):
+            CuratorAgent(llm_client=llm, workspace_root=workspace)
+        curator1.close()
+
+    def test_close_allows_new_instance(self, workspace: Path) -> None:
+        """After close(), a new instance can be created."""
+        llm = FakeLLMClient()
+        curator1 = CuratorAgent(llm_client=llm, workspace_root=workspace)
+        curator1.close()
+        curator2 = CuratorAgent(llm_client=llm, workspace_root=workspace)
+        assert curator2.role == "curator"
+        curator2.close()
+
+
+class TestCuratorGenerateProposals:
+    """Test the generate_proposals method."""
+
+    def test_generates_orphan_proposals(
+        self,
+        workspace: Path,
+        archivist: Archivist,
+        embedding_client: FakeEmbeddingClient,
+    ) -> None:
+        """Orphan articles should generate proposals."""
+        _populate_kb(workspace, archivist, embedding_client)
+        llm = FakeLLMClient()
+        curator = CuratorAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        proposals = curator.generate_proposals()
+        # Both articles have no links, so both should be orphans
+        orphan_proposals = [p for p in proposals if p["type"] == "orphan"]
+        assert len(orphan_proposals) >= 1
+
+    def test_no_proposals_without_archivist(self, workspace: Path) -> None:
+        """Without an archivist, returns empty list."""
+        llm = FakeLLMClient()
+        curator = CuratorAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+        )
+        proposals = curator.generate_proposals()
+        assert proposals == []
+
+    def test_low_connectivity_proposal(
+        self,
+        workspace: Path,
+        archivist: Archivist,
+        embedding_client: FakeEmbeddingClient,
+    ) -> None:
+        """Low graph density should generate a connectivity proposal."""
+        # Create 4+ articles with no links between them
+        topics = [
+            ("alpha", "Alpha", "Alpha topic content about something."),
+            ("beta", "Beta", "Beta topic content about something else."),
+            ("gamma", "Gamma", "Gamma topic about another thing entirely."),
+            ("delta", "Delta", "Delta topic about a fourth subject."),
+        ]
+        for slug, title, content in topics:
+            rel_path = f"wiki/concepts/{slug}.md"
+            full = f"---\ntitle: {title}\ntype: concept\n---\n\n{content}"
+            path = workspace / rel_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(full)
+            archivist.index_with_embeddings(rel_path, embedding_client=embedding_client)
+
+        llm = FakeLLMClient()
+        curator = CuratorAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        proposals = curator.generate_proposals()
+        connectivity = [p for p in proposals if p["type"] == "low_connectivity"]
+        assert len(connectivity) == 1
+        assert "density" in connectivity[0]["reason"]

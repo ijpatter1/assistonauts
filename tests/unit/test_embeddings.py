@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 
 from assistonauts.archivist.embeddings import (
-    EmbeddingClient,
     chunk_text,
     generate_retrieval_keywords,
 )
 from assistonauts.archivist.service import Archivist
+from tests.helpers import FakeEmbeddingClient
 
 
 class TestChunking:
@@ -96,28 +96,6 @@ class TestEmbeddingClient:
         e1 = client.embed("hello world")
         e2 = client.embed("goodbye moon")
         assert e1 != e2
-
-
-class FakeEmbeddingClient(EmbeddingClient):
-    """Deterministic embedding client for testing."""
-
-    def __init__(self, dimensions: int = 4) -> None:
-        self._dimensions = dimensions
-
-    @property
-    def dimensions(self) -> int:
-        return self._dimensions
-
-    def embed(self, text: str) -> list[float]:
-        """Generate a deterministic embedding from text hash."""
-        import hashlib
-
-        h = hashlib.sha256(text.encode()).digest()
-        values = [b / 255.0 for b in h[: self._dimensions]]
-        return values
-
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed(t) for t in texts]
 
 
 class TestArchivistWithEmbeddings:

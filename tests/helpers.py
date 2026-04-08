@@ -1,11 +1,15 @@
 """Shared test helpers for Assistonauts tests.
 
-FakeLLMClient and FakeResponse are the single source of truth for
-fake LLM infrastructure in tests. Import from here instead of
-defining local copies.
+FakeLLMClient, FakeResponse, and FakeEmbeddingClient are the single
+source of truth for fake infrastructure in tests. Import from here
+instead of defining local copies.
 """
 
 from __future__ import annotations
+
+import hashlib
+
+from assistonauts.archivist.embeddings import EmbeddingClient
 
 
 class FakeResponse:
@@ -40,3 +44,26 @@ class FakeLLMClient:
         idx = min(self._call_count, len(self._responses) - 1)
         self._call_count += 1
         return FakeResponse(self._responses[idx])
+
+
+class FakeEmbeddingClient(EmbeddingClient):
+    """Deterministic embedding client for testing.
+
+    Generates reproducible embeddings from SHA-256 hashes of input text.
+    Use this for unit tests where you need predictable vector outputs
+    without a real embedding model.
+    """
+
+    def __init__(self, dimensions: int = 4) -> None:
+        self._dimensions = dimensions
+
+    @property
+    def dimensions(self) -> int:
+        return self._dimensions
+
+    def embed(self, text: str) -> list[float]:
+        h = hashlib.sha256(text.encode()).digest()
+        return [b / 255.0 for b in h[: self._dimensions]]
+
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        return [self.embed(t) for t in texts]

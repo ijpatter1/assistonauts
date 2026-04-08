@@ -135,6 +135,14 @@ class ArchivistDB:
         rows = self._conn.execute("SELECT * FROM articles ORDER BY path").fetchall()
         return [dict(r) for r in rows]
 
+    def set_embedding_hash(self, path: str, embedding_hash: str) -> None:
+        """Set the embedding_hash for an article."""
+        self._conn.execute(
+            "UPDATE articles SET embedding_hash = ? WHERE path = ?",
+            (embedding_hash, path),
+        )
+        self._conn.commit()
+
     def delete_article(self, path: str) -> None:
         """Delete an article and its associated FTS/vec/summary data."""
         # Delete from FTS

@@ -2,35 +2,16 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import pytest
 
-from assistonauts.archivist.embeddings import EmbeddingClient
 from assistonauts.archivist.retrieval import (
     hybrid_search,
     reciprocal_rank_fusion,
 )
 from assistonauts.archivist.service import Archivist
-
-
-class FakeEmbeddingClient(EmbeddingClient):
-    """Deterministic embedding client for testing."""
-
-    def __init__(self, dimensions: int = 4) -> None:
-        self._dimensions = dimensions
-
-    @property
-    def dimensions(self) -> int:
-        return self._dimensions
-
-    def embed(self, text: str) -> list[float]:
-        h = hashlib.sha256(text.encode()).digest()
-        return [b / 255.0 for b in h[: self._dimensions]]
-
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed(t) for t in texts]
+from tests.helpers import FakeEmbeddingClient
 
 
 class TestReciprocalRankFusion:

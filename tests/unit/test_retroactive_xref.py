@@ -2,31 +2,21 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import pytest
 
 from assistonauts.agents.curator import CuratorAgent
-from assistonauts.archivist.embeddings import EmbeddingClient
 from assistonauts.archivist.service import Archivist
-from tests.helpers import FakeLLMClient
+from tests.helpers import FakeEmbeddingClient, FakeLLMClient
 
 
-class FakeEmbeddingClient(EmbeddingClient):
-    def __init__(self, dimensions: int = 4) -> None:
-        self._dimensions = dimensions
-
-    @property
-    def dimensions(self) -> int:
-        return self._dimensions
-
-    def embed(self, text: str) -> list[float]:
-        h = hashlib.sha256(text.encode()).digest()
-        return [b / 255.0 for b in h[: self._dimensions]]
-
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed(t) for t in texts]
+@pytest.fixture(autouse=True)
+def _reset_curator_singleton() -> None:  # type: ignore[misc]
+    """Reset the CuratorAgent singleton between tests."""
+    CuratorAgent._active_instance = None
+    yield  # type: ignore[misc]
+    CuratorAgent._active_instance = None
 
 
 @pytest.fixture
