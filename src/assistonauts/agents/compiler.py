@@ -119,7 +119,7 @@ def _parse_plan_yaml(
     except yaml.YAMLError:
         return None
 
-    if not isinstance(data, dict) or "articles" not in data:
+    if not isinstance(data, dict) or not isinstance(data.get("articles"), list):
         return None
 
     articles: list[PlannedArticle] = []
@@ -551,9 +551,7 @@ class CompilerAgent(Agent):
         sources_text = "\n\n".join(source_summaries)
 
         # Build the planning prompt
-        scope_line = ""
-        if self._workspace_root:
-            scope_line = getattr(self, "_expedition_scope", "")
+        scope_line = self._expedition_scope
 
         prompt = (
             f"Analyze these {len(resolved)} source documents "
@@ -565,10 +563,21 @@ class CompilerAgent(Agent):
             prompt += f"Expedition scope: {scope_line}\n\n"
         prompt += f"Source documents:\n\n{sources_text}"
 
-        # Call LLM with plan system prompt
+        # Call LLM with plan-specific system prompt.
+        # Can't use self.call_llm() since that uses the compilation
+        # system prompt. Log manually for structured logging.
         response = self.llm_client.complete(
             messages=[{"role": "user", "content": prompt}],
             system=_PLAN_SYSTEM_PROMPT,
+        )
+        assert self.logger is not None
+        usage = getattr(response, "usage", {})
+        p_tokens = usage.get("prompt_tokens", 0) if isinstance(usage, dict) else 0
+        c_tokens = usage.get("completion_tokens", 0) if isinstance(usage, dict) else 0
+        self.logger.log_llm_call(
+            model=getattr(response, "model", "unknown"),
+            prompt_tokens=p_tokens,
+            completion_tokens=c_tokens,
         )
 
         # Parse the response

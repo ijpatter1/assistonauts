@@ -137,10 +137,10 @@ class Agent:
     cache: CacheInterface             # shared cache layers
     owned_dirs: list[Path]            # directories this agent can write to
     readable_dirs: list[Path]         # directories this agent can read from
-    logger: StructuredLogger          # structured logging per mission
+    logger: StructuredLogger          # structured logging per task
 
-    def run_mission(self, mission: Mission) -> MissionResult:
-        """Execute a mission. Subclasses implement the agent-specific logic."""
+    def run_task(self, task: dict[str, str]) -> AgentResult:
+        """Execute a task. Subclasses implement the agent-specific logic."""
         raise NotImplementedError
 
     def _read_file(self, path: Path) -> str:

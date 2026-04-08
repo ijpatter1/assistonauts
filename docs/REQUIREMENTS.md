@@ -60,7 +60,7 @@ Note: The codebase currently uses "mission" where it means "task" (the Phase 2 `
 6. Task runner — single task execution with YAML audit trail, failure classification (transient vs deterministic), retry logic for transient errors, fail-fast for deterministic errors. (Note: currently named `MissionRunner` in codebase — rename tracked in deliverable 12)
 7. Task-level git commits — task runner commits after each completed task with task ID and agent in commit message
 8. Compiler contract tests and recorded fixtures — structural validation (valid frontmatter, schema-conformant sections, content summary present, source citations included)
-9. CLI: `assistonauts task run --agent compiler` — execute a single Compiler task from the command line. (Note: currently `assistonauts mission run` — rename tracked in deliverable 12)
+9. CLI: `assistonauts task run --agent compiler` — execute a single Compiler task from the command line
 10. Multi-source compilation — Compiler accepts multiple source paths (`--source` repeated), concatenates source content in order, tracks all source hashes in manifest for skip-if-unchanged logic, lists all sources in article frontmatter
 11. Compiler plan mode — `compiler.plan()` reads a set of raw sources, analyzes their content and structure, and proposes a compilation plan: what articles to create, article types, source groupings, and titles. Returns a list of task definitions ready for execution. Uses LLM inference for editorial judgment. The Captain orchestrates when and how plans are executed, but the Compiler owns the editorial decisions.
 12. Task/Mission vocabulary refactor — rename `MissionRunner` → `TaskRunner`, `Mission` → `Task`, `MissionResult` → `TaskResult`, `run_mission()` → `run_task()`, `missions/` → `tasks/`, CLI `mission run` → `task run`. Aligns codebase with glossary: tasks are atomic agent operations, missions are multi-step objectives (Phase 5).
@@ -98,7 +98,7 @@ Note: The codebase currently uses "mission" where it means "task" (the Phase 2 `
 
 **Why this is Phase 3:** The Archivist depends on compiled articles (Phase 2). The Curator depends on the Archivist's retrieval interface. The multi-pass retrieval system needs both the Archivist and a meaningful corpus to validate against. This is the phase where the knowledge base becomes interconnected. Image ingestion and the index/curate CLI commands complete the manual build chain so the full pipeline can be tested end-to-end with real content before Phase 4.
 
-**Validation:** Compile 10+ articles, Archivist indexes them with dual summaries, verify retrieval quality. Curator cross-references a new article — verify multi-pass linking discovers all relevant connections. Verify Phase 1-2 articles are retroactively linked. Ingest an image file via Scout using vision model — verify extracted text is reasonable markdown. Run the full manual chain: `scout ingest` → `mission run --agent compiler` → `index` → `curate` → `status`.
+**Validation:** Compile 10+ articles, Archivist indexes them with dual summaries, verify retrieval quality. Curator cross-references a new article — verify multi-pass linking discovers all relevant connections. Verify Phase 1-2 articles are retroactively linked. Ingest an image file via Scout using vision model — verify extracted text is reasonable markdown. Run the full manual chain: `scout ingest` → `plan --execute` → `index` → `curate` → `status`.
 
 ---
 

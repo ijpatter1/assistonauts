@@ -9,7 +9,7 @@ Assistonauts is a framework for building and maintaining LLM-powered knowledge b
 - **Language:** Python 3.11+, strict typing (no `Any` without justification)
 - **CLI Framework:** Click + Rich
 - **LLM:** litellm (provider-agnostic — Claude, OpenAI, Ollama, Vertex)
-- **Database:** SQLite (FTS5 for keyword search, sqlite-vec for vector similarity, mission ledger, LLM cache)
+- **Database:** SQLite (FTS5 for keyword search, sqlite-vec for vector similarity, task audit trails, LLM cache)
 - **Testing:** pytest + pytest-cov, contract tests with recorded LLM fixtures
 - **Linter/Formatter:** ruff (lint + format)
 - **Package Manager:** uv
@@ -133,7 +133,7 @@ See the Testing Strategy section in `docs/assistonauts-spec.md` for full details
 ### Error Handling
 
 - CLI errors show a meaningful message via Rich. Technical details go to the structured log.
-- Agent errors are classified as transient or deterministic (see mission runner spec). Transient errors retry; deterministic errors fail-fast to the review queue.
+- Agent errors are classified as transient or deterministic (see task runner). Transient errors retry; deterministic errors fail-fast to the review queue.
 - File I/O errors from ownership boundary violations raise `OwnershipError` with the agent role, attempted path, and allowed directories.
 
 ## Git Conventions
