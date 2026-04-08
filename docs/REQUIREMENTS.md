@@ -76,10 +76,13 @@ The system is built around six specialized agents (Captain, Scout, Compiler, Cur
 12. LLM response cache — SHA-256 prompt hash keying, SQLite backend, configurable TTL, flush per agent/expedition
 13. Retroactive cross-referencing — Curator pass over all Phase 1-2 articles to add backlinks and "See also" sections now that the index exists
 14. CLI: `assistonauts status` — expedition and knowledge base status overview
+15. Image ingestion in Scout — vision model support (Gemma 4 via litellm) for image files (.png, .jpg, .jpeg, .gif, .webp), sends images to multimodal LLM for text extraction and markdown conversion, integrates with existing Scout ingestion pipeline
+16. CLI: `assistonauts index` — index all wiki articles into the Archivist (FTS + embeddings), with `--reindex` flag to force reindexing of unchanged articles
+17. CLI: `assistonauts curate` — run Curator cross-referencing over all indexed articles, with `--proposals` flag to show structural improvement proposals
 
-**Why this is Phase 3:** The Archivist depends on compiled articles (Phase 2). The Curator depends on the Archivist's retrieval interface. The multi-pass retrieval system needs both the Archivist and a meaningful corpus to validate against. This is the phase where the knowledge base becomes interconnected.
+**Why this is Phase 3:** The Archivist depends on compiled articles (Phase 2). The Curator depends on the Archivist's retrieval interface. The multi-pass retrieval system needs both the Archivist and a meaningful corpus to validate against. This is the phase where the knowledge base becomes interconnected. Image ingestion and the index/curate CLI commands complete the manual build chain so the full pipeline can be tested end-to-end with real content before Phase 4.
 
-**Validation:** Compile 10+ articles, Archivist indexes them with dual summaries, verify retrieval quality. Curator cross-references a new article — verify multi-pass linking discovers all relevant connections. Verify Phase 1-2 articles are retroactively linked.
+**Validation:** Compile 10+ articles, Archivist indexes them with dual summaries, verify retrieval quality. Curator cross-references a new article — verify multi-pass linking discovers all relevant connections. Verify Phase 1-2 articles are retroactively linked. Ingest an image file via Scout using vision model — verify extracted text is reasonable markdown. Run the full manual chain: `scout ingest` → `mission run --agent compiler` → `index` → `curate` → `status`.
 
 ---
 

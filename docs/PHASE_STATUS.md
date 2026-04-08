@@ -59,6 +59,9 @@ _Goal: Build the Archivist (deterministic knowledge base operating system), hybr
 - ✅ 2026-04-08, session-2026-04-08-003 — LLM response cache — SHA-256 prompt hash keying, SQLite backend, configurable TTL, flush per agent/expedition, max_size_mb enforcement, integrated into LLMClient
 - ✅ 2026-04-08, session-2026-04-08-003 — Retroactive cross-referencing — `retroactive_cross_reference()` on CuratorAgent, batch pass over all indexed articles
 - ✅ 2026-04-08, session-2026-04-08-003 — CLI: `assistonauts status` — knowledge base status overview with article counts, word count, stale detection
+- ⬜ Image ingestion in Scout — vision model support (Gemma 4 via litellm) for image files, multimodal LLM text extraction, integrates with existing Scout pipeline
+- ⬜ CLI: `assistonauts index` — index all wiki articles into the Archivist (FTS + embeddings), with `--reindex` flag
+- ⬜ CLI: `assistonauts curate` — run Curator cross-referencing over all indexed articles, with `--proposals` flag
 
 ---
 

@@ -1,10 +1,13 @@
-"""Scout agent toolkit — deterministic utility functions.
+"""Scout agent toolkit — utility functions for source ingestion.
 
-All functions are pure/deterministic (no LLM calls) and independently testable.
+Most functions are pure/deterministic (no LLM calls) and independently
+testable. The exception is convert_image(), which uses a vision-capable
+LLM to extract text from images.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import urllib.request
 from dataclasses import dataclass
@@ -56,6 +59,77 @@ def convert_document(path: Path) -> str:
     converter = MarkItDown()
     result = converter.convert(str(path))
     return result.text_content
+
+
+_IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"})
+
+_IMAGE_MIME_TYPES: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+_VISION_SYSTEM_PROMPT = """\
+You are a text extraction agent. Given an image (typically a page from a book,
+paper, or document), extract ALL text content and convert it to well-structured
+markdown. Preserve headings, paragraphs, lists, and emphasis where visible.
+If the image contains diagrams or figures, describe them briefly in brackets.
+Output ONLY the extracted markdown, no commentary or wrapping.
+"""
+
+
+def is_image_file(path: Path) -> bool:
+    """Check if a file path has a supported image extension."""
+    return path.suffix.lower() in _IMAGE_EXTENSIONS
+
+
+def convert_image(
+    path: Path,
+    llm_client: object,
+) -> str:
+    """Convert an image to markdown using a vision-capable LLM.
+
+    Sends the image as a base64-encoded data URL to the LLM and
+    returns the extracted text as markdown.
+
+    Args:
+        path: Path to the image file.
+        llm_client: An LLM client with a complete() method that
+            supports multimodal messages (image_url content type).
+
+    Raises:
+        ValueError: If the file is not a supported image format.
+    """
+    if not is_image_file(path):
+        raise ValueError(
+            f"{path.name} is not a supported image format. "
+            f"Supported: {', '.join(sorted(_IMAGE_EXTENSIONS))}"
+        )
+
+    # Read and encode image as base64 data URL
+    image_bytes = path.read_bytes()
+    mime_type = _IMAGE_MIME_TYPES.get(path.suffix.lower(), "image/png")
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    data_url = f"data:{mime_type};base64,{b64}"
+
+    # Build multimodal message with image
+    messages: list[dict[str, str]] = [
+        {
+            "role": "user",
+            "content": (
+                f"Extract all text from this image and convert to markdown.\n\n"
+                f"![image]({data_url})"
+            ),
+        },
+    ]
+
+    response = llm_client.complete(  # type: ignore[union-attr]
+        messages=messages,
+        system=_VISION_SYSTEM_PROMPT,
+    )
+    return response.content
 
 
 def clip_web(url: str, output_dir: Path) -> tuple[str, list[Path]]:
