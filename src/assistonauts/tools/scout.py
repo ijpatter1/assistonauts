@@ -98,6 +98,45 @@ Rules:
 """
 
 
+def _prepare_image(path: Path, max_bytes: int = 4_500_000) -> bytes:
+    """Read an image, resizing if it exceeds max_bytes.
+
+    Uses Pillow to progressively downscale large images while
+    maintaining aspect ratio and readability for vision models.
+    Returns the image as PNG or JPEG bytes.
+    """
+    raw = path.read_bytes()
+    if len(raw) <= max_bytes:
+        return raw
+
+    from io import BytesIO
+
+    from PIL import Image
+
+    img = Image.open(BytesIO(raw))
+
+    # Convert RGBA to RGB for JPEG compatibility
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+
+    # Progressively downscale until under the limit
+    quality = 85
+    for scale in [0.75, 0.5, 0.4, 0.3, 0.25]:
+        new_w = int(img.width * scale)
+        new_h = int(img.height * scale)
+        resized = img.resize((new_w, new_h), Image.LANCZOS)
+
+        buf = BytesIO()
+        resized.save(buf, format="JPEG", quality=quality)
+        if buf.tell() <= max_bytes:
+            return buf.getvalue()
+
+    # Last resort: aggressive compression
+    buf = BytesIO()
+    resized.save(buf, format="JPEG", quality=60)
+    return buf.getvalue()
+
+
 def is_image_file(path: Path) -> bool:
     """Check if a file path has a supported image extension."""
     return path.suffix.lower() in _IMAGE_EXTENSIONS
@@ -126,9 +165,14 @@ def convert_image(
             f"Supported: {', '.join(sorted(_IMAGE_EXTENSIONS))}"
         )
 
-    # Read and encode image as base64 data URL
-    image_bytes = path.read_bytes()
-    mime_type = _IMAGE_MIME_TYPES.get(path.suffix.lower(), "image/png")
+    # Read image, resize if needed to stay under API limits (5MB)
+    raw_bytes = path.read_bytes()
+    image_bytes = _prepare_image(path, max_bytes=4_500_000)
+    # If we had to resize, it's now JPEG regardless of original format
+    if len(raw_bytes) > 4_500_000:
+        mime_type = "image/jpeg"
+    else:
+        mime_type = _IMAGE_MIME_TYPES.get(path.suffix.lower(), "image/png")
     b64 = base64.b64encode(image_bytes).decode("utf-8")
     data_url = f"data:{mime_type};base64,{b64}"
 
