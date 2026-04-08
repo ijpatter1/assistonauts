@@ -155,6 +155,21 @@ def _parse_plan_yaml(
     return CompilationPlan(articles=articles) if articles else None
 
 
+def _strip_code_fences(text: str) -> str:
+    """Strip markdown code fences from LLM output.
+
+    LLMs sometimes wrap their output in ```markdown ... ``` fences.
+    This strips them so the article is clean markdown.
+    """
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        # Remove opening fence (```markdown, ```md, or just ```)
+        stripped = re.sub(r"^```\w*\n?", "", stripped, count=1)
+        # Remove closing fence
+        stripped = re.sub(r"\n?```\s*$", "", stripped)
+    return stripped.strip()
+
+
 def _slugify(title: str, separator: str = "-", max_length: int = 80) -> str:
     """Convert a title to a URL-friendly slug."""
     slug = title.lower().strip()
@@ -309,8 +324,10 @@ class CompilerAgent(Agent):
             )
 
         # Call LLM to compile
-        article_content = self.call_llm(
-            messages=[{"role": "user", "content": compile_msg}],
+        article_content = _strip_code_fences(
+            self.call_llm(
+                messages=[{"role": "user", "content": compile_msg}],
+            )
         )
 
         # Write article
@@ -462,8 +479,10 @@ class CompilerAgent(Agent):
             )
 
         # Call LLM to compile
-        article_content = self.call_llm(
-            messages=[{"role": "user", "content": compile_msg}],
+        article_content = _strip_code_fences(
+            self.call_llm(
+                messages=[{"role": "user", "content": compile_msg}],
+            )
         )
 
         # Write article

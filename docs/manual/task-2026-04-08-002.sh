@@ -91,23 +91,14 @@ echo ""
 echo "  ⚠️  Review: does the transcription look reasonable?"
 echo "     If garbled, check ANTHROPIC_API_KEY and model config."
 
-# ── Step 4: Run Compiler plan mode ───────────────────
+# ── Step 4: Plan and compile ─────────────────────────
 
 echo ""
-echo "Step 4: Running Compiler plan mode..."
-echo "  Analyzing sources and proposing compilation plan..."
-assistonauts plan -w "$WORKSPACE"
-
-echo ""
-echo "  ⚠️  Review the plan above. Does it make sense?"
-read -p "  Press Enter to execute the plan, or Ctrl+C to abort..."
-
-# ── Step 5: Execute the plan ─────────────────────────
-
-echo ""
-echo "Step 5: Executing compilation plan..."
+echo "Step 4: Running Compiler plan mode + compile..."
+echo "  Analyzing sources, proposing plan, and compiling..."
+echo "  (single LLM call for planning, then compile each article)"
 assistonauts plan --execute -w "$WORKSPACE"
-echo "  ✓ Compilation complete"
+echo "  ✓ Plan + compilation complete"
 
 # ── Step 6: Index all articles ───────────────────────
 
