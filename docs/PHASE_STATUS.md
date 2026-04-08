@@ -1,8 +1,9 @@
 # Phase Status Tracker
 
-> **Current Phase: 2 — Compiler + Mission Runner**
-> Last updated: 2026-04-07, session-2026-04-07-003
+> **Current Phase: 3 — Archivist System + Curator + Hybrid RAG**
+> Last updated: 2026-04-08, session-2026-04-08-002
 > Phase 1 merged to main 2026-04-07
+> Phase 2 merged to main 2026-04-08
 
 ---
 
