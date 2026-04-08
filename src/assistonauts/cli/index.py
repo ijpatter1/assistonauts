@@ -26,8 +26,13 @@ console = Console()
     default=False,
     help="Force reindexing of all articles, even if unchanged.",
 )
-def index(workspace: Path, reindex: bool) -> None:
-    """Index all wiki articles into the Archivist (FTS + metadata)."""
+@click.option(
+    "--embeddings/--no-embeddings",
+    default=True,
+    help="Generate vector embeddings (requires embedding model). Default: on.",
+)
+def index(workspace: Path, reindex: bool, embeddings: bool) -> None:
+    """Index all wiki articles into the Archivist (FTS + embeddings)."""
     workspace = workspace.resolve()
 
     if not (workspace / ".assistonauts").exists():
@@ -49,26 +54,67 @@ def index(workspace: Path, reindex: bool) -> None:
 
     archivist = Archivist(workspace)
 
+    # Set up embedding client if requested
+    embedding_client = None
+    if embeddings:
+        embedding_client = _create_embedding_client(workspace)
+        if embedding_client is None:
+            console.print(
+                "[yellow]Warning:[/yellow] Could not initialize "
+                "embedding model. Indexing FTS only."
+            )
+
     indexed = 0
     skipped = 0
     for article_path in articles:
         rel_path = str(article_path.relative_to(workspace))
 
         if reindex:
-            # Delete existing entry to force reindex
             existing = archivist.db.get_article(rel_path)
             if existing:
                 archivist.db.delete_article(rel_path)
 
-        changed = archivist.index(rel_path)
+        if embedding_client is not None:
+            changed = archivist.index_with_embeddings(
+                rel_path, embedding_client=embedding_client
+            )
+        else:
+            changed = archivist.index(rel_path)
+
         if changed:
             indexed += 1
             console.print(f"  [green]indexed[/green] {rel_path}")
         else:
             skipped += 1
 
+    mode = "FTS + embeddings" if embedding_client else "FTS only"
     console.print(
         f"\n[bold]Indexed: {indexed}[/bold], "
         f"[dim]Skipped: {skipped}[/dim] "
-        f"(total: {indexed + skipped} articles)"
+        f"(total: {indexed + skipped} articles, {mode})"
     )
+
+
+def _create_embedding_client(
+    workspace: Path,
+) -> object | None:
+    """Try to create an embedding client from workspace config."""
+    from assistonauts.archivist.embeddings import LiteLLMEmbeddingClient
+    from assistonauts.config.loader import load_config
+
+    try:
+        config = load_config(workspace / ".assistonauts" / "config.yaml")
+        emb_config = config.get("embedding", {})
+        active = emb_config.get("active", "")
+        if not active:
+            return None
+        provider = emb_config.get("providers", {}).get(active, {})
+        model = provider.get("model", "")
+        if not model:
+            return None
+        return LiteLLMEmbeddingClient(
+            model=model,
+            base_url=provider.get("base_url"),
+        )
+    except Exception:
+        return None

@@ -116,31 +116,36 @@ class LLMResponseCache:
         self._enforce_max_size()
 
     def _enforce_max_size(self) -> None:
-        """Evict oldest entries if cache exceeds max_size_mb."""
-        max_bytes = self._max_size_mb * 1024 * 1024
-        page_info = self._conn.execute("PRAGMA page_count").fetchone()
-        page_size_info = self._conn.execute("PRAGMA page_size").fetchone()
-        page_count = page_info[0] if page_info else 0
-        page_size = page_size_info[0] if page_size_info else 4096
-        current_size = page_count * page_size
+        """Evict oldest entries if cache exceeds max_size_mb.
 
-        if current_size <= max_bytes:
+        Uses sum of content lengths as a proxy for cache size since
+        SQLite's page_count doesn't decrease after DELETE without VACUUM.
+        """
+        max_bytes = self._max_size_mb * 1024 * 1024
+
+        # Estimate actual data size from content lengths
+        row = self._conn.execute(
+            "SELECT COALESCE(SUM(LENGTH(content) + LENGTH(usage)), 0) FROM llm_cache"
+        ).fetchone()
+        estimated_size = row[0] if row else 0
+
+        if estimated_size <= max_bytes:
             return
 
         # Delete oldest entries until under limit
         rows = self._conn.execute(
-            "SELECT cache_key FROM llm_cache ORDER BY created_at ASC"
+            "SELECT cache_key, LENGTH(content) + LENGTH(usage) as entry_size "
+            "FROM llm_cache ORDER BY created_at ASC"
         ).fetchall()
         for row in rows:
             self._conn.execute(
-                "DELETE FROM llm_cache WHERE cache_key = ?", (row["cache_key"],)
+                "DELETE FROM llm_cache WHERE cache_key = ?",
+                (row["cache_key"],),
             )
-            self._conn.commit()
-            # Recheck size
-            page_info = self._conn.execute("PRAGMA page_count").fetchone()
-            page_count = page_info[0] if page_info else 0
-            if page_count * page_size <= max_bytes:
+            estimated_size -= row["entry_size"]
+            if estimated_size <= max_bytes:
                 break
+        self._conn.commit()
 
     def flush(
         self,

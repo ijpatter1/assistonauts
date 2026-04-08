@@ -91,9 +91,9 @@ def analyze_graph(
         if targets:
             has_outgoing.add(source)
         for target in targets:
-            # Match target slug to article paths
+            # Match target slug to article path stems (exact match)
             for article in all_articles:
-                if target in article:
+                if Path(article).stem == target:
                     has_incoming.add(article)
 
     connected = has_outgoing | has_incoming

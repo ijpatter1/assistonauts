@@ -12,8 +12,20 @@ import hashlib
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from assistonauts.cache.content import hash_content as _hash_content
+
+
+class LLMClientProtocol(Protocol):
+    """Minimal protocol for LLM clients used by toolkit functions."""
+
+    def complete(
+        self,
+        messages: list[dict[str, object]],
+        system: str | None = None,
+        **kwargs: object,
+    ) -> object: ...
 
 
 def hash_content(path: Path) -> str:
@@ -87,7 +99,7 @@ def is_image_file(path: Path) -> bool:
 
 def convert_image(
     path: Path,
-    llm_client: object,
+    llm_client: LLMClientProtocol,
 ) -> str:
     """Convert an image to markdown using a vision-capable LLM.
 
@@ -114,22 +126,29 @@ def convert_image(
     b64 = base64.b64encode(image_bytes).decode("utf-8")
     data_url = f"data:{mime_type};base64,{b64}"
 
-    # Build multimodal message with image
-    messages: list[dict[str, str]] = [
+    # Build multimodal message with proper content blocks format
+    # (OpenAI/litellm standard for vision models)
+    messages: list[dict[str, object]] = [
         {
             "role": "user",
-            "content": (
-                f"Extract all text from this image and convert to markdown.\n\n"
-                f"![image]({data_url})"
-            ),
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Extract all text from this image and convert to markdown.",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": data_url},
+                },
+            ],
         },
     ]
 
-    response = llm_client.complete(  # type: ignore[union-attr]
+    response = llm_client.complete(
         messages=messages,
         system=_VISION_SYSTEM_PROMPT,
     )
-    return response.content
+    return response.content  # type: ignore[union-attr] — Protocol.complete returns object, but LLM clients return objects with .content
 
 
 def clip_web(url: str, output_dir: Path) -> tuple[str, list[Path]]:
