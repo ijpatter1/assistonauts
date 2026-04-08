@@ -1,4 +1,4 @@
-"""Tests for the mission runner."""
+"""Tests for the task runner."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from assistonauts.missions.runner import (
-    Mission,
-    MissionRunner,
-    MissionStatus,
+from assistonauts.tasks.runner import (
+    Task,
+    TaskRunner,
+    TaskStatus,
     TransientError,
 )
 from tests.helpers import FakeLLMClient, FakeResponse
@@ -25,7 +25,7 @@ def workspace(tmp_path: Path) -> Path:
     from assistonauts.storage.workspace import init_workspace
 
     root = init_workspace(tmp_path)
-    # Create a raw source for compiler missions
+    # Create a raw source for compiler tasks
     raw_dir = root / "raw" / "articles"
     raw_dir.mkdir(parents=True, exist_ok=True)
     source = raw_dir / "test-source.md"
@@ -40,47 +40,47 @@ def workspace(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def missions_dir(workspace: Path) -> Path:
-    d = workspace / ".assistonauts" / "missions"
+def tasks_dir(workspace: Path) -> Path:
+    d = workspace / ".assistonauts" / "tasks"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-class TestMissionModel:
-    """Test the Mission data model."""
+class TestTaskModel:
+    """Test the Task data model."""
 
-    def test_create_mission(self) -> None:
-        m = Mission(
-            mission_id="m-001",
+    def test_create_task(self) -> None:
+        t = Task(
+            task_id="t-001",
             agent="compiler",
             params={"source_path": "/some/path.md", "title": "Test"},
         )
-        assert m.mission_id == "m-001"
-        assert m.agent == "compiler"
-        assert m.status == MissionStatus.PENDING
+        assert t.task_id == "t-001"
+        assert t.agent == "compiler"
+        assert t.status == TaskStatus.PENDING
 
-    def test_mission_status_values(self) -> None:
-        assert set(MissionStatus) == {
-            MissionStatus.PENDING,
-            MissionStatus.RUNNING,
-            MissionStatus.COMPLETED,
-            MissionStatus.FAILED,
+    def test_task_status_values(self) -> None:
+        assert set(TaskStatus) == {
+            TaskStatus.PENDING,
+            TaskStatus.RUNNING,
+            TaskStatus.COMPLETED,
+            TaskStatus.FAILED,
         }
 
 
-class TestMissionRunner:
-    """Test mission execution lifecycle."""
+class TestTaskRunner:
+    """Test task execution lifecycle."""
 
-    def test_run_mission_success(self, workspace: Path, missions_dir: Path) -> None:
+    def test_run_task_success(self, workspace: Path, tasks_dir: Path) -> None:
         llm = FakeLLMClient(
             [
                 _FAKE_ARTICLE,
                 "A summary of the test article.",
             ]
         )
-        runner = MissionRunner(workspace_root=workspace, missions_dir=missions_dir)
-        mission = Mission(
-            mission_id="m-001",
+        runner = TaskRunner(workspace_root=workspace, tasks_dir=tasks_dir)
+        task = Task(
+            task_id="t-001",
             agent="compiler",
             params={
                 "source_path": str(workspace / "raw" / "articles" / "test-source.md"),
@@ -88,12 +88,12 @@ class TestMissionRunner:
                 "title": "Test Topic",
             },
         )
-        result = runner.run(mission, llm_client=llm)
+        result = runner.run(task, llm_client=llm)
         assert result.success is True
-        assert result.status == MissionStatus.COMPLETED
+        assert result.status == TaskStatus.COMPLETED
 
-    def test_run_mission_writes_audit_trail(
-        self, workspace: Path, missions_dir: Path
+    def test_run_task_writes_audit_trail(
+        self, workspace: Path, tasks_dir: Path
     ) -> None:
         llm = FakeLLMClient(
             [
@@ -101,9 +101,9 @@ class TestMissionRunner:
                 "Summary.",
             ]
         )
-        runner = MissionRunner(workspace_root=workspace, missions_dir=missions_dir)
-        mission = Mission(
-            mission_id="m-002",
+        runner = TaskRunner(workspace_root=workspace, tasks_dir=tasks_dir)
+        task = Task(
+            task_id="t-002",
             agent="compiler",
             params={
                 "source_path": str(workspace / "raw" / "articles" / "test-source.md"),
@@ -111,17 +111,17 @@ class TestMissionRunner:
                 "title": "Test Topic",
             },
         )
-        runner.run(mission, llm_client=llm)
-        audit_file = missions_dir / "m-002.yaml"
+        runner.run(task, llm_client=llm)
+        audit_file = tasks_dir / "t-002.yaml"
         assert audit_file.exists()
         audit = yaml.safe_load(audit_file.read_text())
-        assert audit["mission_id"] == "m-002"
+        assert audit["task_id"] == "t-002"
         assert audit["status"] == "completed"
         assert "started_at" in audit
         assert "completed_at" in audit
 
-    def test_run_mission_status_transitions(
-        self, workspace: Path, missions_dir: Path
+    def test_run_task_status_transitions(
+        self, workspace: Path, tasks_dir: Path
     ) -> None:
         llm = FakeLLMClient(
             [
@@ -129,9 +129,9 @@ class TestMissionRunner:
                 "Summary.",
             ]
         )
-        runner = MissionRunner(workspace_root=workspace, missions_dir=missions_dir)
-        mission = Mission(
-            mission_id="m-003",
+        runner = TaskRunner(workspace_root=workspace, tasks_dir=tasks_dir)
+        task = Task(
+            task_id="t-003",
             agent="compiler",
             params={
                 "source_path": str(workspace / "raw" / "articles" / "test-source.md"),
@@ -139,17 +139,17 @@ class TestMissionRunner:
                 "title": "Test Topic",
             },
         )
-        runner.run(mission, llm_client=llm)
-        assert mission.status == MissionStatus.COMPLETED
+        runner.run(task, llm_client=llm)
+        assert task.status == TaskStatus.COMPLETED
 
-    def test_run_mission_deterministic_failure(
-        self, workspace: Path, missions_dir: Path
+    def test_run_task_deterministic_failure(
+        self, workspace: Path, tasks_dir: Path
     ) -> None:
         """Deterministic errors (bad input) should fail-fast, no retry."""
         llm = FakeLLMClient()
-        runner = MissionRunner(workspace_root=workspace, missions_dir=missions_dir)
-        mission = Mission(
-            mission_id="m-004",
+        runner = TaskRunner(workspace_root=workspace, tasks_dir=tasks_dir)
+        task = Task(
+            task_id="t-004",
             agent="compiler",
             params={
                 "source_path": "/nonexistent/path.md",
@@ -157,19 +157,19 @@ class TestMissionRunner:
                 "title": "Bad Source",
             },
         )
-        result = runner.run(mission, llm_client=llm)
+        result = runner.run(task, llm_client=llm)
         assert result.success is False
-        assert result.status == MissionStatus.FAILED
+        assert result.status == TaskStatus.FAILED
         assert result.error_type == "deterministic"
         # Audit trail should record the failure
-        audit_file = missions_dir / "m-004.yaml"
+        audit_file = tasks_dir / "t-004.yaml"
         assert audit_file.exists()
         audit = yaml.safe_load(audit_file.read_text())
         assert audit["status"] == "failed"
         assert audit["error_type"] == "deterministic"
 
-    def test_run_mission_transient_failure_retries(
-        self, workspace: Path, missions_dir: Path
+    def test_run_task_transient_failure_retries(
+        self, workspace: Path, tasks_dir: Path
     ) -> None:
         """Transient errors should be retried."""
 
@@ -191,13 +191,13 @@ class TestMissionRunner:
                     "---\ntitle: T\ntype: concept\n---\n\n# T\n\n## Overview\n\nC."
                 )
 
-        runner = MissionRunner(
+        runner = TaskRunner(
             workspace_root=workspace,
-            missions_dir=missions_dir,
+            tasks_dir=tasks_dir,
             max_retries=3,
         )
-        mission = Mission(
-            mission_id="m-005",
+        task = Task(
+            task_id="t-005",
             agent="compiler",
             params={
                 "source_path": str(workspace / "raw" / "articles" / "test-source.md"),
@@ -205,12 +205,12 @@ class TestMissionRunner:
                 "title": "Retry Test",
             },
         )
-        result = runner.run(mission, llm_client=FailThenSucceedLLM())
+        result = runner.run(task, llm_client=FailThenSucceedLLM())
         assert result.success is True
         assert result.retry_count == 2
 
-    def test_run_mission_transient_exhausted(
-        self, workspace: Path, missions_dir: Path
+    def test_run_task_transient_exhausted(
+        self, workspace: Path, tasks_dir: Path
     ) -> None:
         """Transient errors that exhaust retries should fail."""
 
@@ -224,13 +224,13 @@ class TestMissionRunner:
             ) -> FakeResponse:
                 raise TransientError("API timeout")
 
-        runner = MissionRunner(
+        runner = TaskRunner(
             workspace_root=workspace,
-            missions_dir=missions_dir,
+            tasks_dir=tasks_dir,
             max_retries=2,
         )
-        mission = Mission(
-            mission_id="m-006",
+        task = Task(
+            task_id="t-006",
             agent="compiler",
             params={
                 "source_path": str(workspace / "raw" / "articles" / "test-source.md"),
@@ -238,14 +238,14 @@ class TestMissionRunner:
                 "title": "Exhaust Test",
             },
         )
-        result = runner.run(mission, llm_client=AlwaysFailLLM())
+        result = runner.run(task, llm_client=AlwaysFailLLM())
         assert result.success is False
-        assert result.status == MissionStatus.FAILED
+        assert result.status == TaskStatus.FAILED
         assert result.error_type == "transient"
         assert result.retry_count == 2
 
-    def test_mission_result_includes_agent_output(
-        self, workspace: Path, missions_dir: Path
+    def test_task_result_includes_agent_output(
+        self, workspace: Path, tasks_dir: Path
     ) -> None:
         llm = FakeLLMClient(
             [
@@ -253,9 +253,9 @@ class TestMissionRunner:
                 "Summary of test.",
             ]
         )
-        runner = MissionRunner(workspace_root=workspace, missions_dir=missions_dir)
-        mission = Mission(
-            mission_id="m-007",
+        runner = TaskRunner(workspace_root=workspace, tasks_dir=tasks_dir)
+        task = Task(
+            task_id="t-007",
             agent="compiler",
             params={
                 "source_path": str(workspace / "raw" / "articles" / "test-source.md"),
@@ -263,5 +263,5 @@ class TestMissionRunner:
                 "title": "Test Topic",
             },
         )
-        result = runner.run(mission, llm_client=llm)
+        result = runner.run(task, llm_client=llm)
         assert result.agent_output is not None

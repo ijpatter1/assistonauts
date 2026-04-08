@@ -315,18 +315,18 @@ class TestCompilerAgent:
         assert result.success is True
         assert result.skipped is False
 
-    def test_run_mission_delegates_to_compile(self, workspace: Path) -> None:
+    def test_run_task_delegates_to_compile(self, workspace: Path) -> None:
         llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
         compiler = CompilerAgent(
             llm_client=llm,
             workspace_root=workspace,
         )
-        mission = {
+        task = {
             "source_path": str(workspace / "raw" / "articles" / "test-source.md"),
             "article_type": "concept",
             "title": "Test Concept",
         }
-        result = compiler.run_mission(mission)
+        result = compiler.run_task(task)
         assert isinstance(result, CompilationResult)
         assert result.success is True
 

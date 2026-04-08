@@ -157,11 +157,11 @@ class ScoutAgent(Agent):
             message=f"Ingested {source_path.name} → {manifest_key}",
         )
 
-    def run_mission(self, mission: dict[str, str]) -> IngestResult:
-        """Execute a Scout mission (ingest a source).
+    def run_task(self, task: dict[str, str]) -> IngestResult:
+        """Execute a Scout task (ingest a source).
 
-        Expects mission dict with 'source_path' and optional 'category'.
+        Expects task dict with 'source_path' and optional 'category'.
         """
-        source_path = Path(mission["source_path"])
-        category = mission.get("category", "articles")
+        source_path = Path(task["source_path"])
+        category = task.get("category", "articles")
         return self.ingest(source_path, category=category)

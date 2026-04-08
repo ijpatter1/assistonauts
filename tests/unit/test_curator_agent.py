@@ -167,7 +167,7 @@ class TestCuratorCrossReference:
         )
         assert len(result.links_added) >= 0  # May be 0 if already linked
 
-    def test_run_mission(
+    def test_run_task(
         self,
         workspace: Path,
         archivist: Archivist,
@@ -181,7 +181,7 @@ class TestCuratorCrossReference:
             archivist=archivist,
             embedding_client=embedding_client,
         )
-        result = curator.run_mission(
+        result = curator.run_task(
             {"article_path": "wiki/concepts/spectral-analysis.md"}
         )
         assert result.success is True

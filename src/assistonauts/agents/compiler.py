@@ -407,20 +407,20 @@ class CompilerAgent(Agent):
             message=(f"Compiled {len(resolved)} sources → {manifest_key}"),
         )
 
-    def run_mission(self, mission: dict[str, str]) -> CompilationResult:
-        """Execute a Compiler mission.
+    def run_task(self, task: dict[str, str]) -> CompilationResult:
+        """Execute a Compiler task.
 
-        Expects mission dict with 'source_path' (single) or
+        Expects task dict with 'source_path' (single) or
         'source_paths' (comma-separated list), 'article_type', and 'title'.
         """
-        article_type = ArticleType(mission.get("article_type", "concept"))
+        article_type = ArticleType(task.get("article_type", "concept"))
 
         # Support multi-source via comma-separated paths
-        if "source_paths" in mission:
-            paths = [Path(p.strip()) for p in mission["source_paths"].split(",")]
-            title = mission.get("title", paths[0].stem)
+        if "source_paths" in task:
+            paths = [Path(p.strip()) for p in task["source_paths"].split(",")]
+            title = task.get("title", paths[0].stem)
             return self.compile_multi(paths, article_type=article_type, title=title)
 
-        source_path = Path(mission["source_path"])
-        title = mission.get("title", source_path.stem)
+        source_path = Path(task["source_path"])
+        title = task.get("title", source_path.stem)
         return self.compile(source_path, article_type=article_type, title=title)

@@ -1,4 +1,4 @@
-"""Mission CLI subcommands."""
+"""Task CLI subcommands."""
 
 from __future__ import annotations
 
@@ -36,17 +36,17 @@ def _create_llm_client(
 
 
 @click.group()
-def mission() -> None:
-    """Mission commands — execute agent missions."""
+def task() -> None:
+    """Task commands — execute agent tasks."""
 
 
-@mission.command()
+@task.command()
 @click.option(
     "--agent",
     "-a",
     required=True,
     type=click.Choice(["compiler", "scout"]),
-    help="Agent to run the mission with.",
+    help="Agent to run the task with.",
 )
 @click.option(
     "--source",
@@ -77,7 +77,7 @@ def mission() -> None:
 @click.option(
     "--commit/--no-commit",
     default=False,
-    help="Auto-commit after successful mission.",
+    help="Auto-commit after successful task.",
 )
 def run(
     agent: str,
@@ -87,8 +87,8 @@ def run(
     workspace: Path,
     commit: bool,
 ) -> None:
-    """Execute a single agent mission."""
-    from assistonauts.missions.runner import Mission, MissionRunner
+    """Execute a single agent task."""
+    from assistonauts.tasks.runner import Task, TaskRunner
 
     workspace = workspace.resolve()
 
@@ -104,15 +104,15 @@ def run(
     if not title:
         title = source_paths[0].stem.replace("-", " ").replace("_", " ").title()
 
-    mission_id = f"m-{uuid.uuid4().hex[:8]}"
-    missions_dir = workspace / ".assistonauts" / "missions"
-    missions_dir.mkdir(parents=True, exist_ok=True)
+    task_id = f"t-{uuid.uuid4().hex[:8]}"
+    tasks_dir = workspace / ".assistonauts" / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
 
     llm_client = _create_llm_client(workspace, agent)
 
-    runner = MissionRunner(
+    runner = TaskRunner(
         workspace_root=workspace,
-        missions_dir=missions_dir,
+        tasks_dir=tasks_dir,
         auto_commit=commit,
     )
 
@@ -130,25 +130,24 @@ def run(
             "title": title,
         }
 
-    mission_obj = Mission(
-        mission_id=mission_id,
+    task_obj = Task(
+        task_id=task_id,
         agent=agent,
         params=params,
     )
 
     try:
-        result = runner.run(mission_obj, llm_client=llm_client)
+        result = runner.run(task_obj, llm_client=llm_client)
 
         if result.success:
             console.print(
-                f"[green]✓[/green] Completed mission "
-                f"[bold]{mission_id}[/bold] ({agent})"
+                f"[green]\u2713[/green] Completed task [bold]{task_id}[/bold] ({agent})"
             )
             if result.agent_output and result.agent_output.output_path:
                 console.print(f"  Output: {result.agent_output.output_path}")
         else:
             console.print(
-                f"[red]✗[/red] Mission {mission_id} failed: {result.error_message}"
+                f"[red]\u2717[/red] Task {task_id} failed: {result.error_message}"
             )
             raise SystemExit(1)
     except SystemExit:

@@ -30,15 +30,15 @@ class TestStructuredLogger:
         assert entry["event"] == "test_event"
         assert entry["detail"] == "value"
 
-    def test_log_with_mission_id(self, tmp_path: Path) -> None:
-        """Mission ID is included in log entries when provided."""
-        logger = StructuredLogger(role="scout", log_dir=tmp_path, mission_id="m-001")
+    def test_log_with_task_id(self, tmp_path: Path) -> None:
+        """Task ID is included in log entries when provided."""
+        logger = StructuredLogger(role="scout", log_dir=tmp_path, task_id="t-001")
         logger.log("ingest")
 
-        log_file = tmp_path / "scout_m-001.jsonl"
+        log_file = tmp_path / "scout_t-001.jsonl"
         assert log_file.exists()
         entry = json.loads(log_file.read_text().strip())
-        assert entry["mission_id"] == "m-001"
+        assert entry["task_id"] == "t-001"
 
     def test_log_llm_call(self, tmp_path: Path) -> None:
         """log_llm_call records model and token counts."""

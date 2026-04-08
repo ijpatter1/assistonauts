@@ -216,7 +216,7 @@ class TestMultiSourceCLI:
         result = runner.invoke(
             cli,
             [
-                "mission",
+                "task",
                 "run",
                 "--agent",
                 "compiler",

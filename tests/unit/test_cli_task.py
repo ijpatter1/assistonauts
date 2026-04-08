@@ -1,4 +1,4 @@
-"""Tests for the mission CLI command."""
+"""Tests for the task CLI command."""
 
 from __future__ import annotations
 
@@ -28,26 +28,26 @@ def _make_workspace(tmp_path: Path) -> Path:
     source.write_text(
         "---\nsource: test-source.md\n---\n\n# Test Content\n\nSome text.\n"
     )
-    missions_dir = root / ".assistonauts" / "missions"
-    missions_dir.mkdir(parents=True, exist_ok=True)
+    tasks_dir = root / ".assistonauts" / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
     return root
 
 
-class TestMissionCLI:
-    """Test the mission run CLI command."""
+class TestTaskCLI:
+    """Test the task run CLI command."""
 
-    def test_mission_run_compiler_success(self, tmp_path: Path) -> None:
+    def test_task_run_compiler_success(self, tmp_path: Path) -> None:
         workspace = _make_workspace(tmp_path)
         source = workspace / "raw" / "articles" / "test-source.md"
 
         runner = CliRunner()
-        with patch("assistonauts.cli.mission._create_llm_client") as mock_llm:
+        with patch("assistonauts.cli.task._create_llm_client") as mock_llm:
             fake_llm = FakeLLMClient(_COMPILER_RESPONSES)
             mock_llm.return_value = fake_llm
             result = runner.invoke(
                 cli,
                 [
-                    "mission",
+                    "task",
                     "run",
                     "--agent",
                     "compiler",
@@ -60,17 +60,17 @@ class TestMissionCLI:
                 ],
             )
         assert result.exit_code == 0, result.output
-        assert "Completed" in result.output or "✓" in result.output
+        assert "Completed" in result.output or "\u2713" in result.output
 
-    def test_mission_run_missing_source(self, tmp_path: Path) -> None:
+    def test_task_run_missing_source(self, tmp_path: Path) -> None:
         workspace = _make_workspace(tmp_path)
         runner = CliRunner()
-        with patch("assistonauts.cli.mission._create_llm_client") as mock_llm:
+        with patch("assistonauts.cli.task._create_llm_client") as mock_llm:
             mock_llm.return_value = FakeLLMClient(_COMPILER_RESPONSES)
             result = runner.invoke(
                 cli,
                 [
-                    "mission",
+                    "task",
                     "run",
                     "--agent",
                     "compiler",
@@ -84,12 +84,12 @@ class TestMissionCLI:
             )
         assert result.exit_code == 1
 
-    def test_mission_run_not_workspace(self, tmp_path: Path) -> None:
+    def test_task_run_not_workspace(self, tmp_path: Path) -> None:
         runner = CliRunner()
         result = runner.invoke(
             cli,
             [
-                "mission",
+                "task",
                 "run",
                 "--agent",
                 "compiler",
@@ -104,17 +104,17 @@ class TestMissionCLI:
         assert result.exit_code == 1
         assert "workspace" in result.output.lower()
 
-    def test_mission_run_writes_audit_file(self, tmp_path: Path) -> None:
+    def test_task_run_writes_audit_file(self, tmp_path: Path) -> None:
         workspace = _make_workspace(tmp_path)
         source = workspace / "raw" / "articles" / "test-source.md"
 
         runner = CliRunner()
-        with patch("assistonauts.cli.mission._create_llm_client") as mock_llm:
+        with patch("assistonauts.cli.task._create_llm_client") as mock_llm:
             mock_llm.return_value = FakeLLMClient(_COMPILER_RESPONSES)
             runner.invoke(
                 cli,
                 [
-                    "mission",
+                    "task",
                     "run",
                     "--agent",
                     "compiler",
@@ -126,6 +126,6 @@ class TestMissionCLI:
                     str(workspace),
                 ],
             )
-        missions_dir = workspace / ".assistonauts" / "missions"
-        yaml_files = list(missions_dir.glob("*.yaml"))
+        tasks_dir = workspace / ".assistonauts" / "tasks"
+        yaml_files = list(tasks_dir.glob("*.yaml"))
         assert len(yaml_files) > 0

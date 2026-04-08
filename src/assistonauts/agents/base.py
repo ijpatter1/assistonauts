@@ -43,9 +43,9 @@ class LLMClientProtocol(Protocol):
 
 
 class AgentResult(Protocol):
-    """Protocol for agent mission results.
+    """Protocol for agent task results.
 
-    All agent run_mission() return types must satisfy this interface.
+    All agent run_task() return types must satisfy this interface.
     """
 
     success: bool
@@ -58,7 +58,7 @@ class Agent:
     """Base class for all Assistonauts agents.
 
     Provides ownership-enforced file I/O, toolkit registration,
-    and LLM client integration. Subclasses implement run_mission().
+    and LLM client integration. Subclasses implement run_task().
     """
 
     role: str
@@ -74,9 +74,9 @@ class Agent:
         if self.logger is None:
             self.logger = StructuredLogger(role=self.role)
 
-    def run_mission(self, mission: dict[str, str]) -> AgentResult:
-        """Execute a mission. Subclasses must override."""
-        raise NotImplementedError(f"Agent '{self.role}' must implement run_mission()")
+    def run_task(self, task: dict[str, str]) -> AgentResult:
+        """Execute a task. Subclasses must override."""
+        raise NotImplementedError(f"Agent '{self.role}' must implement run_task()")
 
     def read_file(self, path: Path) -> str:
         """Read a file, enforcing readable_dirs + owned_dirs boundary."""

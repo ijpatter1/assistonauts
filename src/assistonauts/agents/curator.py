@@ -289,10 +289,10 @@ class CuratorAgent(Agent):
 
         return proposals
 
-    def run_mission(self, mission: dict[str, str]) -> CuratorResult:
-        """Execute a Curator mission.
+    def run_task(self, task: dict[str, str]) -> CuratorResult:
+        """Execute a Curator task.
 
-        Expects mission dict with 'article_path'.
+        Expects task dict with 'article_path'.
         """
-        article_path = mission["article_path"]
+        article_path = task["article_path"]
         return self.cross_reference(article_path)

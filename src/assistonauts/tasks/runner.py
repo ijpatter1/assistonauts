@@ -1,7 +1,7 @@
-"""Mission runner — executes single missions with audit trails and failure handling.
+"""Task runner — executes single tasks with audit trails and failure handling.
 
-Runs one mission at a time, classifying failures as transient (retryable) or
-deterministic (fail-fast). Writes YAML audit trail for each mission.
+Runs one task at a time, classifying failures as transient (retryable) or
+deterministic (fail-fast). Writes YAML audit trail for each task.
 """
 
 from __future__ import annotations
@@ -17,11 +17,11 @@ import yaml
 
 from assistonauts.agents.base import Agent, AgentResult, LLMClientProtocol
 
-logger = logging.getLogger("assistonauts.missions")
+logger = logging.getLogger("assistonauts.tasks")
 
 
-class MissionStatus(Enum):
-    """Mission lifecycle states."""
+class TaskStatus(Enum):
+    """Task lifecycle states."""
 
     PENDING = "pending"
     RUNNING = "running"
@@ -38,21 +38,21 @@ class DeterministicError(Exception):
 
 
 @dataclass
-class Mission:
+class Task:
     """A single unit of agent work."""
 
-    mission_id: str
+    task_id: str
     agent: str
     params: dict[str, str]
-    status: MissionStatus = MissionStatus.PENDING
+    status: TaskStatus = TaskStatus.PENDING
 
 
 @dataclass
-class MissionResult:
-    """Result of executing a mission."""
+class TaskResult:
+    """Result of executing a task."""
 
     success: bool
-    status: MissionStatus
+    status: TaskStatus
     error_type: str = ""
     error_message: str = ""
     retry_count: int = 0
@@ -77,8 +77,8 @@ def _resolve_agent(
         raise DeterministicError(f"Unknown agent: {agent_name}")
 
 
-class MissionRunner:
-    """Executes single missions with YAML audit trail and failure classification.
+class TaskRunner:
+    """Executes single tasks with YAML audit trail and failure classification.
 
     Transient errors (TransientError, ConnectionError, TimeoutError) are retried
     up to max_retries times. Deterministic errors fail immediately.
@@ -89,101 +89,101 @@ class MissionRunner:
     def __init__(
         self,
         workspace_root: Path,
-        missions_dir: Path,
+        tasks_dir: Path,
         max_retries: int = 3,
         auto_commit: bool = False,
     ) -> None:
         self._workspace_root = workspace_root
-        self._missions_dir = missions_dir
+        self._tasks_dir = tasks_dir
         self._max_retries = max_retries
         self._auto_commit = auto_commit
 
     def run(
         self,
-        mission: Mission,
+        task: Task,
         llm_client: LLMClientProtocol,
-    ) -> MissionResult:
-        """Execute a mission, handling retries and writing audit trail."""
-        mission.status = MissionStatus.RUNNING
+    ) -> TaskResult:
+        """Execute a task, handling retries and writing audit trail."""
+        task.status = TaskStatus.RUNNING
         started_at = datetime.now(UTC).isoformat()
         retry_count = 0
         last_error = ""
 
         # Resolve agent
         try:
-            agent = _resolve_agent(mission.agent, self._workspace_root, llm_client)
+            agent = _resolve_agent(task.agent, self._workspace_root, llm_client)
         except DeterministicError as e:
-            mission.status = MissionStatus.FAILED
-            result = MissionResult(
+            task.status = TaskStatus.FAILED
+            result = TaskResult(
                 success=False,
-                status=MissionStatus.FAILED,
+                status=TaskStatus.FAILED,
                 error_type="deterministic",
                 error_message=str(e),
             )
-            self._write_audit(mission, started_at, result)
+            self._write_audit(task, started_at, result)
             return result
 
         # Execute with retry logic
         while True:
             try:
-                agent_output = agent.run_mission(mission.params)
-                mission.status = MissionStatus.COMPLETED
-                result = MissionResult(
+                agent_output = agent.run_task(task.params)
+                task.status = TaskStatus.COMPLETED
+                result = TaskResult(
                     success=True,
-                    status=MissionStatus.COMPLETED,
+                    status=TaskStatus.COMPLETED,
                     retry_count=retry_count,
                     agent_output=agent_output,
                 )
-                self._write_audit(mission, started_at, result)
+                self._write_audit(task, started_at, result)
                 if self._auto_commit:
-                    self._git_commit(mission, agent_output)
+                    self._git_commit(task, agent_output)
                 return result
 
             except self._TRANSIENT_EXCEPTIONS as e:
                 retry_count += 1
                 last_error = str(e)
                 if retry_count > self._max_retries:
-                    mission.status = MissionStatus.FAILED
-                    result = MissionResult(
+                    task.status = TaskStatus.FAILED
+                    result = TaskResult(
                         success=False,
-                        status=MissionStatus.FAILED,
+                        status=TaskStatus.FAILED,
                         error_type="transient",
                         error_message=last_error,
                         retry_count=self._max_retries,
                     )
-                    self._write_audit(mission, started_at, result)
+                    self._write_audit(task, started_at, result)
                     return result
                 # Retry — no backoff in v1 (simplicity over sophistication)
                 continue
 
             except Exception as e:
                 # All other errors are deterministic
-                mission.status = MissionStatus.FAILED
-                result = MissionResult(
+                task.status = TaskStatus.FAILED
+                result = TaskResult(
                     success=False,
-                    status=MissionStatus.FAILED,
+                    status=TaskStatus.FAILED,
                     error_type="deterministic",
                     error_message=str(e),
                     retry_count=retry_count,
                 )
-                self._write_audit(mission, started_at, result)
+                self._write_audit(task, started_at, result)
                 return result
 
     def _write_audit(
         self,
-        mission: Mission,
+        task: Task,
         started_at: str,
-        result: MissionResult,
+        result: TaskResult,
     ) -> None:
-        """Write YAML audit trail for a mission."""
-        self._missions_dir.mkdir(parents=True, exist_ok=True)
-        audit_path = self._missions_dir / f"{mission.mission_id}.yaml"
+        """Write YAML audit trail for a task."""
+        self._tasks_dir.mkdir(parents=True, exist_ok=True)
+        audit_path = self._tasks_dir / f"{task.task_id}.yaml"
 
         audit: dict[str, object] = {
-            "mission_id": mission.mission_id,
-            "agent": mission.agent,
-            "params": mission.params,
-            "status": mission.status.value,
+            "task_id": task.task_id,
+            "agent": task.agent,
+            "params": task.params,
+            "status": task.status.value,
             "started_at": started_at,
         }
 
@@ -199,17 +199,17 @@ class MissionRunner:
 
         audit_path.write_text(yaml.dump(audit, default_flow_style=False))
 
-    def _git_commit(self, mission: Mission, agent_output: AgentResult) -> None:
-        """Create a git commit for a completed mission.
+    def _git_commit(self, task: Task, agent_output: AgentResult) -> None:
+        """Create a git commit for a completed task.
 
         Stages only the files produced by the agent (via agent_output.output_paths)
-        plus the mission audit trail, rather than blindly staging all workspace changes.
+        plus the task audit trail, rather than blindly staging all workspace changes.
         """
         # Collect files to stage: agent outputs + audit trail
         paths_to_stage: list[str] = []
         for p in agent_output.output_paths:
             paths_to_stage.append(str(p))
-        audit_path = self._missions_dir / f"{mission.mission_id}.yaml"
+        audit_path = self._tasks_dir / f"{task.task_id}.yaml"
         if audit_path.exists():
             paths_to_stage.append(str(audit_path))
         # Also stage the manifest (updated by the agent)
@@ -224,8 +224,8 @@ class MissionRunner:
                 check=True,
                 capture_output=True,
             )
-            title = mission.params.get("title", "article")
-            msg = f"[mission-{mission.mission_id}] {mission.agent}: process {title}"
+            title = task.params.get("title", "article")
+            msg = f"[task-{task.task_id}] {task.agent}: process {title}"
             subprocess.run(
                 ["git", "commit", "-m", msg],
                 cwd=self._workspace_root,
@@ -234,7 +234,7 @@ class MissionRunner:
             )
         except subprocess.CalledProcessError as exc:
             logger.warning(
-                "Git commit failed for mission %s: %s",
-                mission.mission_id,
+                "Git commit failed for task %s: %s",
+                task.task_id,
                 exc.stderr.decode() if exc.stderr else str(exc),
             )

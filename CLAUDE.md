@@ -53,9 +53,9 @@ assistonauts/
 │       ├── cache/                  # Cache layers (content, LLM, embedding)
 │       ├── storage/                # Workspace management, file I/O, ownership
 │       ├── archivist/              # Knowledge base OS (Phase 3)
-│       ├── missions/               # Mission runner, state machine (Phase 2)
+│       ├── tasks/                  # Task runner, state machine (Phase 2)
 │       ├── rag/                    # Multi-pass retrieval (Phase 3)
-│       └── models/                 # Data models (configs, missions, etc.)
+│       └── models/                 # Data models (configs, tasks, etc.)
 ├── tests/
 │   ├── conftest.py                 # Shared fixtures, replay client setup
 │   ├── helpers.py                  # FakeLLMClient, FakeEmbeddingClient (canonical source)
