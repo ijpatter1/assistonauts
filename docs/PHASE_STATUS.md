@@ -1,7 +1,7 @@
 # Phase Status Tracker
 
 > **Current Phase: 3 — Archivist System + Curator + Hybrid RAG**
-> Last updated: 2026-04-08, session-2026-04-08-002
+> Last updated: 2026-04-08, session-2026-04-08-003
 > Phase 1 merged to main 2026-04-07
 > Phase 2 merged to main 2026-04-08
 
@@ -45,20 +45,20 @@ _Goal: Build the compilation pipeline — the Compiler agent that transforms raw
 
 _Goal: Build the Archivist (deterministic knowledge base operating system), hybrid retrieval, the multi-pass retrieval system, and the Curator agent for cross-referencing._
 
-- ⬜ Archivist system core — main `Archivist` class with service interface (`index()`, `search()`, `reindex_batch()`, `get_staleness()`, `get_downstream()`), not an agent — no LLM inference
-- ⬜ Embedding generation and storage — embedding model API calls via litellm, chunking, batching, storage in `index/assistonauts.db` (sqlite-vec)
-- ⬜ FTS indexing — SQLite FTS5 insert/update/delete for keyword-based retrieval
-- ⬜ Hybrid retrieval — vector similarity + FTS keyword search, reciprocal rank fusion reranking, configurable relevance floor, no arbitrary result cap
-- ⬜ Dual summary storage — retrieval summaries (deterministic keyword extraction) and content summaries (received from Compiler) in `index/summaries.jsonl`
-- ⬜ Manifest management — full lineage tracking, staleness graphs, embedding version tracking, summary staleness detection
-- ⬜ Multi-pass retrieval system — shared module (`rag/multi_pass.py`) with Pass 1 (broad scan, zero inference), Pass 2 (triage on summaries, cheap inference), Pass 3 (deep read, targeted inference), Pass 4 (weak match resolution)
-- ⬜ Short-circuit mode — bypass multi-pass for small knowledge bases (below configurable article/word count threshold), load all articles directly
-- ⬜ Curator agent — role implementation with system prompt, singleton enforcement, cross-referencing pipeline, proposal generation for structural needs
-- ⬜ Curator toolkit — backlink scanner (parse links, build graph, identify backlink targets), graph analyzer (connectivity metrics, orphan detection, cluster density)
-- ⬜ Embedding cache — embedding version tracking, recompute only when content hash changes
-- ⬜ LLM response cache — SHA-256 prompt hash keying, SQLite backend, configurable TTL, flush per agent/expedition
-- ⬜ Retroactive cross-referencing — Curator pass over all Phase 1-2 articles to add backlinks and "See also" sections now that the index exists
-- ⬜ CLI: `assistonauts status` — expedition and knowledge base status overview
+- ✅ 2026-04-08, session-2026-04-08-003 — Archivist system core — main `Archivist` class with service interface (`index()`, `search()`, `reindex_batch()`, `get_staleness()`, `get_downstream()`, `get_stale_articles()`), not an agent — no LLM inference
+- ✅ 2026-04-08, session-2026-04-08-003 — Embedding generation and storage — `EmbeddingClient` ABC with `LiteLLMEmbeddingClient`, chunking, batching, storage in `index/assistonauts.db` (sqlite-vec)
+- ✅ 2026-04-08, session-2026-04-08-003 — FTS indexing — SQLite FTS5 insert/update/delete for keyword-based retrieval with query sanitization
+- ✅ 2026-04-08, session-2026-04-08-003 — Hybrid retrieval — vector similarity + FTS keyword search, reciprocal rank fusion reranking, configurable relevance floor, no arbitrary result cap
+- ✅ 2026-04-08, session-2026-04-08-003 — Dual summary storage — retrieval summaries (deterministic keyword extraction) and content summaries in `summaries` table in `index/assistonauts.db` (SQLite, not JSONL — collocated with other index data)
+- ✅ 2026-04-08, session-2026-04-08-003 — Manifest management — full lineage tracking, staleness graphs via `get_stale_articles()`, embedding version tracking via `embedding_hash` column
+- ✅ 2026-04-08, session-2026-04-08-003 — Multi-pass retrieval system — shared module (`rag/multi_pass.py`) with Pass 1 (broad scan, zero inference), Pass 2 (triage on summaries, cheap LLM inference), Pass 3 (deep read, targeted inference), Pass 4 (weak match resolution)
+- ✅ 2026-04-08, session-2026-04-08-003 — Short-circuit mode — bypass multi-pass for small knowledge bases (below configurable article/word count threshold), load all articles directly
+- ✅ 2026-04-08, session-2026-04-08-003 — Curator agent — role implementation with system prompt, singleton enforcement (class-level lock), cross-referencing pipeline, proposal generation for structural needs (orphan detection, low connectivity)
+- ✅ 2026-04-08, session-2026-04-08-003 — Curator toolkit — backlink scanner (parse wiki-links, build graph, identify backlink targets), graph analyzer (connectivity metrics, orphan detection, density)
+- ✅ 2026-04-08, session-2026-04-08-003 — Embedding cache — embedding version tracking via `embedding_hash`, recompute only when content hash changes
+- ✅ 2026-04-08, session-2026-04-08-003 — LLM response cache — SHA-256 prompt hash keying, SQLite backend, configurable TTL, flush per agent/expedition, max_size_mb enforcement, integrated into LLMClient
+- ✅ 2026-04-08, session-2026-04-08-003 — Retroactive cross-referencing — `retroactive_cross_reference()` on CuratorAgent, batch pass over all indexed articles
+- ✅ 2026-04-08, session-2026-04-08-003 — CLI: `assistonauts status` — knowledge base status overview with article counts, word count, stale detection
 
 ---
 
