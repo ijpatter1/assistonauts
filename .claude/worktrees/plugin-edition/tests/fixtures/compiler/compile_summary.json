@@ -1,5 +1,0 @@
-{
-  "content": "A concept article covering machine learning fundamentals including supervised learning, unsupervised learning, and reinforcement learning. Key topics: feature engineering, model evaluation, pattern recognition. Distinguishing feature: provides a broad overview of ML paradigms with practical algorithm examples.",
-  "model": "gpt-3.5-turbo",
-  "usage": { "prompt_tokens": 400, "completion_tokens": 50 }
-}

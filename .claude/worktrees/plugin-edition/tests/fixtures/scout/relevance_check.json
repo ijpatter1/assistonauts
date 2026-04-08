@@ -1,8 +1,0 @@
-{
-  "content": "Yes, this source is relevant to the expedition scope. It discusses machine learning approaches to cryptocurrency trading, which directly matches the keywords: ML, trading, BTC.",
-  "model": "claude-sonnet-4-20250514",
-  "usage": {
-    "prompt_tokens": 150,
-    "completion_tokens": 35
-  }
-}
