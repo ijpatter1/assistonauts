@@ -39,8 +39,8 @@ _Goal: Build the compilation pipeline — the Compiler agent that transforms raw
 - ✅ 2026-04-07, session-2026-04-07-003 — Compiler contract tests and recorded fixtures — 16 contract tests validating frontmatter, schema sections, content summary, source citations
 - ✅ 2026-04-07, session-2026-04-07-003 — CLI: `assistonauts mission run --agent compiler` — execute single task. (Rename to `task run` tracked below)
 - ✅ 2026-04-08, session-2026-04-08-003 — Multi-source compilation — `compile_multi()` accepts multiple source paths, concatenates in order, combined hash in manifest, `--source` repeatable in CLI
-- ⬜ Compiler plan mode — `compiler.plan()` analyzes raw sources, proposes compilation tasks with article types, source groupings, and titles. Editorial triage layer.
-- ⬜ Task/Mission vocabulary refactor — rename codebase to align with glossary (MissionRunner → TaskRunner, Mission → Task, missions/ → tasks/, CLI `mission run` → `task run`)
+- ✅ 2026-04-08, session-2026-04-08-004 — Compiler plan mode — `compiler.plan()` analyzes raw sources, proposes compilation plan with article types, source groupings, titles. Falls back to one-per-source on parse errors. CLI: `assistonauts plan [--execute]`
+- ✅ 2026-04-08, session-2026-04-08-004 — Task/Mission vocabulary refactor — MissionRunner → TaskRunner, Mission → Task, missions/ → tasks/, CLI `mission run` → `task run`. 19 files renamed/updated, 369 tests pass.
 
 ---
 
