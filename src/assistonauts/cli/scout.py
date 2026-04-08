@@ -19,7 +19,7 @@ def scout() -> None:
 
 
 @scout.command()
-@click.argument("source")
+@click.argument("source", nargs=-1, required=True)
 @click.option(
     "--category",
     "-c",
@@ -33,8 +33,11 @@ def scout() -> None:
     type=click.Path(path_type=Path),
     help="Workspace root (default: current directory)",
 )
-def ingest(source: str, category: str, workspace: Path) -> None:
-    """Ingest a source file or URL into the knowledge base."""
+def ingest(source: tuple[str, ...], category: str, workspace: Path) -> None:
+    """Ingest source file(s) or URL(s) into the knowledge base.
+
+    Accepts multiple files: assistonauts scout ingest a.png b.png c.png
+    """
     from assistonauts.agents.scout import ScoutAgent
     from assistonauts.config.loader import load_config
     from assistonauts.config.resolver import resolve_llm_for_role
@@ -66,46 +69,56 @@ def ingest(source: str, category: str, workspace: Path) -> None:
         workspace_root=workspace,
     )
 
-    try:
-        if _is_url(source):
-            # Web clipping: download URL to temp, then ingest
-            assets_dir = workspace / "raw" / "assets"
-            content, _assets = clip_web(source, assets_dir)
-
-            # Write clipped content to a temp file for ingestion
-            import hashlib
-
-            url_slug = hashlib.sha256(source.encode()).hexdigest()[:12]
-            temp_file = workspace / "raw" / f"_web_{url_slug}.md"
-            temp_file.write_text(content)
-            try:
-                result = agent.ingest(temp_file, category=category)
-            finally:
-                temp_file.unlink(missing_ok=True)
-
-            display_name = source
-        else:
-            path = Path(source)
-            if not path.exists():
-                console.print(f"[red]Error:[/red] File not found: {source}")
+    for src in source:
+        try:
+            result, display_name = _ingest_one(
+                agent, src, category, workspace, clip_web
+            )
+            if result.skipped:
+                console.print(
+                    f"[yellow]⊘[/yellow] Skipped "
+                    f"[bold]{display_name}[/bold] (unchanged)"
+                )
+            elif result.success:
+                console.print(
+                    f"[green]✓[/green] Ingested "
+                    f"[bold]{display_name}[/bold] → "
+                    f"{result.manifest_key}"
+                )
+            else:
+                console.print(f"[red]✗[/red] Failed: {result.message}")
                 raise SystemExit(1)
-            result = agent.ingest(path.resolve(), category=category)
-            display_name = str(path)
+        except SystemExit:
+            raise
+        except Exception as exc:
+            console.print(f"[red]Error:[/red] {src}: {exc}")
+            raise SystemExit(1) from exc
 
-        if result.skipped:
-            console.print(
-                f"[yellow]⊘[/yellow] Skipped [bold]{display_name}[/bold] (unchanged)"
-            )
-        elif result.success:
-            key = result.manifest_key
-            console.print(
-                f"[green]✓[/green] Ingested [bold]{display_name}[/bold] → {key}"
-            )
-        else:
-            console.print(f"[red]✗[/red] Failed: {result.message}")
-            raise SystemExit(1)
-    except SystemExit:
-        raise
-    except Exception as exc:
-        console.print(f"[red]Error:[/red] {exc}")
-        raise SystemExit(1) from exc
+
+def _ingest_one(
+    agent: object,
+    source: str,
+    category: str,
+    workspace: Path,
+    clip_web: object,
+) -> tuple[object, str]:
+    """Ingest a single source (file or URL). Returns (result, display_name)."""
+    if _is_url(source):
+        import hashlib
+
+        assets_dir = workspace / "raw" / "assets"
+        content, _assets = clip_web(source, assets_dir)  # type: ignore[operator]
+        url_slug = hashlib.sha256(source.encode()).hexdigest()[:12]
+        temp_file = workspace / "raw" / f"_web_{url_slug}.md"
+        temp_file.write_text(content)
+        try:
+            result = agent.ingest(temp_file, category=category)  # type: ignore[union-attr]
+        finally:
+            temp_file.unlink(missing_ok=True)
+        return result, source
+    else:
+        path = Path(source)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {source}")
+        result = agent.ingest(path.resolve(), category=category)  # type: ignore[union-attr]
+        return result, str(path)

@@ -49,10 +49,11 @@ The system is built around six specialized agents (Captain, Scout, Compiler, Cur
 7. Mission-level git commits — mission runner commits after each completed mission with mission ID and agent in commit message
 8. Compiler contract tests and recorded fixtures — structural validation (valid frontmatter, schema-conformant sections, content summary present, source citations included)
 9. CLI: `assistonauts mission run --agent compiler` — execute a single Compiler mission from the command line
+10. Multi-source compilation — Compiler accepts multiple source paths (`--source` repeated), concatenates source content in order, tracks all source hashes in manifest for skip-if-unchanged logic, lists all sources in article frontmatter
 
 **Why this is Phase 2:** The Compiler depends on the base agent class, LLM client, config system, and Scout output from Phase 1. The mission runner is introduced here because Compiler work is the first multi-step agent workflow that needs tracking and audit trails.
 
-**Validation:** Run Scout to ingest a source, then run Compiler via the mission runner to produce a wiki article with valid frontmatter and schema-conformant structure. Git log shows mission-level commits. Contract tests pass. Articles lack cross-referencing (expected — Phase 3 adds it).
+**Validation:** Run Scout to ingest a source, then run Compiler via the mission runner to produce a wiki article with valid frontmatter and schema-conformant structure. Git log shows mission-level commits. Contract tests pass. Articles lack cross-referencing (expected — Phase 3 adds it). Multi-source: ingest multiple page images, compile them into a single article with `--source` repeated — verify all sources listed in frontmatter and content is coherent.
 
 ---
 
@@ -79,6 +80,7 @@ The system is built around six specialized agents (Captain, Scout, Compiler, Cur
 15. Image ingestion in Scout — vision model support (Gemma 4 via litellm) for image files (.png, .jpg, .jpeg, .gif, .webp), sends images to multimodal LLM for text extraction and markdown conversion, integrates with existing Scout ingestion pipeline
 16. CLI: `assistonauts index` — index all wiki articles into the Archivist (FTS + embeddings), with `--reindex` flag to force reindexing of unchanged articles
 17. CLI: `assistonauts curate` — run Curator cross-referencing over all indexed articles, with `--proposals` flag to show structural improvement proposals
+18. Batch ingestion CLI — `scout ingest` accepts multiple file arguments or glob patterns, ingesting each in sequence
 
 **Why this is Phase 3:** The Archivist depends on compiled articles (Phase 2). The Curator depends on the Archivist's retrieval interface. The multi-pass retrieval system needs both the Archivist and a meaningful corpus to validate against. This is the phase where the knowledge base becomes interconnected. Image ingestion and the index/curate CLI commands complete the manual build chain so the full pipeline can be tested end-to-end with real content before Phase 4.
 

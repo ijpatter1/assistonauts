@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -252,12 +253,174 @@ class CompilerAgent(Agent):
             message=f"Compiled {source_path.name} → {manifest_key}",
         )
 
+    def compile_multi(
+        self,
+        source_paths: list[Path],
+        article_type: str | ArticleType,
+        title: str,
+    ) -> CompilationResult:
+        """Compile multiple source files into a single wiki article.
+
+        Concatenates source content in order, tracks all source hashes
+        in the manifest, and lists all sources in the article frontmatter.
+        Falls back to single-source compile() for one source.
+        """
+        if not source_paths:
+            return CompilationResult(success=False, message="No source paths provided.")
+
+        if isinstance(article_type, str):
+            article_type = ArticleType(article_type)
+
+        resolved = [p.resolve() for p in source_paths]
+        manifest = Manifest(self._manifest_path)
+
+        # Determine output location
+        slug = _slugify(
+            title,
+            self._schema.naming.slug_separator,
+            self._schema.naming.max_slug_length,
+        )
+        output_dir = self._workspace_root / "wiki" / article_type.value
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / f"{slug}.md"
+        manifest_key = f"wiki/{article_type.value}/{slug}.md"
+
+        # Check if ANY source has changed — compute combined hash
+        source_hashes = [hash_content(p) for p in resolved]
+        combined_hash = hashlib.sha256("|".join(source_hashes).encode()).hexdigest()
+
+        existing = manifest.get(manifest_key)
+        if existing and existing.hash == combined_hash:
+            return CompilationResult(
+                success=True,
+                skipped=True,
+                output_path=output_path,
+                output_paths=[output_path],
+                manifest_key=manifest_key,
+                message="Sources unchanged, skipped.",
+            )
+
+        # Concatenate source content with separators
+        source_contents: list[str] = []
+        for p in resolved:
+            source_contents.append(self.read_file(p))
+
+        combined_content = "\n\n---\n\n".join(source_contents)
+        source_names = [p.name for p in resolved]
+
+        # Check for existing article (recompilation)
+        existing_content = ""
+        if output_path.exists():
+            existing_content = self.read_file(output_path)
+
+        # Render template scaffold
+        template = render_template(
+            schema=self._schema,
+            article_type=article_type,
+            title=title,
+            sources=source_names,
+        )
+
+        # Build compilation prompt
+        if existing_content:
+            article_diff = generate_diff("", existing_content)
+            compile_msg = (
+                f"Recompile this wiki article based on updated "
+                f"source material ({len(resolved)} sources).\n\n"
+                f"Current article structure: "
+                f"{article_diff.summary}\n\n"
+                f"Current article:\n"
+                f"```markdown\n{existing_content}\n```\n\n"
+                f"Updated source material:\n"
+                f"```markdown\n{combined_content}\n```\n\n"
+                f"Template structure to follow:\n"
+                f"```markdown\n{template}\n```\n\n"
+                f"Update the article to reflect all source "
+                f"material. Output the complete article."
+            )
+        else:
+            compile_msg = (
+                f"Compile these {len(resolved)} source documents "
+                f"into a single wiki article.\n\n"
+                f"Source material:\n"
+                f"```markdown\n{combined_content}\n```\n\n"
+                f"Template to fill:\n"
+                f"```markdown\n{template}\n```\n\n"
+                f"Synthesize all sources into a coherent article. "
+                f"Output the complete article including frontmatter."
+            )
+
+        # Call LLM to compile
+        article_content = self.call_llm(
+            messages=[{"role": "user", "content": compile_msg}],
+        )
+
+        # Write article
+        self.write_file(output_path, article_content)
+
+        # Generate content summary
+        summary_msg = (
+            f"Summarize this wiki article:\n\n```markdown\n{article_content}\n```"
+        )
+        summary_response = self.llm_client.complete(
+            messages=[{"role": "user", "content": summary_msg}],
+            system=_SUMMARY_SYSTEM_PROMPT,
+        )
+        content_summary = summary_response.content
+
+        # Persist content summary
+        summary_path = output_path.with_suffix(".summary.json")
+        summary_data = {
+            "summary": content_summary,
+            "article_path": str(output_path),
+            "manifest_key": manifest_key,
+            "sources": source_names,
+            "generated_at": datetime.now(UTC).isoformat(),
+        }
+        self.write_file(summary_path, json.dumps(summary_data, indent=2))
+
+        # Update manifest — store combined hash of all sources
+        now = datetime.now(UTC).isoformat()
+        manifest.set(
+            manifest_key,
+            ManifestEntry(
+                hash=combined_hash,
+                last_processed=now,
+                processed_by="compiler",
+            ),
+        )
+        # Track source→wiki dependencies
+        for p in resolved:
+            source_key = str(p.relative_to(self._workspace_root))
+            source_entry = manifest.get(source_key)
+            if source_entry and manifest_key not in source_entry.downstream:
+                source_entry.downstream.append(manifest_key)
+        manifest.save()
+
+        return CompilationResult(
+            success=True,
+            skipped=False,
+            output_path=output_path,
+            output_paths=[output_path, summary_path],
+            manifest_key=manifest_key,
+            content_summary=content_summary,
+            message=(f"Compiled {len(resolved)} sources → {manifest_key}"),
+        )
+
     def run_mission(self, mission: dict[str, str]) -> CompilationResult:
         """Execute a Compiler mission.
 
-        Expects mission dict with 'source_path', 'article_type', and 'title'.
+        Expects mission dict with 'source_path' (single) or
+        'source_paths' (comma-separated list), 'article_type', and 'title'.
         """
-        source_path = Path(mission["source_path"])
         article_type = ArticleType(mission.get("article_type", "concept"))
+
+        # Support multi-source via comma-separated paths
+        if "source_paths" in mission:
+            paths = [Path(p.strip()) for p in mission["source_paths"].split(",")]
+            title = mission.get("title", paths[0].stem)
+            return self.compile_multi(paths, article_type=article_type, title=title)
+
+        source_path = Path(mission["source_path"])
         title = mission.get("title", source_path.stem)
         return self.compile(source_path, article_type=article_type, title=title)

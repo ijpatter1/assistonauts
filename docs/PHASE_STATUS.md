@@ -38,6 +38,7 @@ _Goal: Build the compilation pipeline — the Compiler agent that transforms raw
 - ✅ 2026-04-07, session-2026-04-07-003 — Mission-level git commits — auto_commit option, commit after each completed mission with `[mission-<id>] <agent>: process <title>` format
 - ✅ 2026-04-07, session-2026-04-07-003 — Compiler contract tests and recorded fixtures — 16 contract tests validating frontmatter, schema sections, content summary, source citations
 - ✅ 2026-04-07, session-2026-04-07-003 — CLI: `assistonauts mission run --agent compiler` — execute single mission with --source, --title, --article-type, --commit options
+- ⬜ Multi-source compilation — Compiler accepts multiple source paths, concatenates in order, tracks all source hashes in manifest, lists all sources in frontmatter
 
 ---
 
@@ -62,6 +63,7 @@ _Goal: Build the Archivist (deterministic knowledge base operating system), hybr
 - ✅ 2026-04-08, session-2026-04-08-003 — Image ingestion in Scout — vision model support (Gemma 4 via litellm) for image files (.png, .jpg, .jpeg, .gif, .webp), multimodal LLM text extraction via `convert_image()`, auto-detection in Scout.ingest()
 - ✅ 2026-04-08, session-2026-04-08-003 — CLI: `assistonauts index` — index all wiki articles into the Archivist (FTS + metadata), `--reindex` flag for force reindexing
 - ✅ 2026-04-08, session-2026-04-08-003 — CLI: `assistonauts curate` — structural proposals via `--proposals` flag (orphans, low connectivity), cross-referencing placeholder for LLM-dependent mode
+- ⬜ Batch ingestion CLI — `scout ingest` accepts multiple file arguments or globs
 
 ---
 

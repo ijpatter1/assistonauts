@@ -52,7 +52,8 @@ def mission() -> None:
     "--source",
     "-s",
     required=True,
-    help="Path to the source file to process.",
+    multiple=True,
+    help="Path to source file(s). Repeat for multi-source compilation.",
 )
 @click.option(
     "--title",
@@ -80,7 +81,7 @@ def mission() -> None:
 )
 def run(
     agent: str,
-    source: str,
+    source: tuple[str, ...],
     title: str,
     article_type: str,
     workspace: Path,
@@ -99,9 +100,9 @@ def run(
         )
         raise SystemExit(1)
 
-    source_path = Path(source).resolve()
+    source_paths = [Path(s).resolve() for s in source]
     if not title:
-        title = source_path.stem.replace("-", " ").replace("_", " ").title()
+        title = source_paths[0].stem.replace("-", " ").replace("_", " ").title()
 
     mission_id = f"m-{uuid.uuid4().hex[:8]}"
     missions_dir = workspace / ".assistonauts" / "missions"
@@ -115,14 +116,24 @@ def run(
         auto_commit=commit,
     )
 
+    # Multi-source: pass comma-separated paths
+    if len(source_paths) > 1:
+        params = {
+            "source_paths": ",".join(str(p) for p in source_paths),
+            "article_type": article_type,
+            "title": title,
+        }
+    else:
+        params = {
+            "source_path": str(source_paths[0]),
+            "article_type": article_type,
+            "title": title,
+        }
+
     mission_obj = Mission(
         mission_id=mission_id,
         agent=agent,
-        params={
-            "source_path": str(source_path),
-            "article_type": article_type,
-            "title": title,
-        },
+        params=params,
     )
 
     try:
