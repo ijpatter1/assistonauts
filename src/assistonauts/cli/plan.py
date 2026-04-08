@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
@@ -107,6 +108,7 @@ def plan(workspace: Path, execute: bool) -> None:
     )
 
     console.print("\nCompiling via task runner...")
+    executed_task_ids: list[str] = []
     for article in compilation_plan.articles:
         task_id = f"t-{uuid.uuid4().hex[:8]}"
         task = Task(
@@ -119,6 +121,7 @@ def plan(workspace: Path, execute: bool) -> None:
             },
         )
         result = runner.run(task, llm_client=llm_client)
+        executed_task_ids.append(task_id)
         if result.success:
             output = ""
             if result.agent_output and result.agent_output.output_path:
@@ -130,5 +133,20 @@ def plan(workspace: Path, execute: bool) -> None:
                 f"{article.title}: {result.error_message}"
             )
 
+    # Append task IDs to the plan artifact for traceability
+    if executed_task_ids:
+        _append_task_ids_to_plan(plan_path, executed_task_ids)
+
     console.print(f"\n[bold]Compiled {len(compilation_plan.articles)} articles.[/bold]")
+    console.print(f"[dim]Plan: {plan_path.name}[/dim]")
     console.print(f"[dim]Task audit trails: {tasks_dir}/[/dim]")
+
+
+def _append_task_ids_to_plan(plan_path: Path, task_ids: list[str]) -> None:
+    """Append executed task IDs to an existing plan YAML file."""
+    import yaml
+
+    data = yaml.safe_load(plan_path.read_text())
+    data["executed_at"] = datetime.now(UTC).isoformat()
+    data["task_ids"] = task_ids
+    plan_path.write_text(yaml.dump(data, default_flow_style=False))

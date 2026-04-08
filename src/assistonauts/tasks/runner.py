@@ -212,6 +212,23 @@ class TaskRunner:
 
         if result.success:
             audit["completed_at"] = datetime.now(UTC).isoformat()
+            # Record output details for traceability
+            if result.agent_output:
+                output = result.agent_output
+                if output.output_path:
+                    try:
+                        rel = str(output.output_path.relative_to(self._workspace_root))
+                    except ValueError:
+                        rel = str(output.output_path)
+                    audit["output_path"] = rel
+                if output.output_paths:
+                    rel_paths = []
+                    for p in output.output_paths:
+                        try:
+                            rel_paths.append(str(p.relative_to(self._workspace_root)))
+                        except ValueError:
+                            rel_paths.append(str(p))
+                    audit["output_paths"] = rel_paths
         else:
             audit["failed_at"] = datetime.now(UTC).isoformat()
             audit["error_type"] = result.error_type
