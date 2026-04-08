@@ -4,16 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+
+import yaml
 
 from assistonauts.agents.base import Agent, LLMClientProtocol
 from assistonauts.cache.content import Manifest, ManifestEntry, hash_content
 from assistonauts.models.schema import ArticleType, get_default_schema
 from assistonauts.templates.engine import render_template
 from assistonauts.tools.compiler import generate_diff
+
+logger = logging.getLogger(__name__)
 
 _COMPILER_SYSTEM_PROMPT = """\
 You are Compiler, a knowledge compilation agent for the Assistonauts framework.
@@ -43,6 +48,111 @@ optimized for downstream triage. The summary should capture:
 
 Output ONLY the summary text, no formatting or labels.
 """
+
+_PLAN_SYSTEM_PROMPT = """\
+You are the editorial triage agent for the Assistonauts knowledge base.
+Given a set of raw source documents, analyze their content and propose
+a compilation plan — what wiki articles to create from this material.
+
+For each proposed article, specify:
+- title: a clear, descriptive title
+- type: one of concept, entity, log, exploration
+- sources: which raw source filenames should be compiled into this article
+- rationale: brief explanation of why this grouping and type
+
+Article type guidelines:
+- concept: ideas, techniques, principles, explanations, how-things-work
+- entity: specific things (a person, object, place, event, product)
+- log: records, metadata, reference material, chronological entries
+- exploration: open-ended analysis, synthesis, or Q&A
+
+Guidelines:
+- Group related sources into a single article when they cover the same topic.
+- A source may only appear in one article.
+- Every source must be assigned to exactly one article.
+- Prefer fewer, richer articles over many thin ones.
+
+Output ONLY valid YAML in this exact format:
+```yaml
+articles:
+  - title: "Article Title"
+    type: concept
+    sources:
+      - filename1.md
+      - filename2.md
+    rationale: "Why this grouping."
+```
+"""
+
+
+@dataclass
+class PlannedArticle:
+    """A single article proposed by the Compiler's plan mode."""
+
+    title: str
+    article_type: ArticleType
+    source_paths: list[Path]
+    rationale: str = ""
+
+
+@dataclass
+class CompilationPlan:
+    """A proposed compilation plan from Compiler plan mode."""
+
+    articles: list[PlannedArticle] = field(default_factory=list)
+
+
+def _parse_plan_yaml(
+    response: str,
+    source_lookup: dict[str, Path],
+) -> CompilationPlan | None:
+    """Parse LLM plan response into a CompilationPlan.
+
+    Returns None if parsing fails.
+    """
+    # Strip markdown code fences if present
+    cleaned = re.sub(r"```ya?ml?\n?", "", response)
+    cleaned = re.sub(r"```\n?", "", cleaned)
+
+    try:
+        data = yaml.safe_load(cleaned)
+    except yaml.YAMLError:
+        return None
+
+    if not isinstance(data, dict) or "articles" not in data:
+        return None
+
+    articles: list[PlannedArticle] = []
+    for item in data["articles"]:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title", ""))
+        type_str = str(item.get("type", "concept"))
+        try:
+            article_type = ArticleType(type_str)
+        except ValueError:
+            article_type = ArticleType.CONCEPT
+
+        source_names = item.get("sources", [])
+        source_paths: list[Path] = []
+        for name in source_names:
+            name = str(name)
+            if name in source_lookup:
+                source_paths.append(source_lookup[name])
+
+        rationale = str(item.get("rationale", ""))
+
+        if title and source_paths:
+            articles.append(
+                PlannedArticle(
+                    title=title,
+                    article_type=article_type,
+                    source_paths=source_paths,
+                    rationale=rationale,
+                )
+            )
+
+    return CompilationPlan(articles=articles) if articles else None
 
 
 def _slugify(title: str, separator: str = "-", max_length: int = 80) -> str:
@@ -103,6 +213,7 @@ class CompilerAgent(Agent):
         self._workspace_root = workspace_root
         self._manifest_path = index_dir / "manifest.json"
         self._schema = get_default_schema()
+        self._expedition_scope = expedition_scope
 
     def compile(
         self,
@@ -406,6 +517,81 @@ class CompilerAgent(Agent):
             content_summary=content_summary,
             message=(f"Compiled {len(resolved)} sources → {manifest_key}"),
         )
+
+    def plan(self, source_paths: list[Path]) -> CompilationPlan:
+        """Analyze raw sources and propose a compilation plan.
+
+        Reads each source, sends content + schema info to LLM,
+        and asks it to propose article groupings, types, and titles.
+        Returns a CompilationPlan that can be executed via compile_multi().
+
+        If the LLM response can't be parsed, falls back to one article
+        per source, all typed as concept.
+        """
+        if not source_paths:
+            return CompilationPlan()
+
+        resolved = [p.resolve() for p in source_paths]
+
+        # Build source name → path lookup for resolving LLM references
+        source_lookup: dict[str, Path] = {}
+        for p in resolved:
+            source_lookup[p.name] = p
+
+        # Read source content for the prompt
+        source_summaries: list[str] = []
+        for p in resolved:
+            content = self.read_file(p)
+            # Truncate long sources for the planning prompt
+            preview = content[:2000]
+            if len(content) > 2000:
+                preview += f"\n... ({len(content)} chars total)"
+            source_summaries.append(f"### {p.name}\n{preview}")
+
+        sources_text = "\n\n".join(source_summaries)
+
+        # Build the planning prompt
+        scope_line = ""
+        if self._workspace_root:
+            scope_line = getattr(self, "_expedition_scope", "")
+
+        prompt = (
+            f"Analyze these {len(resolved)} source documents "
+            f"and propose a compilation plan.\n\n"
+            f"Available article types: concept, entity, log, "
+            f"exploration\n\n"
+        )
+        if scope_line:
+            prompt += f"Expedition scope: {scope_line}\n\n"
+        prompt += f"Source documents:\n\n{sources_text}"
+
+        # Call LLM with plan system prompt
+        response = self.llm_client.complete(
+            messages=[{"role": "user", "content": prompt}],
+            system=_PLAN_SYSTEM_PROMPT,
+        )
+
+        # Parse the response
+        plan = _parse_plan_yaml(response.content, source_lookup)
+
+        if plan is not None:
+            return plan
+
+        # Fallback: one article per source, all concept type
+        logger.warning(
+            "Failed to parse compilation plan from LLM response. "
+            "Falling back to one article per source."
+        )
+        fallback_articles = [
+            PlannedArticle(
+                title=p.stem.replace("-", " ").replace("_", " ").title(),
+                article_type=ArticleType.CONCEPT,
+                source_paths=[p],
+                rationale="Fallback: LLM plan response could not be parsed.",
+            )
+            for p in resolved
+        ]
+        return CompilationPlan(articles=fallback_articles)
 
     def run_task(self, task: dict[str, str]) -> CompilationResult:
         """Execute a Compiler task.

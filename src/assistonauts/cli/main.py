@@ -7,6 +7,7 @@ from rich.console import Console
 
 from assistonauts.cli.curate import curate
 from assistonauts.cli.index import index
+from assistonauts.cli.plan import plan
 from assistonauts.cli.scout import scout
 from assistonauts.cli.status import status
 from assistonauts.cli.task import task
@@ -23,6 +24,7 @@ def cli() -> None:
 
 cli.add_command(scout)
 cli.add_command(task)
+cli.add_command(plan)
 cli.add_command(status)
 cli.add_command(index)
 cli.add_command(curate)
