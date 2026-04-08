@@ -7,19 +7,16 @@ from pathlib import Path
 _DEFAULT_CONFIG = """\
 llm:
   providers:
-    ollama:
-      model: ollama/gemma4:e2b
-      base_url: http://localhost:11434
     anthropic:
-      model: claude-sonnet-4-20250514
+      model: claude-haiku-4-5-20251001
       api_key_env: ANTHROPIC_API_KEY
   roles:
-    scout: ollama
-    compiler: ollama
-    curator: ollama
-    captain: ollama
-    inspector: ollama
-    explorer: ollama
+    scout: anthropic
+    compiler: anthropic
+    curator: anthropic
+    captain: anthropic
+    inspector: anthropic
+    explorer: anthropic
 
 embedding:
   active: ollama
