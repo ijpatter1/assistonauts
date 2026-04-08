@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 
 from assistonauts.agents.scout import ScoutAgent
-from tests.conftest import FakeLLMClient
+from tests.helpers import FakeLLMClient
 
 
 def _setup_workspace(tmp_path: Path) -> Path:

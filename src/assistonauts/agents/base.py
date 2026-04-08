@@ -42,6 +42,17 @@ class LLMClientProtocol(Protocol):
     ) -> LLMResponse: ...
 
 
+class AgentResult(Protocol):
+    """Protocol for agent mission results.
+
+    All agent run_mission() return types must satisfy this interface.
+    """
+
+    success: bool
+    output_path: Path | None
+    output_paths: list[Path]
+
+
 @dataclass
 class Agent:
     """Base class for all Assistonauts agents.
@@ -63,7 +74,7 @@ class Agent:
         if self.logger is None:
             self.logger = StructuredLogger(role=self.role)
 
-    def run_mission(self, mission: object) -> object:
+    def run_mission(self, mission: dict[str, str]) -> AgentResult:
         """Execute a mission. Subclasses must override."""
         raise NotImplementedError(f"Agent '{self.role}' must implement run_mission()")
 

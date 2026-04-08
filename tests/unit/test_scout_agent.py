@@ -4,7 +4,7 @@ from pathlib import Path
 
 from assistonauts.agents.scout import ScoutAgent
 from assistonauts.cache.content import Manifest
-from tests.conftest import FakeLLMClient
+from tests.helpers import FakeLLMClient
 
 
 class TestScoutAgentCreation:

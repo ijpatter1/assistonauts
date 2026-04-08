@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -34,6 +34,7 @@ class IngestResult:
     success: bool
     skipped: bool = False
     output_path: Path | None = None
+    output_paths: list[Path] = field(default_factory=list)
     manifest_key: str = ""
     message: str = ""
 
@@ -101,6 +102,7 @@ class ScoutAgent(Agent):
                 success=True,
                 skipped=True,
                 output_path=output_path,
+                output_paths=[output_path],
                 manifest_key=manifest_key,
                 message="Content unchanged, skipped.",
             )
@@ -143,6 +145,7 @@ class ScoutAgent(Agent):
             success=True,
             skipped=False,
             output_path=output_path,
+            output_paths=[output_path],
             manifest_key=manifest_key,
             message=f"Ingested {source_path.name} → {manifest_key}",
         )

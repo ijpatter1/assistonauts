@@ -13,34 +13,11 @@ from assistonauts.missions.runner import (
     MissionStatus,
     TransientError,
 )
+from tests.helpers import FakeLLMClient, FakeResponse
 
 _FAKE_ARTICLE = (
     "---\ntitle: Test\ntype: concept\n---\n\n# Test\n\n## Overview\n\nContent."
 )
-
-
-class FakeResponse:
-    def __init__(self, content: str) -> None:
-        self.content = content
-        self.model = "fake-model"
-        self.usage = {"prompt_tokens": 10, "completion_tokens": 5}
-
-
-class FakeLLMClient:
-    def __init__(self, responses: list[str] | None = None) -> None:
-        self._responses = list(responses or ["default response"])
-        self._call_count = 0
-
-    def complete(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        system: str | None = None,
-        **kwargs: object,
-    ) -> FakeResponse:
-        idx = min(self._call_count, len(self._responses) - 1)
-        self._call_count += 1
-        return FakeResponse(self._responses[idx])
 
 
 @pytest.fixture

@@ -19,38 +19,21 @@ import yaml
 
 from assistonauts.agents.compiler import CompilerAgent
 from assistonauts.models.schema import ArticleType, get_default_schema
+from tests.helpers import FakeLLMClient
 
 _FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "compiler"
 
 
-class FixtureLLMClient:
-    """LLM client that returns responses from fixture files in sequence."""
+class FixtureLLMClient(FakeLLMClient):
+    """LLM client that loads responses from fixture files on disk."""
 
     def __init__(self, fixture_names: list[str]) -> None:
-        self._responses: list[str] = []
+        responses: list[str] = []
         for name in fixture_names:
             fixture_path = _FIXTURES_DIR / f"{name}.json"
             data = json.loads(fixture_path.read_text())
-            self._responses.append(data["content"])
-        self._call_count = 0
-
-    def complete(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        system: str | None = None,
-        **kwargs: object,
-    ) -> FixtureResponse:
-        idx = min(self._call_count, len(self._responses) - 1)
-        self._call_count += 1
-        return FixtureResponse(self._responses[idx])
-
-
-class FixtureResponse:
-    def __init__(self, content: str) -> None:
-        self.content = content
-        self.model = "fixture-model"
-        self.usage = {"prompt_tokens": 100, "completion_tokens": 200}
+            responses.append(data["content"])
+        super().__init__(responses=responses)
 
 
 @pytest.fixture
@@ -87,82 +70,86 @@ def compiled_result(workspace: Path):
     )
 
 
+@pytest.fixture
+def compiled_content(compiled_result) -> str:
+    """Read the compiled article content once for all tests."""
+    assert compiled_result.output_path is not None
+    return compiled_result.output_path.read_text()
+
+
+@pytest.fixture
+def compiled_frontmatter(compiled_content: str) -> dict[str, object]:
+    """Parse frontmatter from the compiled article."""
+    return _extract_frontmatter(compiled_content)
+
+
+@pytest.fixture
+def compiled_body(compiled_content: str) -> str:
+    """Extract body (after frontmatter) from the compiled article."""
+    return _extract_body(compiled_content)
+
+
 class TestCompiledArticleFrontmatter:
     """Validate frontmatter structure of compiled articles."""
 
-    def test_article_has_yaml_frontmatter(
-        self, compiled_result, workspace: Path
-    ) -> None:
-        assert compiled_result.output_path is not None
-        content = compiled_result.output_path.read_text()
-        assert content.startswith("---\n")
-        # Find closing delimiter
-        end = content.find("---", 3)
+    def test_article_has_yaml_frontmatter(self, compiled_content: str) -> None:
+        assert compiled_content.startswith("---\n")
+        end = compiled_content.find("---", 3)
         assert end > 3, "No closing frontmatter delimiter"
 
-    def test_frontmatter_has_title(self, compiled_result, workspace: Path) -> None:
-        content = compiled_result.output_path.read_text()
-        fm = _extract_frontmatter(content)
-        assert "title" in fm
-        assert isinstance(fm["title"], str)
-        assert len(fm["title"]) > 0
+    def test_frontmatter_has_title(
+        self, compiled_frontmatter: dict[str, object]
+    ) -> None:
+        assert "title" in compiled_frontmatter
+        assert isinstance(compiled_frontmatter["title"], str)
+        assert len(compiled_frontmatter["title"]) > 0
 
-    def test_frontmatter_has_type(self, compiled_result, workspace: Path) -> None:
-        content = compiled_result.output_path.read_text()
-        fm = _extract_frontmatter(content)
-        assert "type" in fm
+    def test_frontmatter_has_type(
+        self, compiled_frontmatter: dict[str, object]
+    ) -> None:
+        assert "type" in compiled_frontmatter
         valid_types = {t.value for t in ArticleType}
-        assert fm["type"] in valid_types
+        assert compiled_frontmatter["type"] in valid_types
 
-    def test_frontmatter_has_sources(self, compiled_result, workspace: Path) -> None:
-        content = compiled_result.output_path.read_text()
-        fm = _extract_frontmatter(content)
-        assert "sources" in fm
-        assert isinstance(fm["sources"], list)
-        assert len(fm["sources"]) > 0
+    def test_frontmatter_has_sources(
+        self, compiled_frontmatter: dict[str, object]
+    ) -> None:
+        assert "sources" in compiled_frontmatter
+        assert isinstance(compiled_frontmatter["sources"], list)
+        assert len(compiled_frontmatter["sources"]) > 0
 
-    def test_frontmatter_has_created_at(self, compiled_result, workspace: Path) -> None:
-        content = compiled_result.output_path.read_text()
-        fm = _extract_frontmatter(content)
-        assert "created_at" in fm
+    def test_frontmatter_has_created_at(
+        self, compiled_frontmatter: dict[str, object]
+    ) -> None:
+        assert "created_at" in compiled_frontmatter
 
-    def test_frontmatter_has_status(self, compiled_result, workspace: Path) -> None:
-        content = compiled_result.output_path.read_text()
-        fm = _extract_frontmatter(content)
-        assert "status" in fm
+    def test_frontmatter_has_status(
+        self, compiled_frontmatter: dict[str, object]
+    ) -> None:
+        assert "status" in compiled_frontmatter
 
 
 class TestCompiledArticleSections:
     """Validate section structure of compiled articles."""
 
-    def test_has_h1_title(self, compiled_result, workspace: Path) -> None:
-        content = compiled_result.output_path.read_text()
-        body = _extract_body(content)
-        lines = body.split("\n")
+    def test_has_h1_title(self, compiled_body: str) -> None:
+        lines = compiled_body.split("\n")
         h1_lines = [line for line in lines if line.startswith("# ")]
         assert len(h1_lines) >= 1
 
-    def test_concept_has_required_sections(
-        self, compiled_result, workspace: Path
-    ) -> None:
-        content = compiled_result.output_path.read_text()
-        body = _extract_body(content)
+    def test_concept_has_required_sections(self, compiled_body: str) -> None:
         schema = get_default_schema()
         template = schema.get_template(ArticleType.CONCEPT)
         required_headings = [s.heading for s in template.sections if s.required]
         for heading in required_headings:
-            assert f"## {heading}" in body, f"Missing required section: {heading}"
+            assert f"## {heading}" in compiled_body, (
+                f"Missing required section: {heading}"
+            )
 
-    def test_sources_section_has_citations(
-        self, compiled_result, workspace: Path
-    ) -> None:
-        content = compiled_result.output_path.read_text()
-        body = _extract_body(content)
-        # Find Sources section
-        sources_idx = body.find("## Sources")
+    def test_sources_section_has_citations(self, compiled_body: str) -> None:
+        sources_idx = compiled_body.find("## Sources")
         assert sources_idx >= 0, "No Sources section found"
-        sources_section = body[sources_idx:]
-        # Should contain at least one source reference
+        sources_section = compiled_body[sources_idx:]
         assert "ml-basics.md" in sources_section
 
 

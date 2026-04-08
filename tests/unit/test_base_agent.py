@@ -6,7 +6,7 @@ import pytest
 
 from assistonauts.agents.base import Agent, OwnershipError
 from assistonauts.tools.shared import StructuredLogger
-from tests.conftest import FakeLLMClient
+from tests.helpers import FakeLLMClient
 
 
 class TestAgentConstruction:

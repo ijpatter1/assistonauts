@@ -22,7 +22,7 @@ class TestLLMClientDefaultModel:
 
     def test_default_model_fallback(self) -> None:
         client = LLMClient(provider_config={})
-        assert client.default_model == "gpt-3.5-turbo"
+        assert client.default_model == "ollama/gemma4:e2b"
 
     def test_base_url_stored(self) -> None:
         client = LLMClient(
@@ -69,7 +69,7 @@ class TestResolveProviderFromConfig:
 
         config = load_config(tmp_path)  # no config file → defaults
         model, base_url = resolve_llm_for_role(config, "compiler")
-        assert model == "gpt-3.5-turbo"
+        assert model == "ollama/gemma4:e2b"
         assert base_url is None
 
     def test_resolve_role_with_missing_provider(self, tmp_path: Path) -> None:
@@ -91,7 +91,7 @@ class TestResolveProviderFromConfig:
         config = load_config(tmp_path)
         model, base_url = resolve_llm_for_role(config, "compiler")
         # Falls back to default when provider not found
-        assert model == "gpt-3.5-turbo"
+        assert model == "ollama/gemma4:e2b"
         assert base_url is None
 
     def test_resolve_first_provider_when_no_role_mapping(self, tmp_path: Path) -> None:

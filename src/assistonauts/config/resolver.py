@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from assistonauts.models.config import AssistonautsConfig
 
-_DEFAULT_MODEL = "gpt-3.5-turbo"
+_DEFAULT_MODEL = "ollama/gemma4:e2b"
 
 
 def resolve_llm_for_role(
@@ -17,7 +17,7 @@ def resolve_llm_for_role(
     1. Look up role in config.llm.roles → provider name
     2. Look up provider in config.llm.providers → model + base_url
     3. If no role mapping but providers exist, use the first provider
-    4. Fall back to defaults (gpt-3.5-turbo, no base_url)
+    4. Fall back to defaults (ollama/gemma4:e2b, no base_url)
 
     Returns (model, base_url) tuple.
     """

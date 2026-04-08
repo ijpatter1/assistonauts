@@ -133,9 +133,8 @@ def run(
                 f"[green]✓[/green] Completed mission "
                 f"[bold]{mission_id}[/bold] ({agent})"
             )
-            if hasattr(result.agent_output, "output_path"):
-                out = result.agent_output.output_path  # type: ignore[union-attr]
-                console.print(f"  Output: {out}")
+            if result.agent_output and result.agent_output.output_path:
+                console.print(f"  Output: {result.agent_output.output_path}")
         else:
             console.print(
                 f"[red]✗[/red] Mission {mission_id} failed: {result.error_message}"

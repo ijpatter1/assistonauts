@@ -67,6 +67,13 @@ class Manifest:
         """Check if a file has changed since last processing.
 
         Returns True if the file is new or its hash differs from the manifest.
+
+        Note on key semantics: The key identifies the *output* (e.g.
+        ``wiki/concept/foo.md``) but the stored hash is of the *input*
+        file at ``file_path`` (e.g. the raw source). This lets agents
+        skip reprocessing when the source hasn't changed. The Archivist
+        (Phase 3) should use separate index entries if it needs to track
+        wiki article content hashes for staleness detection.
         """
         entry = self.get(key)
         if entry is None:

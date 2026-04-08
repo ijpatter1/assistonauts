@@ -12,6 +12,7 @@ from assistonauts.agents.compiler import (
     _slugify,
 )
 from assistonauts.models.schema import ArticleType
+from tests.helpers import FakeLLMClient
 
 # --- Fake LLM responses ---
 
@@ -90,34 +91,6 @@ See also: deep-learning, backpropagation, transformers.
 
 - test-source.md
 """
-
-
-class FakeLLMClient:
-    """Fake LLM client that returns canned compilation responses."""
-
-    def __init__(self, responses: list[str] | None = None) -> None:
-        self._responses = list(responses or [_FAKE_COMPILED_ARTICLE])
-        self._call_count = 0
-        self.calls: list[dict[str, object]] = []
-
-    def complete(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        system: str | None = None,
-        **kwargs: object,
-    ) -> FakeResponse:
-        self.calls.append({"messages": messages, "model": model, "system": system})
-        idx = min(self._call_count, len(self._responses) - 1)
-        self._call_count += 1
-        return FakeResponse(self._responses[idx])
-
-
-class FakeResponse:
-    def __init__(self, content: str) -> None:
-        self.content = content
-        self.model = "fake-model"
-        self.usage = {"prompt_tokens": 100, "completion_tokens": 200}
 
 
 @pytest.fixture

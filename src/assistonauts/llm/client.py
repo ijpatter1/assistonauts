@@ -35,7 +35,7 @@ def _call_litellm(
     litellm_messages.extend(messages)
 
     response = litellm.completion(
-        model=model or "gpt-3.5-turbo",  # fallback for direct calls
+        model=model or "ollama/gemma4:e2b",  # fallback for direct calls
         messages=litellm_messages,
         **kwargs,
     )
@@ -68,7 +68,7 @@ class LLMClient:
         provider_config: dict[str, object],
         mode: str = "live",
         fixture_dir: Path | None = None,
-        default_model: str = "gpt-3.5-turbo",
+        default_model: str = "ollama/gemma4:e2b",
         base_url: str | None = None,
     ) -> None:
         if mode not in _VALID_MODES:

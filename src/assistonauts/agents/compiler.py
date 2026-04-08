@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,7 +12,7 @@ from assistonauts.agents.base import Agent, LLMClientProtocol
 from assistonauts.cache.content import Manifest, ManifestEntry, hash_content
 from assistonauts.models.schema import ArticleType, get_default_schema
 from assistonauts.templates.engine import render_template
-from assistonauts.tools.compiler import compute_stats, generate_diff
+from assistonauts.tools.compiler import generate_diff
 
 _COMPILER_SYSTEM_PROMPT = """\
 You are Compiler, a knowledge compilation agent for the Assistonauts framework.
@@ -60,6 +60,7 @@ class CompilationResult:
     success: bool
     skipped: bool = False
     output_path: Path | None = None
+    output_paths: list[Path] = field(default_factory=list)
     manifest_key: str = ""
     content_summary: str = ""
     message: str = ""
@@ -95,7 +96,6 @@ class CompilerAgent(Agent):
             owned_dirs=[wiki_dir],
             readable_dirs=[raw_dir, index_dir],
             toolkit={
-                "compute_stats": compute_stats,
                 "generate_diff": generate_diff,
             },
         )
@@ -134,12 +134,14 @@ class CompilerAgent(Agent):
         output_path = output_dir / f"{slug}.md"
         manifest_key = f"wiki/{article_type.value}/{slug}.md"
 
-        # Check if source has changed
+        # Check if source has changed — manifest keys the output path but
+        # stores the hash of the *source* file for skip-if-unchanged logic
         if not manifest.has_changed(source_path, manifest_key):
             return CompilationResult(
                 success=True,
                 skipped=True,
                 output_path=output_path,
+                output_paths=[output_path],
                 manifest_key=manifest_key,
                 message="Source unchanged, skipped.",
             )
@@ -244,6 +246,7 @@ class CompilerAgent(Agent):
             success=True,
             skipped=False,
             output_path=output_path,
+            output_paths=[output_path, summary_path],
             manifest_key=manifest_key,
             content_summary=content_summary,
             message=f"Compiled {source_path.name} → {manifest_key}",

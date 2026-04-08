@@ -8,18 +8,13 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from assistonauts.cli.main import cli
-
-
-class FakeResponse:
-    def __init__(self, content: str) -> None:
-        self.content = content
-        self.model = "fake-model"
-        self.usage = {"prompt_tokens": 10, "completion_tokens": 5}
-
+from tests.helpers import FakeLLMClient
 
 _FAKE_ARTICLE = (
     "---\ntitle: Test\ntype: concept\n---\n\n# Test\n\n## Overview\n\nContent."
 )
+_FAKE_SUMMARY = "Summary of compiled article."
+_COMPILER_RESPONSES = [_FAKE_ARTICLE, _FAKE_SUMMARY]
 
 
 def _make_workspace(tmp_path: Path) -> Path:
@@ -47,7 +42,7 @@ class TestMissionCLI:
 
         runner = CliRunner()
         with patch("assistonauts.cli.mission._create_llm_client") as mock_llm:
-            fake_llm = _FakeLLMClient()
+            fake_llm = FakeLLMClient(_COMPILER_RESPONSES)
             mock_llm.return_value = fake_llm
             result = runner.invoke(
                 cli,
@@ -71,7 +66,7 @@ class TestMissionCLI:
         workspace = _make_workspace(tmp_path)
         runner = CliRunner()
         with patch("assistonauts.cli.mission._create_llm_client") as mock_llm:
-            mock_llm.return_value = _FakeLLMClient()
+            mock_llm.return_value = FakeLLMClient(_COMPILER_RESPONSES)
             result = runner.invoke(
                 cli,
                 [
@@ -115,7 +110,7 @@ class TestMissionCLI:
 
         runner = CliRunner()
         with patch("assistonauts.cli.mission._create_llm_client") as mock_llm:
-            mock_llm.return_value = _FakeLLMClient()
+            mock_llm.return_value = FakeLLMClient(_COMPILER_RESPONSES)
             runner.invoke(
                 cli,
                 [
@@ -134,22 +129,3 @@ class TestMissionCLI:
         missions_dir = workspace / ".assistonauts" / "missions"
         yaml_files = list(missions_dir.glob("*.yaml"))
         assert len(yaml_files) > 0
-
-
-class _FakeLLMClient:
-    """Fake LLM for CLI tests."""
-
-    def __init__(self) -> None:
-        self._call_count = 0
-
-    def complete(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        system: str | None = None,
-        **kwargs: object,
-    ) -> FakeResponse:
-        self._call_count += 1
-        if self._call_count == 1:
-            return FakeResponse(_FAKE_ARTICLE)
-        return FakeResponse("Summary of compiled article.")

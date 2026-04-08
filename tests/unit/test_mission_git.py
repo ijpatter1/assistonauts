@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from pathlib import Path
 
@@ -11,34 +12,11 @@ from assistonauts.missions.runner import (
     Mission,
     MissionRunner,
 )
+from tests.helpers import FakeLLMClient
 
 _FAKE_ARTICLE = (
     "---\ntitle: Test\ntype: concept\n---\n\n# Test\n\n## Overview\n\nContent."
 )
-
-
-class FakeResponse:
-    def __init__(self, content: str) -> None:
-        self.content = content
-        self.model = "fake-model"
-        self.usage = {"prompt_tokens": 10, "completion_tokens": 5}
-
-
-class FakeLLMClient:
-    def __init__(self, responses: list[str] | None = None) -> None:
-        self._responses = list(responses or ["default"])
-        self._call_count = 0
-
-    def complete(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        system: str | None = None,
-        **kwargs: object,
-    ) -> FakeResponse:
-        idx = min(self._call_count, len(self._responses) - 1)
-        self._call_count += 1
-        return FakeResponse(self._responses[idx])
 
 
 @pytest.fixture
@@ -173,6 +151,109 @@ class TestMissionGitCommits:
             text=True,
         )
         assert before.stdout.strip() == after.stdout.strip()
+
+    def test_commit_only_stages_mission_outputs(self, git_workspace: Path) -> None:
+        """Auto-commit should not stage unrelated files in the workspace."""
+        llm = FakeLLMClient(
+            [
+                _FAKE_ARTICLE,
+                "Summary.",
+            ]
+        )
+        missions_dir = git_workspace / ".assistonauts" / "missions"
+        missions_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create an unrelated file that should NOT be staged
+        unrelated = git_workspace / "unrelated.txt"
+        unrelated.write_text("This should not be committed.")
+
+        runner = MissionRunner(
+            workspace_root=git_workspace,
+            missions_dir=missions_dir,
+            auto_commit=True,
+        )
+        mission = Mission(
+            mission_id="m-git-005",
+            agent="compiler",
+            params={
+                "source_path": str(
+                    git_workspace / "raw" / "articles" / "test-source.md"
+                ),
+                "article_type": "concept",
+                "title": "Selective Stage",
+            },
+        )
+        result = runner.run(mission, llm_client=llm)
+        assert result.success is True
+
+        # The unrelated file should still be untracked
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=git_workspace,
+            capture_output=True,
+            text=True,
+        )
+        assert "unrelated.txt" in status.stdout
+        # Verify it's untracked (??), not staged
+        for line in status.stdout.strip().splitlines():
+            if "unrelated.txt" in line:
+                assert line.startswith("??"), (
+                    f"unrelated.txt should be untracked, got: {line}"
+                )
+
+    def test_git_commit_failure_logs_warning(
+        self, git_workspace: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """When git commit fails, a warning should be logged."""
+        from unittest.mock import patch
+
+        llm = FakeLLMClient(
+            [
+                _FAKE_ARTICLE,
+                "Summary.",
+            ]
+        )
+        missions_dir = git_workspace / ".assistonauts" / "missions"
+        missions_dir.mkdir(parents=True, exist_ok=True)
+
+        runner = MissionRunner(
+            workspace_root=git_workspace,
+            missions_dir=missions_dir,
+            auto_commit=True,
+        )
+        mission = Mission(
+            mission_id="m-git-006",
+            agent="compiler",
+            params={
+                "source_path": str(
+                    git_workspace / "raw" / "articles" / "test-source.md"
+                ),
+                "article_type": "concept",
+                "title": "Log Test",
+            },
+        )
+
+        # Patch subprocess.run to fail on git commands
+        original_run = subprocess.run
+
+        def failing_git_run(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            if cmd and cmd[0] == "git":
+                raise subprocess.CalledProcessError(
+                    1, cmd, stderr=b"fatal: simulated git failure"
+                )
+            return original_run(*args, **kwargs)
+
+        with (
+            caplog.at_level(logging.WARNING, logger="assistonauts.missions"),
+            patch(
+                "assistonauts.missions.runner.subprocess.run",
+                side_effect=failing_git_run,
+            ),
+        ):
+            runner.run(mission, llm_client=llm)
+
+        assert any("Git commit failed" in msg for msg in caplog.messages)
 
     def test_commit_message_format(self, git_workspace: Path) -> None:
         llm = FakeLLMClient(

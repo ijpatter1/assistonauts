@@ -6,6 +6,7 @@ deterministic (fail-fast). Writes YAML audit trail for each mission.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,7 +15,9 @@ from pathlib import Path
 
 import yaml
 
-from assistonauts.agents.base import Agent, LLMClientProtocol
+from assistonauts.agents.base import Agent, AgentResult, LLMClientProtocol
+
+logger = logging.getLogger("assistonauts.missions")
 
 
 class MissionStatus(Enum):
@@ -53,7 +56,7 @@ class MissionResult:
     error_type: str = ""
     error_message: str = ""
     retry_count: int = 0
-    agent_output: object = None
+    agent_output: AgentResult | None = None
 
 
 def _resolve_agent(
@@ -133,7 +136,7 @@ class MissionRunner:
                 )
                 self._write_audit(mission, started_at, result)
                 if self._auto_commit:
-                    self._git_commit(mission)
+                    self._git_commit(mission, agent_output)
                 return result
 
             except self._TRANSIENT_EXCEPTIONS as e:
@@ -196,11 +199,27 @@ class MissionRunner:
 
         audit_path.write_text(yaml.dump(audit, default_flow_style=False))
 
-    def _git_commit(self, mission: Mission) -> None:
-        """Create a git commit for a completed mission."""
+    def _git_commit(self, mission: Mission, agent_output: AgentResult) -> None:
+        """Create a git commit for a completed mission.
+
+        Stages only the files produced by the agent (via agent_output.output_paths)
+        plus the mission audit trail, rather than blindly staging all workspace changes.
+        """
+        # Collect files to stage: agent outputs + audit trail
+        paths_to_stage: list[str] = []
+        for p in agent_output.output_paths:
+            paths_to_stage.append(str(p))
+        audit_path = self._missions_dir / f"{mission.mission_id}.yaml"
+        if audit_path.exists():
+            paths_to_stage.append(str(audit_path))
+        # Also stage the manifest (updated by the agent)
+        manifest_path = self._workspace_root / "index" / "manifest.json"
+        if manifest_path.exists():
+            paths_to_stage.append(str(manifest_path))
+
         try:
             subprocess.run(
-                ["git", "add", "-A"],
+                ["git", "add", "--", *paths_to_stage],
                 cwd=self._workspace_root,
                 check=True,
                 capture_output=True,
@@ -213,6 +232,9 @@ class MissionRunner:
                 check=True,
                 capture_output=True,
             )
-        except subprocess.CalledProcessError:
-            # Non-critical — log but don't fail the mission
-            pass
+        except subprocess.CalledProcessError as exc:
+            logger.warning(
+                "Git commit failed for mission %s: %s",
+                mission.mission_id,
+                exc.stderr.decode() if exc.stderr else str(exc),
+            )
