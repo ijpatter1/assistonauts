@@ -137,7 +137,33 @@ Update `docs/PHASE_STATUS.md` to reflect the current state of the phase:
 - Update any progress notes
 - Adjust estimates if the work revealed unexpected complexity
 
-## Step 7 — Summary
+## Step 7 — CLAUDE.md Freshness Check
+
+Review the current CLAUDE.md against what actually happened during this session. Check for:
+
+- **Tech stack drift:** Were new dependencies added, tools changed, or frameworks swapped? Does the Tech Stack section still reflect reality?
+- **Directory structure changes:** Were new directories created that aren't in the Directory Structure section?
+- **New conventions established:** Did you establish a pattern (naming convention, component structure, error handling approach) that future sessions should follow but that isn't documented in Coding Standards?
+- **Phase progression:** If a phase was completed, does Current Phase need to advance?
+- **Stale bootstrapping section:** If the project has been scaffolded, is the Bootstrapping section still present? It can be removed or collapsed once it's no longer the first session.
+- **New references:** Were new reference documents created (content guides, API specs, data schemas) that should be listed in References?
+
+If any updates are needed, **propose them to the user** as a list:
+
+```
+CLAUDE.md updates needed:
+1. Tech Stack: add "sqlite-vec 0.1.6" to dependencies
+2. Directory Structure: add "src/agents/" and "src/toolkits/"
+3. Coding Standards: add "Agent classes use @mission decorator for toolkit methods"
+4. Current Phase: advance to Phase 2
+```
+
+**In interactive mode:** Wait for approval before making the changes.
+**In headless/bypass mode:** Apply the changes and note them in the handoff artifact under Session Notes.
+
+If no updates are needed, skip this step silently — do not announce "CLAUDE.md is up to date."
+
+## Step 8 — Summary
 
 After writing the handoff artifact and updating the phase status, present a brief summary:
 - What was accomplished this session (1-3 sentences)

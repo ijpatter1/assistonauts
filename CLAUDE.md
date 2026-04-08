@@ -27,7 +27,7 @@ See `docs/PHASE_STATUS.md` for current completion state.
 
 Work on the current phase only. Do not implement features from future phases. If you encounter a dependency on a future phase, note it in your session handoff and move on.
 
-Do not modify sections of this file other than "Current Phase" unless explicitly asked to.
+Do not modify sections of this file during active development. CLAUDE.md updates happen during /handoff via the freshness check — the agent proposes changes and the user approves. This prevents mid-session drift while keeping the file current.
 
 ### Bootstrapping (First Session Only)
 
