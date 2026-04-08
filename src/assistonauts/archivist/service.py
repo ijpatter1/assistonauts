@@ -118,6 +118,16 @@ class Archivist:
         body = re.sub(r"^---\n.*?\n---\n?", "", content, count=1, flags=re.DOTALL)
         self.db.upsert_fts(rel_path, body)
 
+        # Load content summary from .summary.json if it exists
+        summary_path = full_path.with_suffix(".summary.json")
+        if summary_path.exists():
+            import json
+
+            data = json.loads(summary_path.read_text())
+            content_summary = data.get("summary", "")
+            if content_summary:
+                self.db.upsert_summary(rel_path, content_summary, "")
+
         return True
 
     def reindex_batch(self, paths: list[str]) -> dict[str, int]:

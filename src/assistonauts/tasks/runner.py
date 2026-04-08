@@ -169,6 +169,29 @@ class TaskRunner:
                 self._write_audit(task, started_at, result)
                 return result
 
+    def _relativize_params(self, params: dict[str, str]) -> dict[str, str]:
+        """Convert absolute paths in task params to workspace-relative paths."""
+        result: dict[str, str] = {}
+        for key, value in params.items():
+            if key in ("source_path", "source_paths"):
+                # Handle comma-separated paths for source_paths
+                parts = value.split(",") if key == "source_paths" else [value]
+                relativized: list[str] = []
+                for part in parts:
+                    p = part.strip()
+                    try:
+                        rel = str(Path(p).relative_to(self._workspace_root))
+                        relativized.append(rel)
+                    except ValueError:
+                        relativized.append(p)
+                if key == "source_paths":
+                    result[key] = ", ".join(relativized)
+                else:
+                    result[key] = relativized[0]
+            else:
+                result[key] = value
+        return result
+
     def _write_audit(
         self,
         task: Task,
@@ -182,7 +205,7 @@ class TaskRunner:
         audit: dict[str, object] = {
             "task_id": task.task_id,
             "agent": task.agent,
-            "params": task.params,
+            "params": self._relativize_params(task.params),
             "status": task.status.value,
             "started_at": started_at,
         }

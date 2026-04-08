@@ -36,6 +36,10 @@ Guidelines:
 - Use the section guidance (HTML comments) to understand what each section needs.
 - Include source citations in the Sources section.
 - Output the complete article including frontmatter.
+- For the frontmatter `sources:` field, use the source filenames provided in
+  the template's sources list, not from the raw content's own frontmatter.
+  The raw source material may reference original filenames (e.g. .png files)
+  that differ from the processed .md filenames in the template.
 """
 
 _SUMMARY_SYSTEM_PROMPT = """\
@@ -101,14 +105,25 @@ class CompilationPlan:
 
     articles: list[PlannedArticle] = field(default_factory=list)
 
-    def save(self, plans_dir: Path) -> Path:
+    def save(self, plans_dir: Path, workspace_root: Path | None = None) -> Path:
         """Persist the plan as a YAML artifact.
 
         Writes to plans_dir/plan-<timestamp>.yaml. Returns the path.
+        If workspace_root is provided, source paths are stored as
+        workspace-relative; otherwise falls back to filename only.
         """
         plans_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         plan_path = plans_dir / f"plan-{timestamp}.yaml"
+
+        def _rel_source(p: Path) -> str:
+            if workspace_root is not None:
+                try:
+                    return str(p.relative_to(workspace_root))
+                except ValueError:
+                    pass
+            return p.name
+
         data = {
             "created_at": datetime.now(UTC).isoformat(),
             "article_count": len(self.articles),
@@ -116,7 +131,7 @@ class CompilationPlan:
                 {
                     "title": a.title,
                     "type": a.article_type.value,
-                    "sources": [str(p) for p in a.source_paths],
+                    "sources": [_rel_source(p) for p in a.source_paths],
                     "rationale": a.rationale,
                 }
                 for a in self.articles
@@ -341,9 +356,14 @@ class CompilerAgent(Agent):
         else:
             compile_msg = (
                 f"Compile this source material into a wiki article.\n\n"
+                f"Source filenames to use in frontmatter: "
+                f"{', '.join(sources)}\n\n"
                 f"Source material:\n```markdown\n{source_content}\n```\n\n"
                 f"Template to fill:\n```markdown\n{template}\n```\n\n"
                 f"Fill in each section following the guidance comments. "
+                f"Use the source filenames listed above for the "
+                f"frontmatter sources field, not filenames found "
+                f"inside the raw content. "
                 f"Output the complete article including frontmatter."
             )
 
@@ -369,9 +389,10 @@ class CompilerAgent(Agent):
 
         # Persist content summary alongside the article
         summary_path = output_path.with_suffix(".summary.json")
+        rel_article_path = str(output_path.relative_to(self._workspace_root))
         summary_data = {
             "summary": content_summary,
-            "article_path": str(output_path),
+            "article_path": rel_article_path,
             "manifest_key": manifest_key,
             "generated_at": datetime.now(UTC).isoformat(),
         }
@@ -494,11 +515,16 @@ class CompilerAgent(Agent):
             compile_msg = (
                 f"Compile these {len(resolved)} source documents "
                 f"into a single wiki article.\n\n"
+                f"Source filenames to use in frontmatter: "
+                f"{', '.join(source_names)}\n\n"
                 f"Source material:\n"
                 f"```markdown\n{combined_content}\n```\n\n"
                 f"Template to fill:\n"
                 f"```markdown\n{template}\n```\n\n"
                 f"Synthesize all sources into a coherent article. "
+                f"Use the source filenames listed above for the "
+                f"frontmatter sources field, not filenames found "
+                f"inside the raw content. "
                 f"Output the complete article including frontmatter."
             )
 
@@ -524,9 +550,10 @@ class CompilerAgent(Agent):
 
         # Persist content summary
         summary_path = output_path.with_suffix(".summary.json")
+        rel_article_path = str(output_path.relative_to(self._workspace_root))
         summary_data = {
             "summary": content_summary,
-            "article_path": str(output_path),
+            "article_path": rel_article_path,
             "manifest_key": manifest_key,
             "sources": source_names,
             "generated_at": datetime.now(UTC).isoformat(),

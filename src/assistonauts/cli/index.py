@@ -66,6 +66,7 @@ def index(workspace: Path, reindex: bool, embeddings: bool) -> None:
 
     indexed = 0
     skipped = 0
+    summaries_loaded = 0
     for article_path in articles:
         rel_path = str(article_path.relative_to(workspace))
 
@@ -84,13 +85,19 @@ def index(workspace: Path, reindex: bool, embeddings: bool) -> None:
         if changed:
             indexed += 1
             console.print(f"  [green]indexed[/green] {rel_path}")
+            # Check if summary was loaded
+            summary_path = article_path.with_suffix(".summary.json")
+            if summary_path.exists():
+                summaries_loaded += 1
+                console.print("    [cyan]summary loaded[/cyan]")
         else:
             skipped += 1
 
     mode = "FTS + embeddings" if embedding_client else "FTS only"
+    summary_info = f", Summaries: {summaries_loaded}" if summaries_loaded else ""
     console.print(
         f"\n[bold]Indexed: {indexed}[/bold], "
-        f"[dim]Skipped: {skipped}[/dim] "
+        f"[dim]Skipped: {skipped}[/dim]{summary_info} "
         f"(total: {indexed + skipped} articles, {mode})"
     )
 

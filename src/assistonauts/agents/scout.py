@@ -122,7 +122,7 @@ class ScoutAgent(Agent):
         frontmatter = (
             "---\n"
             f"source: {source_path.name}\n"
-            f"source_path: {source_path}\n"
+            f"source_path: {source_path.name}\n"
             f"ingested_by: scout\n"
             f"ingested_at: {now}\n"
             f"category: {category}\n"
