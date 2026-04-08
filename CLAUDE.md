@@ -14,7 +14,7 @@ Assistonauts is a framework for building and maintaining LLM-powered knowledge b
 - **Linter/Formatter:** ruff (lint + format)
 - **Package Manager:** uv
 - **Hosting:** CLI-only for v1 (local execution). Server deployment (FastAPI) deferred
-- **Key Dependencies:** litellm, pyyaml, click, rich, markitdown, sqlite-vec, watchdog, feedparser
+- **Key Dependencies:** litellm, pyyaml, click, rich, markitdown, sqlite-vec, Pillow, watchdog, feedparser
 - **No heavyweight frameworks** — no LangChain, no LlamaIndex
 
 ## Current Phase
