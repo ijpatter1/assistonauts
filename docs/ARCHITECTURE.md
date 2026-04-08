@@ -64,7 +64,7 @@
 4. Curator reads via Archivist retrieval, writes backlinks → `wiki/` (link sections only)
 5. Inspector reads `wiki/` + `index/manifest.json`, writes findings → `audits/`
 6. Captain orchestrates all of the above, writes plans/logs → `expeditions/`, `station-logs/`
-7. Explorer reads via Archivist retrieval, writes explorations → `wiki/explorations/`
+7. Explorer reads via Archivist retrieval, writes explorations → `wiki/exploration/`
 
 ---
 
@@ -255,7 +255,7 @@ Config models are validated with dataclasses (or Pydantic if warranted by comple
     "hash": "a3f2e8...",
     "last_processed": "2026-04-05T12:00:00Z",
     "processed_by": "scout",
-    "downstream": ["wiki/concepts/spectral-analysis.md"]
+    "downstream": ["wiki/concept/spectral-analysis.md"]
   }
 }
 ```
@@ -303,10 +303,10 @@ workspace/
 │   ├── datasets/
 │   └── assets/
 ├── wiki/
-│   ├── concepts/
-│   ├── entities/
-│   ├── logs/
-│   └── explorations/
+│   ├── concept/
+│   ├── entity/
+│   ├── log/
+│   └── exploration/
 ├── index/
 │   └── manifest.json              # empty: {}
 ├── audits/
@@ -393,7 +393,7 @@ Archivist system (`archivist/`) as a deterministic service — not an agent. sql
 
 ### Phase 4 — Explorer + Interactive Mode
 
-Explorer agent (`agents/explorer.py`) with query flow via multi-pass retrieval. Interactive REPL session via Click. Exploration filing to `wiki/explorations/`. Output renderer for markdown, slides (Marp), and charts (matplotlib). New optional dependency: `matplotlib`.
+Explorer agent (`agents/explorer.py`) with query flow via multi-pass retrieval. Interactive REPL session via Click. Exploration filing to `wiki/exploration/`. Output renderer for markdown, slides (Marp), and charts (matplotlib). New optional dependency: `matplotlib`.
 
 ### Phase 5 — Captain + Expedition Orchestration
 
