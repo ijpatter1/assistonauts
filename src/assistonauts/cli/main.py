@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
+from assistonauts.cli.mission import mission
 from assistonauts.cli.scout import scout
 from assistonauts.storage.workspace import init_workspace
 
@@ -18,6 +19,7 @@ def cli() -> None:
 
 
 cli.add_command(scout)
+cli.add_command(mission)
 
 
 @cli.command()

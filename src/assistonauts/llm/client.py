@@ -35,7 +35,7 @@ def _call_litellm(
     litellm_messages.extend(messages)
 
     response = litellm.completion(
-        model=model or "gpt-3.5-turbo",
+        model=model or "gpt-3.5-turbo",  # fallback for direct calls
         messages=litellm_messages,
         **kwargs,
     )
@@ -68,6 +68,8 @@ class LLMClient:
         provider_config: dict[str, object],
         mode: str = "live",
         fixture_dir: Path | None = None,
+        default_model: str = "gpt-3.5-turbo",
+        base_url: str | None = None,
     ) -> None:
         if mode not in _VALID_MODES:
             raise ValueError(f"Invalid mode '{mode}'. Must be one of: {_VALID_MODES}")
@@ -77,10 +79,20 @@ class LLMClient:
         self._provider_config = provider_config
         self._mode = mode
         self._fixture_dir = fixture_dir
+        self._default_model = default_model
+        self._base_url = base_url
 
     @property
     def mode(self) -> str:
         return self._mode
+
+    @property
+    def default_model(self) -> str:
+        return self._default_model
+
+    @property
+    def base_url(self) -> str | None:
+        return self._base_url
 
     def complete(
         self,
@@ -90,14 +102,22 @@ class LLMClient:
         **kwargs: object,
     ) -> LLMResponse:
         """Make an inference call. Behavior depends on mode."""
+        resolved_model = model or self._default_model
+        if self._base_url and "base_url" not in kwargs:
+            kwargs["base_url"] = self._base_url
+
         if self._mode == "replay":
             return self._replay(messages, system=system)
         elif self._mode == "record":
-            response = _call_litellm(messages, model=model, system=system, **kwargs)
+            response = _call_litellm(
+                messages, model=resolved_model, system=system, **kwargs
+            )
             self._save_fixture(messages, system=system, response=response)
             return response
         else:  # live
-            return _call_litellm(messages, model=model, system=system, **kwargs)
+            return _call_litellm(
+                messages, model=resolved_model, system=system, **kwargs
+            )
 
     def _replay(
         self,
