@@ -7,6 +7,7 @@ from rich.console import Console
 
 from assistonauts.cli.mission import mission
 from assistonauts.cli.scout import scout
+from assistonauts.cli.status import status
 from assistonauts.storage.workspace import init_workspace
 
 console = Console()
@@ -20,6 +21,7 @@ def cli() -> None:
 
 cli.add_command(scout)
 cli.add_command(mission)
+cli.add_command(status)
 
 
 @cli.command()
