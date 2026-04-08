@@ -1,4 +1,4 @@
-"""Tests for mission-level git commits."""
+"""Tests for task-level git commits."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from assistonauts.missions.runner import (
-    Mission,
-    MissionRunner,
+from assistonauts.tasks.runner import (
+    Task,
+    TaskRunner,
 )
 from tests.helpers import FakeLLMClient
 
@@ -74,25 +74,25 @@ def git_workspace(tmp_path: Path) -> Path:
     return root
 
 
-class TestMissionGitCommits:
-    """Test that completed missions produce git commits."""
+class TestTaskGitCommits:
+    """Test that completed tasks produce git commits."""
 
-    def test_successful_mission_creates_commit(self, git_workspace: Path) -> None:
+    def test_successful_task_creates_commit(self, git_workspace: Path) -> None:
         llm = FakeLLMClient(
             [
                 _FAKE_ARTICLE,
                 "Summary of git test.",
             ]
         )
-        missions_dir = git_workspace / ".assistonauts" / "missions"
-        missions_dir.mkdir(parents=True, exist_ok=True)
-        runner = MissionRunner(
+        tasks_dir = git_workspace / ".assistonauts" / "tasks"
+        tasks_dir.mkdir(parents=True, exist_ok=True)
+        runner = TaskRunner(
             workspace_root=git_workspace,
-            missions_dir=missions_dir,
+            tasks_dir=tasks_dir,
             auto_commit=True,
         )
-        mission = Mission(
-            mission_id="m-git-001",
+        task = Task(
+            task_id="t-git-001",
             agent="compiler",
             params={
                 "source_path": str(
@@ -102,26 +102,26 @@ class TestMissionGitCommits:
                 "title": "Git Test",
             },
         )
-        result = runner.run(mission, llm_client=llm)
+        result = runner.run(task, llm_client=llm)
         assert result.success is True
 
-        # Check git log for mission commit
+        # Check git log for task commit
         log = subprocess.run(
             ["git", "log", "--oneline", "-1"],
             cwd=git_workspace,
             capture_output=True,
             text=True,
         )
-        assert "m-git-001" in log.stdout
+        assert "t-git-001" in log.stdout
         assert "compiler" in log.stdout
 
-    def test_failed_mission_no_commit(self, git_workspace: Path) -> None:
+    def test_failed_task_no_commit(self, git_workspace: Path) -> None:
         llm = FakeLLMClient()
-        missions_dir = git_workspace / ".assistonauts" / "missions"
-        missions_dir.mkdir(parents=True, exist_ok=True)
-        runner = MissionRunner(
+        tasks_dir = git_workspace / ".assistonauts" / "tasks"
+        tasks_dir.mkdir(parents=True, exist_ok=True)
+        runner = TaskRunner(
             workspace_root=git_workspace,
-            missions_dir=missions_dir,
+            tasks_dir=tasks_dir,
             auto_commit=True,
         )
         # Get commit count before
@@ -131,8 +131,8 @@ class TestMissionGitCommits:
             capture_output=True,
             text=True,
         )
-        mission = Mission(
-            mission_id="m-git-002",
+        task = Task(
+            task_id="t-git-002",
             agent="compiler",
             params={
                 "source_path": "/nonexistent/path.md",
@@ -140,7 +140,7 @@ class TestMissionGitCommits:
                 "title": "Bad",
             },
         )
-        result = runner.run(mission, llm_client=llm)
+        result = runner.run(task, llm_client=llm)
         assert result.success is False
 
         # Commit count should not have increased
@@ -152,7 +152,7 @@ class TestMissionGitCommits:
         )
         assert before.stdout.strip() == after.stdout.strip()
 
-    def test_commit_only_stages_mission_outputs(self, git_workspace: Path) -> None:
+    def test_commit_only_stages_task_outputs(self, git_workspace: Path) -> None:
         """Auto-commit should not stage unrelated files in the workspace."""
         llm = FakeLLMClient(
             [
@@ -160,20 +160,20 @@ class TestMissionGitCommits:
                 "Summary.",
             ]
         )
-        missions_dir = git_workspace / ".assistonauts" / "missions"
-        missions_dir.mkdir(parents=True, exist_ok=True)
+        tasks_dir = git_workspace / ".assistonauts" / "tasks"
+        tasks_dir.mkdir(parents=True, exist_ok=True)
 
         # Create an unrelated file that should NOT be staged
         unrelated = git_workspace / "unrelated.txt"
         unrelated.write_text("This should not be committed.")
 
-        runner = MissionRunner(
+        runner = TaskRunner(
             workspace_root=git_workspace,
-            missions_dir=missions_dir,
+            tasks_dir=tasks_dir,
             auto_commit=True,
         )
-        mission = Mission(
-            mission_id="m-git-005",
+        task = Task(
+            task_id="t-git-005",
             agent="compiler",
             params={
                 "source_path": str(
@@ -183,7 +183,7 @@ class TestMissionGitCommits:
                 "title": "Selective Stage",
             },
         )
-        result = runner.run(mission, llm_client=llm)
+        result = runner.run(task, llm_client=llm)
         assert result.success is True
 
         # The unrelated file should still be untracked
@@ -213,16 +213,16 @@ class TestMissionGitCommits:
                 "Summary.",
             ]
         )
-        missions_dir = git_workspace / ".assistonauts" / "missions"
-        missions_dir.mkdir(parents=True, exist_ok=True)
+        tasks_dir = git_workspace / ".assistonauts" / "tasks"
+        tasks_dir.mkdir(parents=True, exist_ok=True)
 
-        runner = MissionRunner(
+        runner = TaskRunner(
             workspace_root=git_workspace,
-            missions_dir=missions_dir,
+            tasks_dir=tasks_dir,
             auto_commit=True,
         )
-        mission = Mission(
-            mission_id="m-git-006",
+        task = Task(
+            task_id="t-git-006",
             agent="compiler",
             params={
                 "source_path": str(
@@ -245,13 +245,13 @@ class TestMissionGitCommits:
             return original_run(*args, **kwargs)
 
         with (
-            caplog.at_level(logging.WARNING, logger="assistonauts.missions"),
+            caplog.at_level(logging.WARNING, logger="assistonauts.tasks"),
             patch(
-                "assistonauts.missions.runner.subprocess.run",
+                "assistonauts.tasks.runner.subprocess.run",
                 side_effect=failing_git_run,
             ),
         ):
-            runner.run(mission, llm_client=llm)
+            runner.run(task, llm_client=llm)
 
         assert any("Git commit failed" in msg for msg in caplog.messages)
 
@@ -262,15 +262,15 @@ class TestMissionGitCommits:
                 "Summary.",
             ]
         )
-        missions_dir = git_workspace / ".assistonauts" / "missions"
-        missions_dir.mkdir(parents=True, exist_ok=True)
-        runner = MissionRunner(
+        tasks_dir = git_workspace / ".assistonauts" / "tasks"
+        tasks_dir.mkdir(parents=True, exist_ok=True)
+        runner = TaskRunner(
             workspace_root=git_workspace,
-            missions_dir=missions_dir,
+            tasks_dir=tasks_dir,
             auto_commit=True,
         )
-        mission = Mission(
-            mission_id="m-git-003",
+        task = Task(
+            task_id="t-git-003",
             agent="compiler",
             params={
                 "source_path": str(
@@ -280,7 +280,7 @@ class TestMissionGitCommits:
                 "title": "Msg Test",
             },
         )
-        runner.run(mission, llm_client=llm)
+        runner.run(task, llm_client=llm)
 
         log = subprocess.run(
             ["git", "log", "--format=%s", "-1"],
@@ -289,8 +289,8 @@ class TestMissionGitCommits:
             text=True,
         )
         msg = log.stdout.strip()
-        # Format: [mission-<id>] <agent>: <description>
-        assert msg.startswith("[mission-m-git-003]")
+        # Format: [task-<id>] <agent>: <description>
+        assert msg.startswith("[task-t-git-003]")
         assert "compiler:" in msg
 
     def test_auto_commit_disabled_by_default(self, git_workspace: Path) -> None:
@@ -301,11 +301,11 @@ class TestMissionGitCommits:
                 "Summary.",
             ]
         )
-        missions_dir = git_workspace / ".assistonauts" / "missions"
-        missions_dir.mkdir(parents=True, exist_ok=True)
-        runner = MissionRunner(
+        tasks_dir = git_workspace / ".assistonauts" / "tasks"
+        tasks_dir.mkdir(parents=True, exist_ok=True)
+        runner = TaskRunner(
             workspace_root=git_workspace,
-            missions_dir=missions_dir,
+            tasks_dir=tasks_dir,
             # auto_commit defaults to False
         )
         before = subprocess.run(
@@ -314,8 +314,8 @@ class TestMissionGitCommits:
             capture_output=True,
             text=True,
         )
-        mission = Mission(
-            mission_id="m-git-004",
+        task = Task(
+            task_id="t-git-004",
             agent="compiler",
             params={
                 "source_path": str(
@@ -325,7 +325,7 @@ class TestMissionGitCommits:
                 "title": "No Commit",
             },
         )
-        runner.run(mission, llm_client=llm)
+        runner.run(task, llm_client=llm)
 
         after = subprocess.run(
             ["git", "rev-list", "--count", "HEAD"],

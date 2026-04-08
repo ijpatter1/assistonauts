@@ -1,16 +1,31 @@
-"""Scout agent toolkit — deterministic utility functions.
+"""Scout agent toolkit — utility functions for source ingestion.
 
-All functions are pure/deterministic (no LLM calls) and independently testable.
+Most functions are pure/deterministic (no LLM calls) and independently
+testable. The exception is convert_image(), which uses a vision-capable
+LLM to extract text from images.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from assistonauts.cache.content import hash_content as _hash_content
+
+
+class LLMClientProtocol(Protocol):
+    """Minimal protocol for LLM clients used by toolkit functions."""
+
+    def complete(
+        self,
+        messages: list[dict[str, object]],
+        system: str | None = None,
+        **kwargs: object,
+    ) -> object: ...
 
 
 def hash_content(path: Path) -> str:
@@ -56,6 +71,136 @@ def convert_document(path: Path) -> str:
     converter = MarkItDown()
     result = converter.convert(str(path))
     return result.text_content
+
+
+_IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"})
+
+_IMAGE_MIME_TYPES: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+_VISION_SYSTEM_PROMPT = """\
+You are a precise text transcription agent. Your job is to faithfully transcribe
+all visible text from the provided image into clean markdown.
+
+Rules:
+- Transcribe ALL text exactly as it appears — do not paraphrase or summarize.
+- Preserve the original structure: headings, paragraphs, lists, emphasis.
+- Use markdown headings (#, ##, ###) for titles and section headers.
+- If the image shows two pages side by side, transcribe left page first, then right.
+- For images or photos, insert a brief description: [Image: description].
+- Do NOT add commentary, introductions, or explanations.
+- Output ONLY the transcribed text.
+"""
+
+
+def _prepare_image(path: Path, max_bytes: int = 4_500_000) -> bytes:
+    """Read an image, resizing if it exceeds max_bytes.
+
+    Uses Pillow to progressively downscale large images while
+    maintaining aspect ratio and readability for vision models.
+    Returns the image as PNG or JPEG bytes.
+    """
+    raw = path.read_bytes()
+    if len(raw) <= max_bytes:
+        return raw
+
+    from io import BytesIO
+
+    from PIL import Image
+
+    img = Image.open(BytesIO(raw))
+
+    # Convert RGBA to RGB for JPEG compatibility
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+
+    # Progressively downscale until under the limit
+    quality = 85
+    for scale in [0.75, 0.5, 0.4, 0.3, 0.25]:
+        new_w = int(img.width * scale)
+        new_h = int(img.height * scale)
+        resized = img.resize((new_w, new_h), Image.LANCZOS)
+
+        buf = BytesIO()
+        resized.save(buf, format="JPEG", quality=quality)
+        if buf.tell() <= max_bytes:
+            return buf.getvalue()
+
+    # Last resort: aggressive compression
+    buf = BytesIO()
+    resized.save(buf, format="JPEG", quality=60)
+    return buf.getvalue()
+
+
+def is_image_file(path: Path) -> bool:
+    """Check if a file path has a supported image extension."""
+    return path.suffix.lower() in _IMAGE_EXTENSIONS
+
+
+def convert_image(
+    path: Path,
+    llm_client: LLMClientProtocol,
+) -> str:
+    """Convert an image to markdown using a vision-capable LLM.
+
+    Sends the image as a base64-encoded data URL to the LLM and
+    returns the extracted text as markdown.
+
+    Args:
+        path: Path to the image file.
+        llm_client: An LLM client with a complete() method that
+            supports multimodal messages (image_url content type).
+
+    Raises:
+        ValueError: If the file is not a supported image format.
+    """
+    if not is_image_file(path):
+        raise ValueError(
+            f"{path.name} is not a supported image format. "
+            f"Supported: {', '.join(sorted(_IMAGE_EXTENSIONS))}"
+        )
+
+    # Read image, resize if needed to stay under API limits (5MB)
+    raw_bytes = path.read_bytes()
+    image_bytes = _prepare_image(path, max_bytes=4_500_000)
+    # If we had to resize, it's now JPEG regardless of original format
+    if len(raw_bytes) > 4_500_000:
+        mime_type = "image/jpeg"
+    else:
+        mime_type = _IMAGE_MIME_TYPES.get(path.suffix.lower(), "image/png")
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    data_url = f"data:{mime_type};base64,{b64}"
+
+    # Build multimodal message with proper content blocks format
+    # (OpenAI/litellm standard for vision models)
+    messages: list[dict[str, object]] = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Transcribe all visible text from this "
+                    "image into markdown. Preserve the exact "
+                    "wording, structure, and formatting.",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": data_url},
+                },
+            ],
+        },
+    ]
+
+    response = llm_client.complete(
+        messages=messages,
+        system=_VISION_SYSTEM_PROMPT,
+    )
+    return response.content  # type: ignore[union-attr] — Protocol.complete returns object, but LLM clients return objects with .content
 
 
 def clip_web(url: str, output_dir: Path) -> tuple[str, list[Path]]:

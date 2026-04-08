@@ -247,11 +247,11 @@ class TestLLMCalls:
         assert len(client.calls) == 2
 
 
-class TestRunMission:
-    """Test that base agent run_mission raises NotImplementedError."""
+class TestRunTask:
+    """Test that base agent run_task raises NotImplementedError."""
 
-    def test_run_mission_not_implemented(self, tmp_workspace: Path) -> None:
-        """Base agent.run_mission raises NotImplementedError."""
+    def test_run_task_not_implemented(self, tmp_workspace: Path) -> None:
+        """Base agent.run_task raises NotImplementedError."""
         agent = Agent(
             role="scout",
             system_prompt="Test",
@@ -261,7 +261,7 @@ class TestRunMission:
         )
 
         with pytest.raises(NotImplementedError):
-            agent.run_mission({})  # type: ignore[arg-type]
+            agent.run_task({})  # type: ignore[arg-type]
 
 
 class TestLogging:

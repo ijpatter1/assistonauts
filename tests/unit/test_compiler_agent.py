@@ -315,18 +315,18 @@ class TestCompilerAgent:
         assert result.success is True
         assert result.skipped is False
 
-    def test_run_mission_delegates_to_compile(self, workspace: Path) -> None:
+    def test_run_task_delegates_to_compile(self, workspace: Path) -> None:
         llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
         compiler = CompilerAgent(
             llm_client=llm,
             workspace_root=workspace,
         )
-        mission = {
+        task = {
             "source_path": str(workspace / "raw" / "articles" / "test-source.md"),
             "article_type": "concept",
             "title": "Test Concept",
         }
-        result = compiler.run_mission(mission)
+        result = compiler.run_task(task)
         assert isinstance(result, CompilationResult)
         assert result.success is True
 
@@ -344,6 +344,24 @@ class TestCompilerAgent:
         assert result.output_path is not None
         # Output should be under wiki/
         assert "wiki" in str(result.output_path)
+
+    def test_compile_strips_code_fences(self, workspace: Path) -> None:
+        """LLM output wrapped in ```markdown fences should be stripped."""
+        fenced_article = "```markdown\n" + _FAKE_COMPILED_ARTICLE + "\n```"
+        llm = FakeLLMClient([fenced_article, _FAKE_CONTENT_SUMMARY])
+        compiler = CompilerAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+        )
+        result = compiler.compile(
+            source_path=workspace / "raw" / "articles" / "test-source.md",
+            article_type=ArticleType.CONCEPT,
+            title="Test Concept",
+        )
+        assert result.output_path is not None
+        content = result.output_path.read_text()
+        assert not content.startswith("```")
+        assert "---\n" in content  # frontmatter should start clean
 
     def test_expedition_scope_in_system_prompt(self, workspace: Path) -> None:
         llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])

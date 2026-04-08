@@ -9,17 +9,17 @@ Assistonauts is a framework for building and maintaining LLM-powered knowledge b
 - **Language:** Python 3.11+, strict typing (no `Any` without justification)
 - **CLI Framework:** Click + Rich
 - **LLM:** litellm (provider-agnostic — Claude, OpenAI, Ollama, Vertex)
-- **Database:** SQLite (FTS5 for keyword search, sqlite-vec for vector similarity, mission ledger, LLM cache)
+- **Database:** SQLite (FTS5 for keyword search, sqlite-vec for vector similarity, task audit trails, LLM cache)
 - **Testing:** pytest + pytest-cov, contract tests with recorded LLM fixtures
 - **Linter/Formatter:** ruff (lint + format)
 - **Package Manager:** uv
 - **Hosting:** CLI-only for v1 (local execution). Server deployment (FastAPI) deferred
-- **Key Dependencies:** litellm, pyyaml, click, rich, markitdown, sqlite-vec, watchdog, feedparser
+- **Key Dependencies:** litellm, pyyaml, click, rich, markitdown, sqlite-vec, Pillow, watchdog, feedparser
 - **No heavyweight frameworks** — no LangChain, no LlamaIndex
 
 ## Current Phase
 
-**Phase 1 — Core Infrastructure + Scout**
+**Phase 4 — Explorer + Interactive Mode** (Phase 3 complete, pending merge)
 
 See `docs/REQUIREMENTS.md` for the full development plan.
 See `docs/ARCHITECTURE.md` for technical architecture details.
@@ -27,22 +27,7 @@ See `docs/PHASE_STATUS.md` for current completion state.
 
 Work on the current phase only. Do not implement features from future phases. If you encounter a dependency on a future phase, note it in your session handoff and move on.
 
-Do not modify sections of this file other than "Current Phase" unless explicitly asked to.
-
-### Bootstrapping (First Session Only)
-
-If this is the very first session and no `pyproject.toml` exists yet, the project hasn't been scaffolded. The first task is to initialize the project. Until scaffolding is complete:
-
-- `pytest`, `ruff check`, and `ruff format --check` will fail — this is expected
-- Skip the "Run the Tests" step in `/start-phase` and note that scaffolding is the first deliverable
-- During scaffolding, configure the following:
-  - **Python 3.11+** with `pyproject.toml` (uv-compatible)
-  - **pytest** with pytest-cov for test coverage
-  - **ruff** for linting and formatting (the auto-format hook depends on ruff being installed)
-  - `src/assistonauts/` package layout with `__init__.py` and `__main__.py`
-  - Console script entry point: `assistonauts = "assistonauts.cli.main:cli"`
-  - Scripts: `pytest` (test), `ruff check` (lint), `ruff format` (format)
-- Write at least one passing test before ending the first session — this establishes the test baseline for all future sessions
+Do not modify sections of this file during active development. CLAUDE.md updates happen during /handoff via the freshness check — the agent proposes changes and the user approves. This prevents mid-session drift while keeping the file current.
 
 ## Directory Structure
 
@@ -68,11 +53,12 @@ assistonauts/
 │       ├── cache/                  # Cache layers (content, LLM, embedding)
 │       ├── storage/                # Workspace management, file I/O, ownership
 │       ├── archivist/              # Knowledge base OS (Phase 3)
-│       ├── missions/               # Mission runner, state machine (Phase 2)
+│       ├── tasks/                  # Task runner, state machine (Phase 2)
 │       ├── rag/                    # Multi-pass retrieval (Phase 3)
-│       └── models/                 # Data models (configs, missions, etc.)
+│       └── models/                 # Data models (configs, tasks, etc.)
 ├── tests/
 │   ├── conftest.py                 # Shared fixtures, replay client setup
+│   ├── helpers.py                  # FakeLLMClient, FakeEmbeddingClient (canonical source)
 │   ├── fixtures/                   # Recorded LLM response fixtures
 │   ├── unit/                       # Unit tests for toolkit functions
 │   └── contract/                   # Contract tests for agent output structure
@@ -125,6 +111,13 @@ Agents make LLM calls that produce non-deterministic output. Three testing layer
 
 See the Testing Strategy section in `docs/assistonauts-spec.md` for full details.
 
+### Test Helpers
+
+`tests/helpers.py` is the canonical source for fake test infrastructure. Import from here — do not define local copies in test files.
+
+- **`FakeLLMClient`** — returns canned responses, tracks calls. Use for unit tests.
+- **`FakeEmbeddingClient`** — deterministic SHA-256-based embeddings. Use for testing Archivist/retrieval without a real embedding model.
+
 ## Coding Standards
 
 ### General
@@ -140,7 +133,7 @@ See the Testing Strategy section in `docs/assistonauts-spec.md` for full details
 ### Error Handling
 
 - CLI errors show a meaningful message via Rich. Technical details go to the structured log.
-- Agent errors are classified as transient or deterministic (see mission runner spec). Transient errors retry; deterministic errors fail-fast to the review queue.
+- Agent errors are classified as transient or deterministic (see task runner). Transient errors retry; deterministic errors fail-fast to the review queue.
 - File I/O errors from ownership boundary violations raise `OwnershipError` with the agent role, attempted path, and allowed directories.
 
 ## Git Conventions

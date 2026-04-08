@@ -13,10 +13,20 @@ Then pass a prompt like: "Evaluate the following work from Phase [N]. Commits th
 Present the evaluator's full report to the user without modification or softening.
 
 - **If FAIL:** Stop the handoff here. Fix the critical issues identified by the evaluator, then invoke `/handoff` again from the top (the evaluator will re-run on the fixed code).
-- **If PASS WITH ISSUES:** Note the issues but continue with Step 2. Issues will be captured in the handoff artifact.
+- **If PASS WITH ISSUES:** Note the issues but continue with Step 2.
 - **If PASS:** Continue with Step 2.
 
-## Step 2 — Final Test Run
+## Step 2 — Invoke the Product Reviewer
+
+Invoke the `product-reviewer` subagent using the Agent tool. Pass a prompt like: "Review the following work from Phase [N] for product quality. Commits this session: [list]. Changed files: [list]. Review against the product vision in docs/REQUIREMENTS.md and any content guides referenced in CLAUDE.md."
+
+Present the product reviewer's full report to the user without modification or softening.
+
+- **If NEEDS WORK with Critical issues:** Stop the handoff. Address critical product issues, then invoke `/handoff` again.
+- **If NEEDS WORK with Major/Minor issues only:** Note the issues but continue with Step 3. Issues will be captured in the handoff artifact.
+- **If PASS:** Continue with Step 3.
+
+## Step 3 — Final Test Run
 
 Run the full test suite to confirm the codebase is in a clean state:
 
@@ -26,7 +36,7 @@ npm test 2>&1
 
 If any tests are failing, note them explicitly in the handoff. Do not leave the session with unexplained test failures.
 
-## Step 3 — Commit Any Uncommitted Work
+## Step 4 — Commit Any Uncommitted Work
 
 Check for uncommitted changes:
 
@@ -36,7 +46,7 @@ git status
 
 If there are uncommitted changes, commit them with an appropriate conventional commit message. If there are changes that are intentionally uncommitted (work in progress, experimental code), note this in the handoff artifact.
 
-## Step 4 — Review Session Work
+## Step 5 — Review Session Work
 
 Review what was accomplished this session. Use a reasonable number of recent commits:
 
@@ -46,7 +56,7 @@ git log --oneline -15
 
 Scan the output and identify which commits belong to this session (based on timestamps and commit messages). If the session spans more than 15 commits, increase the count.
 
-## Step 5 — Generate Handoff Artifact
+## Step 6 — Generate Handoff Artifact
 
 Determine the next session number by checking existing files in `docs/sessions/`. Create the handoff artifact at:
 
@@ -88,18 +98,30 @@ Anything that can't proceed and why:
 
 ## Issues & Technical Debt
 
-Any issues identified (by you or the evaluator) that weren't resolved this session:
+Any issues identified (by you or either reviewer) that weren't resolved this session:
 - Issue description
 - Severity (critical / important / minor)
+- Source (evaluator / product reviewer / self-identified)
 - Where it lives in the code
 
 ## Evaluator Results
 
-Summary of the evaluator's assessment:
+Summary of the evaluator's technical assessment:
 - Weighted score: X.X/5.0
 - Verdict: PASS / PASS WITH ISSUES / FAIL
 - Critical issues (if any): [list]
 - Unresolved important issues: [list]
+
+## Product Review Results
+
+Summary of the product reviewer's assessment:
+- Weighted score: X.X/5.0
+- Verdict: PASS / NEEDS WORK
+- Vision alignment: [score]/5
+- User experience: [score]/5
+- Content quality: [score]/5
+- Feature depth: [score]/5
+- Issues (if any): [list]
 
 ## Test State
 
@@ -130,14 +152,40 @@ Any context that would be useful for the next session that doesn't fit above:
 - Gotchas discovered
 ```
 
-## Step 6 — Update Phase Status
+## Step 7 — Update Phase Status
 
 Update `docs/PHASE_STATUS.md` to reflect the current state of the phase:
 - Mark completed deliverables
 - Update any progress notes
 - Adjust estimates if the work revealed unexpected complexity
 
-## Step 7 — Summary
+## Step 8 — CLAUDE.md Freshness Check
+
+Review the current CLAUDE.md against what actually happened during this session. Check for:
+
+- **Tech stack drift:** Were new dependencies added, tools changed, or frameworks swapped? Does the Tech Stack section still reflect reality?
+- **Directory structure changes:** Were new directories created that aren't in the Directory Structure section?
+- **New conventions established:** Did you establish a pattern (naming convention, component structure, error handling approach) that future sessions should follow but that isn't documented in Coding Standards?
+- **Phase progression:** If a phase was completed, does Current Phase need to advance?
+- **Stale bootstrapping section:** If the project has been scaffolded, is the Bootstrapping section still present? It can be removed or collapsed once it's no longer the first session.
+- **New references:** Were new reference documents created (content guides, API specs, data schemas) that should be listed in References?
+
+If any updates are needed, **propose them to the user** as a list:
+
+```
+CLAUDE.md updates needed:
+1. Tech Stack: add "sqlite-vec 0.1.6" to dependencies
+2. Directory Structure: add "src/agents/" and "src/toolkits/"
+3. Coding Standards: add "Agent classes use @mission decorator for toolkit methods"
+4. Current Phase: advance to Phase 2
+```
+
+**In interactive mode:** Wait for approval before making the changes.
+**In headless/bypass mode:** Apply the changes and note them in the handoff artifact under Session Notes.
+
+If no updates are needed, skip this step silently — do not announce "CLAUDE.md is up to date."
+
+## Step 9 — Summary
 
 After writing the handoff artifact and updating the phase status, present a brief summary:
 - What was accomplished this session (1-3 sentences)

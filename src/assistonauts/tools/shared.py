@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 class StructuredLogger:
-    """Structured logger that writes JSON-lines to mission log files.
+    """Structured logger that writes JSON-lines to task log files.
 
     Each log entry includes timestamp, agent role, event type, and
     context-specific data (token counts, file paths, tool names, etc.).
@@ -24,19 +24,19 @@ class StructuredLogger:
         self,
         role: str,
         log_dir: Path | None = None,
-        mission_id: str | None = None,
+        task_id: str | None = None,
     ) -> None:
         self._role = role
         self._log_dir = log_dir
-        self._mission_id = mission_id
+        self._task_id = task_id
         self._logger = logging.getLogger(f"assistonauts.{role}")
         self._log_file: Path | None = None
 
         if log_dir is not None:
             log_dir.mkdir(parents=True, exist_ok=True)
             filename = f"{role}"
-            if mission_id:
-                filename += f"_{mission_id}"
+            if task_id:
+                filename += f"_{task_id}"
             filename += ".jsonl"
             self._log_file = log_dir / filename
 
@@ -57,8 +57,8 @@ class StructuredLogger:
             "event": event,
             **data,
         }
-        if self._mission_id:
-            entry["mission_id"] = self._mission_id
+        if self._task_id:
+            entry["task_id"] = self._task_id
 
         # Log to Python logger
         self._logger.info("%s: %s", event, json.dumps(data, default=str))

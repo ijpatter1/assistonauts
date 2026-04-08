@@ -1,7 +1,7 @@
 # Phase Status Tracker
 
 > **Current Phase: 3 — Archivist System + Curator + Hybrid RAG**
-> Last updated: 2026-04-08, session-2026-04-08-002
+> Last updated: 2026-04-08, session-2026-04-08-003
 > Phase 1 merged to main 2026-04-07
 > Phase 2 merged to main 2026-04-08
 
@@ -25,19 +25,22 @@ _Goal: Establish the foundation that every subsequent phase builds on — worksp
 
 ---
 
-## Phase 2 — Compiler + Mission Runner
+## Phase 2 — Compiler + Task Runner
 
-_Goal: Build the compilation pipeline — the Compiler agent that transforms raw sources into structured wiki articles, and the mission runner that executes and tracks agent work._
+_Goal: Build the compilation pipeline — the Compiler agent that transforms raw sources into structured wiki articles, and the task runner that executes and tracks individual agent operations._
 
 - ✅ 2026-04-07, session-2026-04-07-003 — Wiki schema definition — article types (concept, entity, log, exploration), required frontmatter fields, section templates, naming conventions, backlink formatting rules. Implemented as `models/schema.py`
 - ✅ 2026-04-07, session-2026-04-07-003 — Template engine — renders structured markdown scaffolds with YAML frontmatter and section headings with guidance placeholders
 - ✅ 2026-04-07, session-2026-04-07-003 — Compiler agent — compilation pipeline for new sources, diff-oriented recompilation for updates, expedition scope as editorial lens in system prompt
 - ✅ 2026-04-07, session-2026-04-07-003 — Compiler toolkit — structured diff generator (section-level), article stats (word count, reading time, source count)
 - ✅ 2026-04-07, session-2026-04-07-003 — Compiler content summary generation — each compilation produces summary via dedicated LLM prompt, persisted as `.summary.json` alongside article
-- ✅ 2026-04-07, session-2026-04-07-003 — Mission runner — single mission execution with YAML audit trail, transient error retry, deterministic error fail-fast, agent resolution by name
-- ✅ 2026-04-07, session-2026-04-07-003 — Mission-level git commits — auto_commit option, commit after each completed mission with `[mission-<id>] <agent>: process <title>` format
+- ✅ 2026-04-07, session-2026-04-07-003 — Task runner — single task execution with YAML audit trail, transient error retry, deterministic error fail-fast, agent resolution by name. (Codebase: `MissionRunner` pending rename)
+- ✅ 2026-04-07, session-2026-04-07-003 — Task-level git commits — auto_commit option, commit after each completed task. (Codebase: uses `[mission-<id>]` format pending rename)
 - ✅ 2026-04-07, session-2026-04-07-003 — Compiler contract tests and recorded fixtures — 16 contract tests validating frontmatter, schema sections, content summary, source citations
-- ✅ 2026-04-07, session-2026-04-07-003 — CLI: `assistonauts mission run --agent compiler` — execute single mission with --source, --title, --article-type, --commit options
+- ✅ 2026-04-07, session-2026-04-07-003 — CLI: `assistonauts mission run --agent compiler` — execute single task. (Rename to `task run` tracked below)
+- ✅ 2026-04-08, session-2026-04-08-003 — Multi-source compilation — `compile_multi()` accepts multiple source paths, concatenates in order, combined hash in manifest, `--source` repeatable in CLI
+- ✅ 2026-04-08, session-2026-04-08-004 — Compiler plan mode — `compiler.plan()` analyzes raw sources, proposes compilation plan with article types, source groupings, titles. Falls back to one-per-source on parse errors. CLI: `assistonauts plan [--execute]`
+- ✅ 2026-04-08, session-2026-04-08-004 — Task/Mission vocabulary refactor — MissionRunner → TaskRunner, Mission → Task, missions/ → tasks/, CLI `mission run` → `task run`. 19 files renamed/updated, 369 tests pass.
 
 ---
 
@@ -45,20 +48,24 @@ _Goal: Build the compilation pipeline — the Compiler agent that transforms raw
 
 _Goal: Build the Archivist (deterministic knowledge base operating system), hybrid retrieval, the multi-pass retrieval system, and the Curator agent for cross-referencing._
 
-- ⬜ Archivist system core — main `Archivist` class with service interface (`index()`, `search()`, `reindex_batch()`, `get_staleness()`, `get_downstream()`), not an agent — no LLM inference
-- ⬜ Embedding generation and storage — embedding model API calls via litellm, chunking, batching, storage in `index/assistonauts.db` (sqlite-vec)
-- ⬜ FTS indexing — SQLite FTS5 insert/update/delete for keyword-based retrieval
-- ⬜ Hybrid retrieval — vector similarity + FTS keyword search, reciprocal rank fusion reranking, configurable relevance floor, no arbitrary result cap
-- ⬜ Dual summary storage — retrieval summaries (deterministic keyword extraction) and content summaries (received from Compiler) in `index/summaries.jsonl`
-- ⬜ Manifest management — full lineage tracking, staleness graphs, embedding version tracking, summary staleness detection
-- ⬜ Multi-pass retrieval system — shared module (`rag/multi_pass.py`) with Pass 1 (broad scan, zero inference), Pass 2 (triage on summaries, cheap inference), Pass 3 (deep read, targeted inference), Pass 4 (weak match resolution)
-- ⬜ Short-circuit mode — bypass multi-pass for small knowledge bases (below configurable article/word count threshold), load all articles directly
-- ⬜ Curator agent — role implementation with system prompt, singleton enforcement, cross-referencing pipeline, proposal generation for structural needs
-- ⬜ Curator toolkit — backlink scanner (parse links, build graph, identify backlink targets), graph analyzer (connectivity metrics, orphan detection, cluster density)
-- ⬜ Embedding cache — embedding version tracking, recompute only when content hash changes
-- ⬜ LLM response cache — SHA-256 prompt hash keying, SQLite backend, configurable TTL, flush per agent/expedition
-- ⬜ Retroactive cross-referencing — Curator pass over all Phase 1-2 articles to add backlinks and "See also" sections now that the index exists
-- ⬜ CLI: `assistonauts status` — expedition and knowledge base status overview
+- ✅ 2026-04-08, session-2026-04-08-003 — Archivist system core — main `Archivist` class with service interface (`index()`, `search()`, `reindex_batch()`, `get_staleness()`, `get_downstream()`, `get_stale_articles()`), not an agent — no LLM inference
+- ✅ 2026-04-08, session-2026-04-08-003 — Embedding generation and storage — `EmbeddingClient` ABC with `LiteLLMEmbeddingClient`, chunking, batching, storage in `index/assistonauts.db` (sqlite-vec)
+- ✅ 2026-04-08, session-2026-04-08-003 — FTS indexing — SQLite FTS5 insert/update/delete for keyword-based retrieval with query sanitization
+- ✅ 2026-04-08, session-2026-04-08-003 — Hybrid retrieval — vector similarity + FTS keyword search, reciprocal rank fusion reranking, configurable relevance floor, no arbitrary result cap
+- ✅ 2026-04-08, session-2026-04-08-003 — Dual summary storage — retrieval summaries (deterministic keyword extraction) and content summaries in `summaries` table in `index/assistonauts.db` (SQLite, not JSONL — collocated with other index data)
+- ✅ 2026-04-08, session-2026-04-08-003 — Manifest management — full lineage tracking, staleness graphs via `get_stale_articles()`, embedding version tracking via `embedding_hash` column
+- ✅ 2026-04-08, session-2026-04-08-003 — Multi-pass retrieval system — shared module (`rag/multi_pass.py`) with Pass 1 (broad scan, zero inference), Pass 2 (triage on summaries, cheap LLM inference), Pass 3 (deep read, targeted inference), Pass 4 (weak match resolution)
+- ✅ 2026-04-08, session-2026-04-08-003 — Short-circuit mode — bypass multi-pass for small knowledge bases (below configurable article/word count threshold), load all articles directly
+- ✅ 2026-04-08, session-2026-04-08-003 — Curator agent — role implementation with system prompt, singleton enforcement (class-level lock), cross-referencing pipeline, proposal generation for structural needs (orphan detection, low connectivity)
+- ✅ 2026-04-08, session-2026-04-08-003 — Curator toolkit — backlink scanner (parse wiki-links, build graph, identify backlink targets), graph analyzer (connectivity metrics, orphan detection, density)
+- ✅ 2026-04-08, session-2026-04-08-003 — Embedding cache — embedding version tracking via `embedding_hash`, recompute only when content hash changes
+- ✅ 2026-04-08, session-2026-04-08-003 — LLM response cache — SHA-256 prompt hash keying, SQLite backend, configurable TTL, flush per agent/expedition, max_size_mb enforcement, integrated into LLMClient
+- ✅ 2026-04-08, session-2026-04-08-003 — Retroactive cross-referencing — `retroactive_cross_reference()` on CuratorAgent, batch pass over all indexed articles
+- ✅ 2026-04-08, session-2026-04-08-003 — CLI: `assistonauts status` — knowledge base status overview with article counts, word count, stale detection
+- ✅ 2026-04-08, session-2026-04-08-003 — Image ingestion in Scout — vision model support (Gemma 4 via litellm) for image files (.png, .jpg, .jpeg, .gif, .webp), multimodal LLM text extraction via `convert_image()`, auto-detection in Scout.ingest()
+- ✅ 2026-04-08, session-2026-04-08-003 — CLI: `assistonauts index` — index all wiki articles into the Archivist (FTS + metadata), `--reindex` flag for force reindexing
+- ✅ 2026-04-08, session-2026-04-08-003 — CLI: `assistonauts curate` — structural proposals via `--proposals` flag (orphans, low connectivity), cross-referencing placeholder for LLM-dependent mode
+- ✅ 2026-04-08, session-2026-04-08-003 — Batch ingestion CLI — `scout ingest` accepts multiple file arguments
 
 ---
 
@@ -77,14 +84,14 @@ _Goal: Build the Explorer agent for query synthesis and an interactive REPL for 
 
 ## Phase 5 — Captain + Expedition Orchestration
 
-_Goal: Build the Captain agent for expedition planning and orchestration, the mission state machine, and the scaling/budget systems._
+_Goal: Build the Captain agent for expedition orchestration, the mission state machine, and the scaling/budget systems. The Captain creates missions and sequences tasks; editorial decisions are delegated to Compiler plan mode._
 
-- ⬜ Captain agent — role implementation with two operational modes (planning mode for expedition decomposition, operations mode for routine triage), system prompt with full state visibility
-- ⬜ Captain toolkit — mission queue manager (priority queue, dependency graph, topological sort), mission ledger (SQLite-backed state persistence), token budget tracker, schedule runner (cron evaluation), status aggregator
-- ⬜ Iterative planning — plan → execute batch → observe → replan cycle for build phase, with dependency-aware mission sequencing
+- ⬜ Captain agent — role implementation with two operational modes (planning mode for expedition decomposition into missions, operations mode for routine triage), system prompt with full state visibility
+- ⬜ Captain toolkit — task queue manager (priority queue, dependency graph, topological sort), mission ledger (SQLite-backed mission state persistence), token budget tracker, schedule runner (cron evaluation), status aggregator
+- ⬜ Iterative planning — plan → execute batch → observe → replan cycle. Captain creates missions, calls Compiler plan mode for editorial triage, sequences resulting tasks
 - ⬜ Expedition lifecycle — `expedition.yaml` parsing, build phase orchestration across all agents, phase transition (build → stationed) as explicit human decision
-- ⬜ Mission state machine — full lifecycle with acceptance criteria, agent-level checklists, status rollup to Captain view, failure classification integration
-- ⬜ Mission dependency resolution — topological sort, foundational concepts compiled before articles that reference them, cascading mission chains from proposals
+- ⬜ Mission state machine — full lifecycle with acceptance criteria, agent-level checklists, status rollup to Captain view. Missions contain ordered task sequences; tasks use Phase 2 task runner
+- ⬜ Task dependency resolution — topological sort, foundational concepts compiled before articles that reference them, cascading task chains from Curator proposals
 - ⬜ Deterministic scaling system — concurrent instances for Scout/Compiler/Explorer, Curator singleton enforcement, queue depth triggers, max instances, cooldown. Note: SQLite write concurrency is a known ceiling (see spec)
 - ⬜ Deterministic budget system — daily token limits, per-agent tracking, warning thresholds, notifications to Captain for station logs
 - ⬜ CLI: `assistonauts expedition create`, `assistonauts build` — create expeditions and run build phase

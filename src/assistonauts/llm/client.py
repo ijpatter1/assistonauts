@@ -7,6 +7,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from assistonauts.cache.llm_cache import LLMResponseCache
+
 
 @dataclass
 class LLMResponse:
@@ -18,7 +20,7 @@ class LLMResponse:
 
 
 def _call_litellm(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, object]],
     model: str | None = None,
     system: str | None = None,
     **kwargs: object,
@@ -26,10 +28,12 @@ def _call_litellm(
     """Call litellm.completion and wrap the response.
 
     Separated as a module-level function for easy mocking in tests.
+    Messages can contain multimodal content blocks (image_url, etc.)
+    for vision model calls.
     """
     import litellm
 
-    litellm_messages: list[dict[str, str]] = []
+    litellm_messages: list[dict[str, object]] = []
     if system:
         litellm_messages.append({"role": "system", "content": system})
     litellm_messages.extend(messages)
@@ -70,6 +74,7 @@ class LLMClient:
         fixture_dir: Path | None = None,
         default_model: str = "ollama/gemma4:e2b",
         base_url: str | None = None,
+        cache_path: Path | None = None,
     ) -> None:
         if mode not in _VALID_MODES:
             raise ValueError(f"Invalid mode '{mode}'. Must be one of: {_VALID_MODES}")
@@ -81,6 +86,9 @@ class LLMClient:
         self._fixture_dir = fixture_dir
         self._default_model = default_model
         self._base_url = base_url
+        self._cache: LLMResponseCache | None = (
+            LLMResponseCache(cache_path) if cache_path else None
+        )
 
     @property
     def mode(self) -> str:
@@ -96,28 +104,55 @@ class LLMClient:
 
     def complete(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, object]],
         model: str | None = None,
         system: str | None = None,
         **kwargs: object,
     ) -> LLMResponse:
-        """Make an inference call. Behavior depends on mode."""
+        """Make an inference call. Behavior depends on mode.
+
+        When a cache_path was provided at init, the cache is checked
+        before making API calls (in live/record modes) and responses
+        are stored after successful calls.
+        """
         resolved_model = model or self._default_model
         if self._base_url and "base_url" not in kwargs:
             kwargs["base_url"] = self._base_url
 
         if self._mode == "replay":
             return self._replay(messages, system=system)
-        elif self._mode == "record":
+
+        # Check cache before making API call (live and record modes)
+        if self._cache is not None:
+            cached = self._cache.get(resolved_model, system, messages)
+            if cached is not None:
+                return LLMResponse(
+                    content=str(cached["content"]),
+                    model=resolved_model,
+                    usage=cached["usage"] if isinstance(cached["usage"], dict) else {},
+                )
+
+        if self._mode == "record":
             response = _call_litellm(
                 messages, model=resolved_model, system=system, **kwargs
             )
             self._save_fixture(messages, system=system, response=response)
-            return response
         else:  # live
-            return _call_litellm(
+            response = _call_litellm(
                 messages, model=resolved_model, system=system, **kwargs
             )
+
+        # Store in cache after successful call
+        if self._cache is not None:
+            self._cache.put(
+                model=resolved_model,
+                system=system,
+                messages=messages,
+                content=response.content,
+                usage=response.usage,
+            )
+
+        return response
 
     def _replay(
         self,

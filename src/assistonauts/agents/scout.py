@@ -13,7 +13,9 @@ from assistonauts.tools.scout import (
     check_relevance_keywords,
     clip_web,
     convert_document,
+    convert_image,
     convert_text_file,
+    is_image_file,
 )
 
 _SCOUT_SYSTEM_PROMPT = """\
@@ -65,6 +67,8 @@ class ScoutAgent(Agent):
                 "check_relevance_keywords": check_relevance_keywords,
                 "convert_text_file": convert_text_file,
                 "convert_document": convert_document,
+                "convert_image": convert_image,
+                "is_image_file": is_image_file,
                 "clip_web": clip_web,
                 "check_dedup": check_dedup,
             },
@@ -107,15 +111,18 @@ class ScoutAgent(Agent):
                 message="Content unchanged, skipped.",
             )
 
-        # Convert to markdown
-        content = convert_document(source_path)
+        # Convert to markdown — use vision model for images
+        if is_image_file(source_path):
+            content = convert_image(source_path, self.llm_client)
+        else:
+            content = convert_document(source_path)
 
         # Add frontmatter
         now = datetime.now(UTC).isoformat()
         frontmatter = (
             "---\n"
             f"source: {source_path.name}\n"
-            f"source_path: {source_path}\n"
+            f"source_path: {source_path.name}\n"
             f"ingested_by: scout\n"
             f"ingested_at: {now}\n"
             f"category: {category}\n"
@@ -150,11 +157,11 @@ class ScoutAgent(Agent):
             message=f"Ingested {source_path.name} → {manifest_key}",
         )
 
-    def run_mission(self, mission: dict[str, str]) -> IngestResult:
-        """Execute a Scout mission (ingest a source).
+    def run_task(self, task: dict[str, str]) -> IngestResult:
+        """Execute a Scout task (ingest a source).
 
-        Expects mission dict with 'source_path' and optional 'category'.
+        Expects task dict with 'source_path' and optional 'category'.
         """
-        source_path = Path(mission["source_path"])
-        category = mission.get("category", "articles")
+        source_path = Path(task["source_path"])
+        category = task.get("category", "articles")
         return self.ingest(source_path, category=category)

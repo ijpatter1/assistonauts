@@ -13,6 +13,8 @@ dependencies = [
     "click",
     "rich",
     "markitdown",
+    "sqlite-vec",
+    "Pillow",
 ]
 
 [project.optional-dependencies]

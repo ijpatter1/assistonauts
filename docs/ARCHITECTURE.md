@@ -32,7 +32,7 @@
           │  │                    Shared Infrastructure                       │        │
           │  │                                                               │        │
           │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐ │        │
-          │  │  │ LLM      │  │ Config   │  │ Cache    │  │ Mission      │ │        │
+          │  │  │ LLM      │  │ Config   │  │ Cache    │  │ Task         │ │        │
           │  │  │ Client   │  │ Loader   │  │ Layers   │  │ Runner       │ │        │
           │  │  │ (litellm)│  │ (YAML)   │  │ (3-tier) │  │ (exec+track) │ │        │
           │  │  └──────────┘  └──────────┘  └──────────┘  └──────────────┘ │        │
@@ -64,7 +64,7 @@
 4. Curator reads via Archivist retrieval, writes backlinks → `wiki/` (link sections only)
 5. Inspector reads `wiki/` + `index/manifest.json`, writes findings → `audits/`
 6. Captain orchestrates all of the above, writes plans/logs → `expeditions/`, `station-logs/`
-7. Explorer reads via Archivist retrieval, writes explorations → `wiki/explorations/`
+7. Explorer reads via Archivist retrieval, writes explorations → `wiki/exploration/`
 
 ---
 
@@ -137,10 +137,10 @@ class Agent:
     cache: CacheInterface             # shared cache layers
     owned_dirs: list[Path]            # directories this agent can write to
     readable_dirs: list[Path]         # directories this agent can read from
-    logger: StructuredLogger          # structured logging per mission
+    logger: StructuredLogger          # structured logging per task
 
-    def run_mission(self, mission: Mission) -> MissionResult:
-        """Execute a mission. Subclasses implement the agent-specific logic."""
+    def run_task(self, task: dict[str, str]) -> AgentResult:
+        """Execute a task. Subclasses implement the agent-specific logic."""
         raise NotImplementedError
 
     def _read_file(self, path: Path) -> str:
@@ -255,7 +255,7 @@ Config models are validated with dataclasses (or Pydantic if warranted by comple
     "hash": "a3f2e8...",
     "last_processed": "2026-04-05T12:00:00Z",
     "processed_by": "scout",
-    "downstream": ["wiki/concepts/spectral-analysis.md"]
+    "downstream": ["wiki/concept/spectral-analysis.md"]
   }
 }
 ```
@@ -303,10 +303,10 @@ workspace/
 │   ├── datasets/
 │   └── assets/
 ├── wiki/
-│   ├── concepts/
-│   ├── entities/
-│   ├── logs/
-│   └── explorations/
+│   ├── concept/
+│   ├── entity/
+│   ├── log/
+│   └── exploration/
 ├── index/
 │   └── manifest.json              # empty: {}
 ├── audits/
@@ -383,9 +383,9 @@ Note: `sqlite-vec`, `feedparser`, `watchdog`, and `fastapi` are deferred to the 
 
 _Expand these sections as each phase approaches. Keep them minimal until the phase is active — detailed architecture written too early becomes stale._
 
-### Phase 2 — Compiler + Mission Runner
+### Phase 2 — Compiler + Task Runner
 
-Wiki schema template system and Compiler agent added to `agents/compiler.py` and `tools/compiler.py`. Mission runner (`missions/runner.py`) executes single missions with YAML audit trail, failure classification (transient vs deterministic), and mission-level git commits. CLI gains `mission run` command.
+Wiki schema template system and Compiler agent added to `agents/compiler.py` and `tools/compiler.py`. Task runner (`tasks/runner.py`, currently `missions/runner.py` pending rename) executes single tasks with YAML audit trail, failure classification (transient vs deterministic), and task-level git commits. Compiler plan mode (`compiler.plan()`) provides editorial triage — analyzes raw sources and proposes compilation tasks with article types, source groupings, and titles. CLI gains `task run` command (currently `mission run` pending rename).
 
 ### Phase 3 — Archivist System + Curator + Hybrid RAG
 
@@ -393,15 +393,15 @@ Archivist system (`archivist/`) as a deterministic service — not an agent. sql
 
 ### Phase 4 — Explorer + Interactive Mode
 
-Explorer agent (`agents/explorer.py`) with query flow via multi-pass retrieval. Interactive REPL session via Click. Exploration filing to `wiki/explorations/`. Output renderer for markdown, slides (Marp), and charts (matplotlib). New optional dependency: `matplotlib`.
+Explorer agent (`agents/explorer.py`) with query flow via multi-pass retrieval. Interactive REPL session via Click. Exploration filing to `wiki/exploration/`. Output renderer for markdown, slides (Marp), and charts (matplotlib). New optional dependency: `matplotlib`.
 
 ### Phase 5 — Captain + Expedition Orchestration
 
-Captain agent (`agents/captain.py`) with planning and operations modes. Mission ledger (`ledger.db`) in SQLite for state persistence. Mission queue manager with dependency graph and topological sort. Deterministic scaling system for concurrent agent instances. Budget tracking system. Expedition lifecycle orchestration.
+Captain agent (`agents/captain.py`) with planning and operations modes. Creates missions (multi-step objectives) that decompose into ordered task sequences. Mission ledger (`ledger.db`) in SQLite for mission-level state persistence; individual tasks use YAML audit trails from the Phase 2 task runner. Task queue manager with dependency graph and topological sort. Captain delegates editorial decisions (article types, groupings, titles) to Compiler plan mode. Deterministic scaling system for concurrent agent instances. Budget tracking system. Expedition lifecycle orchestration.
 
 ### Phase 6 — Inspector + Quality + Review
 
-Inspector agent (`agents/inspector.py`) with deterministic-scan-first sweep pattern. Full toolkit for mechanical checks (links, orphans, staleness, duplicates, schema, freshness). Audit report generation. Finding → Compiler mission pipeline. Human review queue with typed items and Captain grouping. Exploration promotion pipeline. Summary quality validation — first sweep anticipates remediation batch.
+Inspector agent (`agents/inspector.py`) with deterministic-scan-first sweep pattern. Full toolkit for mechanical checks (links, orphans, staleness, duplicates, schema, freshness). Audit report generation. Finding → Compiler fix task pipeline. Human review queue with typed items and Captain grouping. Exploration promotion pipeline. Summary quality validation — first sweep anticipates remediation batch.
 
 ### Phase 7 — Stationed Mode
 

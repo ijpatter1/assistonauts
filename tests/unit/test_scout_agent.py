@@ -166,30 +166,30 @@ class TestScoutIngest:
         assert "ingested_by: scout" in content
 
 
-class TestScoutRunMission:
-    """Test run_mission delegates to ingest."""
+class TestScoutRunTask:
+    """Test run_task delegates to ingest."""
 
-    def test_run_mission_ingests_source(self, tmp_path: Path) -> None:
-        """run_mission with source_path delegates to ingest."""
+    def test_run_task_ingests_source(self, tmp_path: Path) -> None:
+        """run_task with source_path delegates to ingest."""
         (tmp_path / "raw" / "articles").mkdir(parents=True)
         (tmp_path / "index").mkdir(parents=True)
         (tmp_path / "index" / "manifest.json").write_text("{}\n")
 
-        source = tmp_path / "mission-doc.txt"
-        source.write_text("Mission document content.")
+        source = tmp_path / "task-doc.txt"
+        source.write_text("Task document content.")
 
         agent = ScoutAgent(
             llm_client=FakeLLMClient(),
             workspace_root=tmp_path,
         )
 
-        result = agent.run_mission({"source_path": str(source)})
+        result = agent.run_task({"source_path": str(source)})
         assert result.success is True
         assert result.output_path is not None
         assert result.output_path.exists()
 
-    def test_run_mission_with_category(self, tmp_path: Path) -> None:
-        """run_mission passes category to ingest."""
+    def test_run_task_with_category(self, tmp_path: Path) -> None:
+        """run_task passes category to ingest."""
         (tmp_path / "raw" / "papers").mkdir(parents=True)
         (tmp_path / "index").mkdir(parents=True)
         (tmp_path / "index" / "manifest.json").write_text("{}\n")
@@ -202,6 +202,6 @@ class TestScoutRunMission:
             workspace_root=tmp_path,
         )
 
-        result = agent.run_mission({"source_path": str(source), "category": "papers"})
+        result = agent.run_task({"source_path": str(source), "category": "papers"})
         assert result.success is True
         assert "papers" in str(result.output_path)

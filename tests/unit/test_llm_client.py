@@ -190,6 +190,41 @@ class TestLiveMode:
         assert len(json_files) == 0
 
 
+class TestCacheIntegration:
+    """Test LLM client with response cache."""
+
+    @patch("assistonauts.llm.client._call_litellm")
+    def test_cache_stores_and_returns_responses(
+        self, mock_litellm: MagicMock, tmp_path: Path
+    ) -> None:
+        """Cached responses should be returned without calling litellm."""
+        cache_path = tmp_path / "llm_cache.db"
+
+        mock_litellm.return_value = LLMResponse(
+            content="cached response",
+            model="test-model",
+            usage={"prompt_tokens": 10, "completion_tokens": 5},
+        )
+
+        client = LLMClient(
+            provider_config={},
+            mode="live",
+            cache_path=cache_path,
+        )
+
+        messages = [{"role": "user", "content": "hello cache"}]
+
+        # First call — should hit litellm and store in cache
+        resp1 = client.complete(messages, system="test")
+        assert resp1.content == "cached response"
+        assert mock_litellm.call_count == 1
+
+        # Second call — should return from cache without calling litellm
+        resp2 = client.complete(messages, system="test")
+        assert resp2.content == "cached response"
+        assert mock_litellm.call_count == 1  # Not called again
+
+
 class TestProviderConfig:
     """Test provider configuration mapping."""
 
