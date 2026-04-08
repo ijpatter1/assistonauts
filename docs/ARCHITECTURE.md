@@ -32,7 +32,7 @@
           │  │                    Shared Infrastructure                       │        │
           │  │                                                               │        │
           │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐ │        │
-          │  │  │ LLM      │  │ Config   │  │ Cache    │  │ Mission      │ │        │
+          │  │  │ LLM      │  │ Config   │  │ Cache    │  │ Task         │ │        │
           │  │  │ Client   │  │ Loader   │  │ Layers   │  │ Runner       │ │        │
           │  │  │ (litellm)│  │ (YAML)   │  │ (3-tier) │  │ (exec+track) │ │        │
           │  │  └──────────┘  └──────────┘  └──────────┘  └──────────────┘ │        │
@@ -383,9 +383,9 @@ Note: `sqlite-vec`, `feedparser`, `watchdog`, and `fastapi` are deferred to the 
 
 _Expand these sections as each phase approaches. Keep them minimal until the phase is active — detailed architecture written too early becomes stale._
 
-### Phase 2 — Compiler + Mission Runner
+### Phase 2 — Compiler + Task Runner
 
-Wiki schema template system and Compiler agent added to `agents/compiler.py` and `tools/compiler.py`. Mission runner (`missions/runner.py`) executes single missions with YAML audit trail, failure classification (transient vs deterministic), and mission-level git commits. CLI gains `mission run` command.
+Wiki schema template system and Compiler agent added to `agents/compiler.py` and `tools/compiler.py`. Task runner (`tasks/runner.py`, currently `missions/runner.py` pending rename) executes single tasks with YAML audit trail, failure classification (transient vs deterministic), and task-level git commits. Compiler plan mode (`compiler.plan()`) provides editorial triage — analyzes raw sources and proposes compilation tasks with article types, source groupings, and titles. CLI gains `task run` command (currently `mission run` pending rename).
 
 ### Phase 3 — Archivist System + Curator + Hybrid RAG
 
@@ -397,11 +397,11 @@ Explorer agent (`agents/explorer.py`) with query flow via multi-pass retrieval. 
 
 ### Phase 5 — Captain + Expedition Orchestration
 
-Captain agent (`agents/captain.py`) with planning and operations modes. Mission ledger (`ledger.db`) in SQLite for state persistence. Mission queue manager with dependency graph and topological sort. Deterministic scaling system for concurrent agent instances. Budget tracking system. Expedition lifecycle orchestration.
+Captain agent (`agents/captain.py`) with planning and operations modes. Creates missions (multi-step objectives) that decompose into ordered task sequences. Mission ledger (`ledger.db`) in SQLite for mission-level state persistence; individual tasks use YAML audit trails from the Phase 2 task runner. Task queue manager with dependency graph and topological sort. Captain delegates editorial decisions (article types, groupings, titles) to Compiler plan mode. Deterministic scaling system for concurrent agent instances. Budget tracking system. Expedition lifecycle orchestration.
 
 ### Phase 6 — Inspector + Quality + Review
 
-Inspector agent (`agents/inspector.py`) with deterministic-scan-first sweep pattern. Full toolkit for mechanical checks (links, orphans, staleness, duplicates, schema, freshness). Audit report generation. Finding → Compiler mission pipeline. Human review queue with typed items and Captain grouping. Exploration promotion pipeline. Summary quality validation — first sweep anticipates remediation batch.
+Inspector agent (`agents/inspector.py`) with deterministic-scan-first sweep pattern. Full toolkit for mechanical checks (links, orphans, staleness, duplicates, schema, freshness). Audit report generation. Finding → Compiler fix task pipeline. Human review queue with typed items and Captain grouping. Exploration promotion pipeline. Summary quality validation — first sweep anticipates remediation batch.
 
 ### Phase 7 — Stationed Mode
 

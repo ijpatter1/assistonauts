@@ -10,6 +10,18 @@ The system is built around six specialized agents (Captain, Scout, Compiler, Cur
 
 ---
 
+## Glossary
+
+- **Task** — A single agent operation: one agent, one action, defined inputs and outputs. Tasks are atomic and independently executable. Example: "Compiler: compile these 3 sources into an article titled X of type Y." The task runner executes tasks with YAML audit trails and failure classification (transient vs deterministic).
+
+- **Mission** — A scoped objective that decomposes into an ordered sequence of tasks, potentially spanning multiple agents. Has acceptance criteria, a state machine (pending → running → completed/failed/stale), and a dependency graph. Example: "Build a knowledge base from this book" decomposes into ingestion tasks, a triage step, compilation tasks, indexing, and cross-referencing. Missions are planned by the Captain and tracked in the mission ledger.
+
+- **Triage** — The editorial judgment step between raw source ingestion and compilation. Determines what articles to create, what type each should be, which sources group together, and what titles to use. This is a Compiler capability (plan mode), not a Captain responsibility. The Captain sequences and orchestrates; the Compiler makes editorial decisions within its domain.
+
+Note: The codebase currently uses "mission" where it means "task" (the Phase 2 `MissionRunner` is really a task runner). A vocabulary refactor is tracked in Phase 2 deliverables. The original spec (`assistonauts-spec.md`) uses "mission" correctly in the multi-step sense.
+
+---
+
 ## Phase 1 — Core Infrastructure + Scout
 
 **Goal:** Establish the foundation that every subsequent phase builds on — workspace management, config system, base agent class, LLM client, shared toolkit, and the first working agent (Scout).
@@ -34,9 +46,9 @@ The system is built around six specialized agents (Captain, Scout, Compiler, Cur
 
 ---
 
-## Phase 2 — Compiler + Mission Runner
+## Phase 2 — Compiler + Task Runner
 
-**Goal:** Build the compilation pipeline — the Compiler agent that transforms raw sources into structured wiki articles, and the mission runner that executes and tracks agent work.
+**Goal:** Build the compilation pipeline — the Compiler agent that transforms raw sources into structured wiki articles, and the task runner that executes and tracks individual agent operations.
 
 **Deliverables:**
 
@@ -45,15 +57,17 @@ The system is built around six specialized agents (Captain, Scout, Compiler, Cur
 3. Compiler agent — role implementation with system prompt incorporating expedition scope as editorial lens, compilation pipeline for new sources and diff-oriented recompilation for updates
 4. Compiler toolkit — diff generator (structured diff for LLM reasoning), article stats (word count, reading time, source count)
 5. Compiler content summary generation — each compilation produces a content summary as a deliverable, optimized for downstream triage by Curator and Explorer
-6. Mission runner — single mission execution with YAML audit trail, failure classification (transient vs deterministic), retry logic for transient errors, fail-fast for deterministic errors
-7. Mission-level git commits — mission runner commits after each completed mission with mission ID and agent in commit message
+6. Task runner — single task execution with YAML audit trail, failure classification (transient vs deterministic), retry logic for transient errors, fail-fast for deterministic errors. (Note: currently named `MissionRunner` in codebase — rename tracked in deliverable 12)
+7. Task-level git commits — task runner commits after each completed task with task ID and agent in commit message
 8. Compiler contract tests and recorded fixtures — structural validation (valid frontmatter, schema-conformant sections, content summary present, source citations included)
-9. CLI: `assistonauts mission run --agent compiler` — execute a single Compiler mission from the command line
+9. CLI: `assistonauts task run --agent compiler` — execute a single Compiler task from the command line. (Note: currently `assistonauts mission run` — rename tracked in deliverable 12)
 10. Multi-source compilation — Compiler accepts multiple source paths (`--source` repeated), concatenates source content in order, tracks all source hashes in manifest for skip-if-unchanged logic, lists all sources in article frontmatter
+11. Compiler plan mode — `compiler.plan()` reads a set of raw sources, analyzes their content and structure, and proposes a compilation plan: what articles to create, article types, source groupings, and titles. Returns a list of task definitions ready for execution. Uses LLM inference for editorial judgment. The Captain orchestrates when and how plans are executed, but the Compiler owns the editorial decisions.
+12. Task/Mission vocabulary refactor — rename `MissionRunner` → `TaskRunner`, `Mission` → `Task`, `MissionResult` → `TaskResult`, `run_mission()` → `run_task()`, `missions/` → `tasks/`, CLI `mission run` → `task run`. Aligns codebase with glossary: tasks are atomic agent operations, missions are multi-step objectives (Phase 5).
 
-**Why this is Phase 2:** The Compiler depends on the base agent class, LLM client, config system, and Scout output from Phase 1. The mission runner is introduced here because Compiler work is the first multi-step agent workflow that needs tracking and audit trails.
+**Why this is Phase 2:** The Compiler depends on the base agent class, LLM client, config system, and Scout output from Phase 1. The task runner is introduced here because Compiler work is the first agent workflow that needs tracking and audit trails. Compiler plan mode is essential for the pipeline to work without manual editorial decisions — it bridges the gap between raw ingestion and structured compilation.
 
-**Validation:** Run Scout to ingest a source, then run Compiler via the mission runner to produce a wiki article with valid frontmatter and schema-conformant structure. Git log shows mission-level commits. Contract tests pass. Articles lack cross-referencing (expected — Phase 3 adds it). Multi-source: ingest multiple page images, compile them into a single article with `--source` repeated — verify all sources listed in frontmatter and content is coherent.
+**Validation:** Run Scout to ingest sources, then Compiler plan mode to propose articles, then task runner to compile. Verify plan mode produces sensible article types, groupings, and titles from real content. Multi-source: ingest multiple page images, plan mode groups them correctly, compile into a single article — verify all sources listed in frontmatter and content is coherent.
 
 ---
 
@@ -109,23 +123,23 @@ The system is built around six specialized agents (Captain, Scout, Compiler, Cur
 
 ## Phase 5 — Captain + Expedition Orchestration
 
-**Goal:** Build the Captain agent for expedition planning and orchestration, the mission state machine, and the scaling/budget systems.
+**Goal:** Build the Captain agent for expedition orchestration, the mission state machine, and the scaling/budget systems. The Captain creates missions (multi-step objectives) and sequences tasks within them. Editorial decisions (article types, groupings, titles) are delegated to the Compiler's plan mode — the Captain orchestrates when and how plans are executed.
 
 **Deliverables:**
 
-1. Captain agent — role implementation with two operational modes (planning mode for expedition decomposition, operations mode for routine triage), system prompt with full state visibility
-2. Captain toolkit — mission queue manager (priority queue, dependency graph, topological sort), mission ledger (SQLite-backed state persistence), token budget tracker, schedule runner (cron evaluation), status aggregator
-3. Iterative planning — plan → execute batch → observe → replan cycle for build phase, with dependency-aware mission sequencing
+1. Captain agent — role implementation with two operational modes (planning mode for expedition decomposition into missions, operations mode for routine triage), system prompt with full state visibility
+2. Captain toolkit — task queue manager (priority queue, dependency graph, topological sort), mission ledger (SQLite-backed mission state persistence), token budget tracker, schedule runner (cron evaluation), status aggregator
+3. Iterative planning — plan → execute batch → observe → replan cycle for build phase. Captain creates missions, calls Compiler plan mode for editorial triage, then sequences the resulting tasks with dependency-aware ordering
 4. Expedition lifecycle — `expedition.yaml` parsing, build phase orchestration across all agents, phase transition (build → stationed) as explicit human decision
-5. Mission state machine — full lifecycle with acceptance criteria, agent-level checklists, status rollup to Captain view, failure classification integration
-6. Mission dependency resolution — topological sort, foundational concepts compiled before articles that reference them, cascading mission chains from proposals
+5. Mission state machine — full lifecycle with acceptance criteria, agent-level checklists, status rollup to Captain view, failure classification integration. Missions contain ordered task sequences; tasks use the Phase 2 task runner for execution
+6. Task dependency resolution — topological sort, foundational concepts compiled before articles that reference them, cascading task chains from Curator proposals
 7. Deterministic scaling system — concurrent instances for Scout/Compiler/Explorer, Curator singleton enforcement, queue depth triggers, max instances, cooldown. Note: SQLite write concurrency is a known ceiling (see spec)
 8. Deterministic budget system — daily token limits, per-agent tracking, warning thresholds, notifications to Captain for station logs
 9. CLI: `assistonauts expedition create`, `assistonauts build` — create expeditions and run build phase
 
-**Why this is Phase 5:** The Captain orchestrates all other agents, so it must be built after Scout (Phase 1), Compiler (Phase 2), Archivist/Curator (Phase 3), and Explorer (Phase 4) are functional. The scaling system requires multiple agent types to be available for concurrent execution.
+**Why this is Phase 5:** The Captain orchestrates all other agents, so it must be built after Scout (Phase 1), Compiler with plan mode (Phase 2), Archivist/Curator (Phase 3), and Explorer (Phase 4) are functional. The scaling system requires multiple agent types to be available for concurrent execution.
 
-**Validation:** Create an expedition config, Captain produces an iterative plan, executes it end-to-end with proper sequencing. Test scaling with concurrent Compiler instances on a large source batch.
+**Validation:** Create an expedition config, Captain produces missions by calling Compiler plan mode for editorial decisions, sequences tasks with dependency resolution, executes end-to-end with proper ordering. Test scaling with concurrent Compiler instances on a large source batch.
 
 ---
 
@@ -138,8 +152,8 @@ The system is built around six specialized agents (Captain, Scout, Compiler, Cur
 1. Inspector agent — role implementation with deterministic-scan-first sweep pattern (tools run first, LLM analyzes flagged items only), finding severity levels (critical/warning/info)
 2. Inspector toolkit — link checker, orphan detector, staleness scanner, duplicate detector (TF-IDF/simhash), schema validator, source freshness checker (HTTP HEAD/conditional GET)
 3. Audit report generation — structured reports in `audits/` with findings, severity, recommended actions, sweep ID tagging
-4. Finding-to-fix pipeline — Inspector findings generate Compiler fix missions, auto-fix policy for low-risk findings, human review for high-risk
-5. Human review queue — typed review items (inspector_finding, curator_proposal, scout_borderline, exploration_promotion, mission_failure), Captain grouping/summarization, approve/dismiss/defer/inspect actions
+4. Finding-to-fix pipeline — Inspector findings generate Compiler fix tasks, auto-fix policy for low-risk findings, human review for high-risk
+5. Human review queue — typed review items (inspector_finding, curator_proposal, scout_borderline, exploration_promotion, task_failure), Captain grouping/summarization, approve/dismiss/defer/inspect actions
 6. Review storage and CLI — `expeditions/<n>/review/` YAML files, `assistonauts review` command with categorized display, drill-down, stale review escalation
 7. Exploration promotion pipeline — Inspector technical quality check → human approval → standard ingestion flow (Compiler recompiles, Curator links)
 8. Summary quality checks — Inspector validates Compiler-generated content summaries, flags stale/vague/missing summaries. First sweep should anticipate a batch of findings from Phases 2-5
@@ -158,7 +172,7 @@ The system is built around six specialized agents (Captain, Scout, Compiler, Cur
 **Deliverables:**
 
 1. Watch system — `watchdog` for local directories, RSS feed parser (`feedparser`), GitHub API poller for repo events, web page change detection (HTTP conditional GET + content diff)
-2. Trigger/event system — event types (new_source, article_update, inspector_finding), trigger matching, event → mission routing via Captain
+2. Trigger/event system — event types (new_source, article_update, inspector_finding), trigger matching, event → task routing via Captain
 3. Scheduled execution — cron expression evaluation for Scout watch intervals, Inspector sweep schedule, station log generation
 4. Station log generation — weekly Captain reports with knowledge base health metrics (article count, word count, orphan rate, cross-referencing density, contradiction count, summary freshness, cache hit rates, token usage by agent)
 5. Stale review item escalation — Captain tracks pending review age, escalates items older than configurable threshold in station logs
@@ -178,7 +192,7 @@ The system is built around six specialized agents (Captain, Scout, Compiler, Cur
 
 ```
 Phase 1 (Core + Scout)
-  └─► Phase 2 (Compiler + Mission Runner)
+  └─► Phase 2 (Compiler + Task Runner)
         └─► Phase 3 (Archivist + Curator + RAG)
               ├─► Phase 4 (Explorer)
               └─► Phase 5 (Captain + Orchestration) ◄── also depends on Phase 4
@@ -194,7 +208,7 @@ Phase 1 (Core + Scout)
 
 3. **Content summary quality gap.** The Inspector (which validates summaries) arrives in Phase 6. Phases 2-5 operate on Compiler-generated summaries with no automated quality gate. Manual review during development mitigates this. The first Inspector sweep should plan for a remediation batch.
 
-4. **Mission retry classification.** Transient failures (API timeouts, rate limits) are retried automatically. Deterministic failures (context overflow, malformed input) are routed to the review queue immediately. Misclassifying a deterministic error as transient wastes tokens; misclassifying a transient error as deterministic creates unnecessary human review. The boundary may need tuning in practice.
+4. **Task retry classification.** Transient failures (API timeouts, rate limits) are retried automatically. Deterministic failures (context overflow, malformed input) are routed to the review queue immediately. Misclassifying a deterministic error as transient wastes tokens; misclassifying a transient error as deterministic creates unnecessary human review. The boundary may need tuning in practice.
 
 5. **Multi-pass retrieval depends on summary quality.** A bad content summary causes the Curator or Explorer to miss relevant connections. This is documented in the spec as "Summary Quality as Infrastructure" — the Compiler's summary generation is core infrastructure, not a nice-to-have.
 
