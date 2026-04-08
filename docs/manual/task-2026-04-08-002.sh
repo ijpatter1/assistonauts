@@ -15,8 +15,12 @@ set -euo pipefail
 
 # ── User Configuration ───────────────────────────────
 
-INPUT_DIR="${INPUT_DIR:-input_artifacts}"
-WORKSPACE="/tmp/test-kb"
+# Resolve paths relative to the project root
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+INPUT_DIR="${INPUT_DIR:-$PROJECT_ROOT/input_artifacts}"
+WORKSPACE="$PROJECT_ROOT/test-kb"
 
 # ── Prerequisites ────────────────────────────────────
 

@@ -43,6 +43,7 @@ playwright-report/
 blob-report/
 .pytest_cache/
 input_artifacts/
+test-kb/
 
 # ─────────────────────────────────────────────
 # IDE & editors
