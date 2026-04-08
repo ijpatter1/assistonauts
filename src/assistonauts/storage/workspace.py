@@ -8,7 +8,7 @@ _DEFAULT_CONFIG = """\
 llm:
   providers:
     ollama:
-      model: ollama/gemma4
+      model: ollama/gemma4:e2b
       base_url: http://localhost:11434
     anthropic:
       model: claude-sonnet-4-20250514
