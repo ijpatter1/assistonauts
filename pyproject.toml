@@ -14,6 +14,7 @@ dependencies = [
     "rich",
     "markitdown",
     "sqlite-vec",
+    "Pillow",
 ]
 
 [project.optional-dependencies]
