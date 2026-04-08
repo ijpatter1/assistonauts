@@ -19,7 +19,7 @@ Assistonauts is a framework for building and maintaining LLM-powered knowledge b
 
 ## Current Phase
 
-**Phase 1 — Core Infrastructure + Scout**
+**Phase 4 — Explorer + Interactive Mode** (Phase 3 complete, pending merge)
 
 See `docs/REQUIREMENTS.md` for the full development plan.
 See `docs/ARCHITECTURE.md` for technical architecture details.
@@ -28,21 +28,6 @@ See `docs/PHASE_STATUS.md` for current completion state.
 Work on the current phase only. Do not implement features from future phases. If you encounter a dependency on a future phase, note it in your session handoff and move on.
 
 Do not modify sections of this file during active development. CLAUDE.md updates happen during /handoff via the freshness check — the agent proposes changes and the user approves. This prevents mid-session drift while keeping the file current.
-
-### Bootstrapping (First Session Only)
-
-If this is the very first session and no `pyproject.toml` exists yet, the project hasn't been scaffolded. The first task is to initialize the project. Until scaffolding is complete:
-
-- `pytest`, `ruff check`, and `ruff format --check` will fail — this is expected
-- Skip the "Run the Tests" step in `/start-phase` and note that scaffolding is the first deliverable
-- During scaffolding, configure the following:
-  - **Python 3.11+** with `pyproject.toml` (uv-compatible)
-  - **pytest** with pytest-cov for test coverage
-  - **ruff** for linting and formatting (the auto-format hook depends on ruff being installed)
-  - `src/assistonauts/` package layout with `__init__.py` and `__main__.py`
-  - Console script entry point: `assistonauts = "assistonauts.cli.main:cli"`
-  - Scripts: `pytest` (test), `ruff check` (lint), `ruff format` (format)
-- Write at least one passing test before ending the first session — this establishes the test baseline for all future sessions
 
 ## Directory Structure
 
@@ -73,6 +58,7 @@ assistonauts/
 │       └── models/                 # Data models (configs, missions, etc.)
 ├── tests/
 │   ├── conftest.py                 # Shared fixtures, replay client setup
+│   ├── helpers.py                  # FakeLLMClient, FakeEmbeddingClient (canonical source)
 │   ├── fixtures/                   # Recorded LLM response fixtures
 │   ├── unit/                       # Unit tests for toolkit functions
 │   └── contract/                   # Contract tests for agent output structure
@@ -124,6 +110,13 @@ Agents make LLM calls that produce non-deterministic output. Three testing layer
 3. **Integration tests** — real LLM calls against a fixture corpus. Expensive, run manually or on schedule, not on every commit.
 
 See the Testing Strategy section in `docs/assistonauts-spec.md` for full details.
+
+### Test Helpers
+
+`tests/helpers.py` is the canonical source for fake test infrastructure. Import from here — do not define local copies in test files.
+
+- **`FakeLLMClient`** — returns canned responses, tracks calls. Use for unit tests.
+- **`FakeEmbeddingClient`** — deterministic SHA-256-based embeddings. Use for testing Archivist/retrieval without a real embedding model.
 
 ## Coding Standards
 
