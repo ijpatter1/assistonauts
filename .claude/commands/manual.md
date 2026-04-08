@@ -59,6 +59,16 @@ If something didn't work as expected, set Status to `blocked` and describe what 
 - State what's blocked. If nothing downstream depends on this, say so — it helps the human prioritize.
 - The Verification section should include checks the human can run locally, not just "confirm it looks right." Prefer `curl` commands, URL checks, or specific log entries over visual inspection.
 
+## Choosing the Right Delivery Format
+
+Before writing, consider what format actually saves the user time:
+
+- **Runnable script** — If the steps are a linear sequence of shell commands (init a workspace, run a pipeline, verify output), write a bash script at `docs/manual/task-YYYY-MM-DD-NNN.sh` with the task card as a short `.md` that points to the script. The user runs one command instead of copy-pasting 20. Include `set -euo pipefail`, progress output via `echo`, and verification checks inline.
+- **Task card only** — If the steps require human judgment at each stage (review a PR, configure a third-party UI, make design decisions), a markdown task card is the right format.
+- **Hybrid** — If most steps are automatable but one or two require judgment, write a script for the automatable parts and note the manual decision points in the task card.
+
+The question to ask: "Could the user run this with `bash docs/manual/task-XXX.sh` and walk away?" If yes, write a script. If the answer is "mostly, except for step N", write a script that pauses at step N.
+
 ## After Creating the Task Card
 
 1. Note the task in the current session's handoff artifact under **Blocked** or **In Progress** with a reference to the task card file
