@@ -268,6 +268,7 @@ class CompilerAgent(Agent):
         self._manifest_path = index_dir / "manifest.json"
         self._schema = get_default_schema()
         self._expedition_scope = expedition_scope
+        self._setup_persistent_logger(workspace_root)
 
     def compile(
         self,

@@ -74,6 +74,15 @@ class Agent:
         if self.logger is None:
             self.logger = StructuredLogger(role=self.role)
 
+    def _setup_persistent_logger(self, workspace_root: Path) -> None:
+        """Upgrade the logger to write persistent .jsonl files.
+
+        Call this from subclass __init__ after super().__init__()
+        when the workspace root is known.
+        """
+        log_dir = workspace_root / ".assistonauts" / "logs"
+        self.logger = StructuredLogger(role=self.role, log_dir=log_dir)
+
     def run_task(self, task: dict[str, str]) -> AgentResult:
         """Execute a task. Subclasses must override."""
         raise NotImplementedError(f"Agent '{self.role}' must implement run_task()")

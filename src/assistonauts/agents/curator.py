@@ -102,6 +102,7 @@ class CuratorAgent(Agent):
         self._workspace_root = workspace_root
         self._archivist = archivist
         self._embedding_client = embedding_client
+        self._setup_persistent_logger(workspace_root)
 
     def close(self) -> None:
         """Release the singleton lock so a new instance can be created."""

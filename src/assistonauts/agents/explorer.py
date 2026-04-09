@@ -92,6 +92,7 @@ class ExplorerAgent(Agent):
         self._archivist = archivist
         self._embedding_client = embedding_client
         self._max_context_tokens = max_context_tokens
+        self._setup_persistent_logger(workspace_root)
 
     def explore(
         self,

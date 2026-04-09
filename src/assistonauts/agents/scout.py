@@ -75,6 +75,7 @@ class ScoutAgent(Agent):
         )
         self._workspace_root = workspace_root
         self._manifest_path = index_dir / "manifest.json"
+        self._setup_persistent_logger(workspace_root)
 
     def ingest(
         self,
