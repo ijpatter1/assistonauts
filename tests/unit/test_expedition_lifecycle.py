@@ -151,11 +151,15 @@ class TestExpeditionCreate:
         assert (exp_dir / "missions").is_dir()
         assert (exp_dir / "review").is_dir()
 
-        # Verify expedition.yaml content
+        # Verify expedition.yaml has full config
         loaded = yaml.safe_load(
             (exp_dir / "expedition.yaml").read_text(),
         )
         assert loaded["expedition"]["name"] == "test-exp"
+        assert "sources" in loaded["expedition"]
+        assert "stationed" in loaded["expedition"]
+        assert "scaling" in loaded["expedition"]
+        assert loaded["expedition"]["scaling"]["budget"]["daily_token_limit"] == 100_000
 
     def test_create_expedition_from_file(
         self,

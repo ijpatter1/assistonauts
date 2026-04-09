@@ -1,5 +1,6 @@
 """Tests for the build phase orchestrator with named iterations."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -7,8 +8,10 @@ import pytest
 from assistonauts.expeditions.orchestrator import (
     BuildIteration,
     BuildOrchestrator,
+    BuildPhaseResult,
     IterationPhase,
 )
+from assistonauts.missions.models import MissionStatus
 from assistonauts.models.config import ExpeditionConfig
 from tests.helpers import FakeLLMClient
 
@@ -241,3 +244,154 @@ class TestBuildOrchestrator:
         assert "discovery" in prompts[0].lower()
         assert "structuring" in prompts[1].lower()
         assert "refinement" in prompts[2].lower()
+
+
+# --- Execution tests ---
+
+
+class TestBuildExecution:
+    def test_execute_iteration_saves_to_ledger(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        plan_response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-001\n"
+            "    agent: scout\n"
+            "    type: ingest_sources\n"
+            "    inputs:\n"
+            "      paths:\n"
+            "        - /tmp/test.md\n"
+            "    acceptance_criteria:\n"
+            "      - Sources ingested\n"
+            "    priority: normal\n"
+            "```\n"
+        )
+        # Scout agent will fail (no real file) but ledger should record it
+        client = FakeLLMClient(responses=[plan_response, "scout output"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        iteration = orch.plan_iteration(IterationPhase.DISCOVERY)
+        orch.execute_iteration(iteration)
+
+        # Verify mission was saved to ledger
+        saved = orch.ledger.get("m-001")
+        assert saved is not None
+        assert saved.status in (
+            MissionStatus.COMPLETED,
+            MissionStatus.FAILED,
+        )
+
+    def test_execute_empty_iteration(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        client = FakeLLMClient(responses=["no missions"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        iteration = orch.plan_iteration(IterationPhase.DISCOVERY)
+        result = orch.execute_iteration(iteration)
+        assert result.missions_planned == 0
+        assert result.missions_completed == 0
+
+    def test_run_build_returns_result(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        # 3 iterations, each returns empty plan
+        client = FakeLLMClient(responses=["no yaml"] * 3)
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        result = orch.run_build()
+        assert isinstance(result, BuildPhaseResult)
+        assert len(result.iterations) == 3
+        assert result.iterations[0].phase == IterationPhase.DISCOVERY
+        assert result.iterations[1].phase == IterationPhase.STRUCTURING
+        assert result.iterations[2].phase == IterationPhase.REFINEMENT
+
+    def test_budget_halt_stops_execution(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        plan_response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-001\n"
+            "    agent: scout\n"
+            "    type: ingest\n"
+            "    inputs: {}\n"
+            "    acceptance_criteria: []\n"
+            "    priority: normal\n"
+            "  - id: m-002\n"
+            "    agent: scout\n"
+            "    type: ingest\n"
+            "    inputs: {}\n"
+            "    acceptance_criteria: []\n"
+            "    priority: normal\n"
+            "```\n"
+        )
+        client = FakeLLMClient(responses=[plan_response])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        # Exhaust the budget before execution
+        orch.budget.tracker.record(
+            agent="test",
+            expedition="test",
+            tokens=200_000,
+        )
+
+        iteration = orch.plan_iteration(IterationPhase.DISCOVERY)
+        orch.execute_iteration(iteration)
+
+        # Neither mission should have completed (budget halt)
+        assert iteration.missions_completed == 0
+
+    def test_structuring_prompt_includes_summaries(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        # Create a summary file
+        summary_dir = workspace / "wiki" / "concept"
+        summary_dir.mkdir(parents=True, exist_ok=True)
+        (summary_dir / "test.summary.json").write_text(
+            json.dumps(
+                {
+                    "title": "Test Article",
+                    "summary": "An article about testing.",
+                }
+            ),
+        )
+
+        client = FakeLLMClient(responses=["no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        orch.plan_iteration(IterationPhase.STRUCTURING)
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "Test Article" in prompt
+        assert "An article about testing" in prompt

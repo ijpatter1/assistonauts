@@ -3,7 +3,11 @@
 from pathlib import Path
 
 import click
+import yaml
 from rich.console import Console
+
+from assistonauts.expeditions.orchestrator import BuildOrchestrator
+from assistonauts.models.config import ExpeditionConfig
 
 console = Console()
 
@@ -31,9 +35,64 @@ def build(expedition_name: str, workspace: Path) -> None:
         )
         return
 
+    # Load expedition config
+    config_path = exp_dir / "expedition.yaml"
+    if not config_path.exists():
+        console.print(
+            f"[red]No expedition.yaml found in {exp_dir}[/red]",
+        )
+        return
+
+    data = yaml.safe_load(config_path.read_text())
+    config = ExpeditionConfig.from_dict(
+        data.get("expedition", data),
+    )
+
     console.print(
         f"[bold]Build phase:[/bold] {expedition_name}\n"
-        f"Expedition dir: {exp_dir}\n\n"
-        "[yellow]Build orchestration not yet implemented — "
-        "requires iterative planning (Deliverable 3).[/yellow]",
+        f"Scope: {config.scope.description}\n",
     )
+
+    # Resolve LLM client using existing pattern
+    try:
+        from assistonauts.config.loader import load_config
+        from assistonauts.config.resolver import resolve_llm_for_role
+        from assistonauts.llm.client import LLMClient
+
+        app_config = load_config(workspace)
+        model, base_url = resolve_llm_for_role(app_config, "captain")
+        llm_client = LLMClient(
+            provider_config={},
+            mode="live",
+            default_model=model,
+            base_url=base_url,
+        )
+    except Exception as exc:
+        console.print(
+            f"[red]Failed to initialize LLM client:[/red] {exc}\n"
+            "Check .assistonauts/config.yaml",
+        )
+        return
+
+    orchestrator = BuildOrchestrator(
+        workspace_root=workspace,
+        config=config,
+        llm_client=llm_client,
+    )
+
+    console.print("Running build phase (Discovery → Structuring → Refinement)...\n")
+    result = orchestrator.run_build()
+
+    console.print(
+        f"\n[bold]Build complete:[/bold] "
+        f"{result.total_completed}/{result.total_missions} missions completed, "
+        f"{result.total_failed} failed\n",
+    )
+
+    for iteration in result.iterations:
+        status = "done" if iteration.is_complete() else "partial"
+        console.print(
+            f"  {iteration.phase.value}: "
+            f"{iteration.missions_completed}/{iteration.missions_planned} "
+            f"({status})",
+        )

@@ -27,8 +27,8 @@ def create_expedition(
     (exp_dir / "missions").mkdir()
     (exp_dir / "review").mkdir()
 
-    # Write expedition.yaml
-    exp_data = {
+    # Write expedition.yaml — persist full config
+    exp_data: dict[str, object] = {
         "expedition": {
             "name": config.name,
             "description": config.description,
@@ -36,6 +36,36 @@ def create_expedition(
             "scope": {
                 "description": config.scope.description,
                 "keywords": config.scope.keywords,
+            },
+            "sources": {
+                "local": [
+                    {"path": ls.path, "pattern": ls.pattern}
+                    for ls in config.sources.local
+                ],
+            },
+            "stationed": {
+                "resources": {
+                    "daily_token_budget": (
+                        config.stationed.resources.daily_token_budget
+                    ),
+                    "max_concurrent_missions": (
+                        config.stationed.resources.max_concurrent_missions
+                    ),
+                },
+                "schedule": config.stationed.schedule,
+                "triggers": config.stationed.triggers,
+            },
+            "scaling": {
+                "agents": config.scaling.agents,
+                "auto_scale": {
+                    "trigger": config.scaling.auto_scale.trigger,
+                    "max_instances": config.scaling.auto_scale.max_instances,
+                    "cooldown_minutes": config.scaling.auto_scale.cooldown_minutes,
+                },
+                "budget": {
+                    "daily_token_limit": config.scaling.budget.daily_token_limit,
+                    "warning_threshold": config.scaling.budget.warning_threshold,
+                },
             },
         },
     }
