@@ -165,7 +165,60 @@ class TestCuratorCrossReference:
             archivist=archivist,
             embedding_client=embedding_client,
         )
-        assert len(result.links_added) >= 0  # May be 0 if already linked
+        assert "frequency-domain" in result.links_added
+
+    def test_cross_reference_writes_see_also_to_file(
+        self,
+        workspace: Path,
+        archivist: Archivist,
+        embedding_client: FakeEmbeddingClient,
+    ) -> None:
+        """cross_reference() must actually write See Also to the article file."""
+        _populate_kb(workspace, archivist, embedding_client)
+        llm = FakeLLMClient(responses=["## See Also\n\n- [[frequency-domain]]"])
+        curator = CuratorAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+        )
+        curator.cross_reference(
+            "wiki/concepts/spectral-analysis.md",
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        content = (workspace / "wiki/concepts/spectral-analysis.md").read_text()
+        assert "## See Also" in content
+        assert "[[frequency-domain]]" in content
+
+    def test_cross_reference_appends_to_existing_see_also(
+        self,
+        workspace: Path,
+        archivist: Archivist,
+        embedding_client: FakeEmbeddingClient,
+    ) -> None:
+        """New links must be appended even if See Also already exists."""
+        _populate_kb(workspace, archivist, embedding_client)
+
+        # Pre-populate See Also with a different link
+        article_path = workspace / "wiki/concepts/spectral-analysis.md"
+        original = article_path.read_text()
+        article_path.write_text(
+            original.rstrip() + "\n\n## See Also\n\n- [[existing-link]]\n"
+        )
+
+        llm = FakeLLMClient(responses=["## See Also\n\n- [[frequency-domain]]"])
+        curator = CuratorAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+        )
+        result = curator.cross_reference(
+            "wiki/concepts/spectral-analysis.md",
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        content = article_path.read_text()
+        assert "[[existing-link]]" in content, "Existing links must be preserved"
+        assert "[[frequency-domain]]" in content, "New links must be appended"
+        assert "frequency-domain" in result.links_added
 
     def test_run_task(
         self,

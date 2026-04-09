@@ -196,12 +196,16 @@ class CuratorAgent(Agent):
         suggested_links = parse_links(llm_response)
         new_links = [link for link in suggested_links if link not in existing_links]
 
-        if new_links and "## See Also" not in content:
-            # Append See Also section
-            see_also = "\n\n## See Also\n\n"
-            for link in new_links:
-                see_also += f"- [[{link}]]\n"
-            updated_content = content.rstrip() + see_also
+        if new_links:
+            if "## See Also" in content:
+                # Append new links to existing See Also section
+                new_entries = "".join(f"- [[{link}]]\n" for link in new_links)
+                updated_content = content.rstrip() + "\n" + new_entries
+            else:
+                # Create new See Also section
+                see_also = "\n\n## See Also\n\n"
+                see_also += "".join(f"- [[{link}]]\n" for link in new_links)
+                updated_content = content.rstrip() + see_also
             self.write_file(full_path, updated_content)
 
         return CuratorResult(
