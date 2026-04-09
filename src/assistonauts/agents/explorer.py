@@ -142,7 +142,11 @@ class ExplorerAgent(Agent):
                 articles_retrieved=0,
                 articles_used=0,
             )
-            self._log_query(result, passes_executed=retrieval.passes_executed)
+            self._log_query(
+                result,
+                passes_executed=retrieval.passes_executed,
+                retrieval_log=retrieval.log,
+            )
             return result
 
         # Step 2: Calculate context budget
@@ -173,7 +177,11 @@ class ExplorerAgent(Agent):
             articles_retrieved=articles_retrieved,
             articles_used=articles_used,
         )
-        self._log_query(result, passes_executed=retrieval.passes_executed)
+        self._log_query(
+            result,
+            passes_executed=retrieval.passes_executed,
+            retrieval_log=retrieval.log,
+        )
         return result
 
     def _read_article_contents(
@@ -259,6 +267,7 @@ class ExplorerAgent(Agent):
         self,
         result: ExplorerResult,
         passes_executed: list[str] | None = None,
+        retrieval_log: object | None = None,
     ) -> None:
         """Append a query record to .assistonauts/explorer/queries.jsonl.
 
@@ -269,7 +278,7 @@ class ExplorerAgent(Agent):
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = log_dir / "queries.jsonl"
 
-        entry = {
+        entry: dict[str, object] = {
             "timestamp": datetime.now(UTC).isoformat(),
             "query": result.query,
             "answer": result.answer,
@@ -283,6 +292,10 @@ class ExplorerAgent(Agent):
             "passes_executed": passes_executed or [],
             "success": result.success,
         }
+
+        # Include full retrieval log if available
+        if retrieval_log is not None and hasattr(retrieval_log, "to_dict"):
+            entry["retrieval"] = retrieval_log.to_dict()
 
         with open(log_path, "a") as f:
             f.write(json.dumps(entry) + "\n")

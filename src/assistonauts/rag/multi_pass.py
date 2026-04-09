@@ -45,12 +45,50 @@ class MultiPassConfig:
 
 
 @dataclass
+class RetrievalLog:
+    """Observability log for a multi-pass retrieval operation.
+
+    Records per-pass metrics so users can audit what was retrieved,
+    filtered, and why.
+    """
+
+    query: str = ""
+    total_articles: int = 0
+    passes: list[dict[str, object]] = field(default_factory=list)
+
+    def add_pass(
+        self,
+        name: str,
+        input_count: int,
+        output_count: int,
+        **details: object,
+    ) -> None:
+        """Record metrics for a single retrieval pass."""
+        entry: dict[str, object] = {
+            "name": name,
+            "input_count": input_count,
+            "output_count": output_count,
+        }
+        entry.update(details)
+        self.passes.append(entry)
+
+    def to_dict(self) -> dict[str, object]:
+        """Serialize to a dict for JSON logging."""
+        return {
+            "query": self.query,
+            "total_articles": self.total_articles,
+            "passes": self.passes,
+        }
+
+
+@dataclass
 class RetrievalResult:
     """Result of a multi-pass retrieval operation."""
 
     articles: list[dict[str, object]]
     short_circuited: bool = False
     passes_executed: list[str] = field(default_factory=list)
+    log: RetrievalLog = field(default_factory=RetrievalLog)
 
 
 class MultiPassRetriever:
@@ -74,16 +112,24 @@ class MultiPassRetriever:
     def retrieve(self, query: str) -> RetrievalResult:
         """Execute multi-pass retrieval for a query.
 
-        Returns relevant articles with metadata about the retrieval process.
+        Returns relevant articles with metadata about the retrieval process,
+        including a RetrievalLog with per-pass metrics.
         """
         all_articles = self._archivist.db.list_articles()
+        log = RetrievalLog(query=query, total_articles=len(all_articles))
 
         # Short-circuit check
         if self._should_short_circuit(all_articles):
+            log.add_pass(
+                "short_circuit",
+                input_count=len(all_articles),
+                output_count=len(all_articles),
+            )
             return RetrievalResult(
                 articles=all_articles,
                 short_circuited=True,
                 passes_executed=["short_circuit"],
+                log=log,
             )
 
         passes_executed: list[str] = []
@@ -91,37 +137,63 @@ class MultiPassRetriever:
         # Pass 1: Broad scan (zero inference)
         candidates = self._pass_1_broad_scan(query)
         passes_executed.append("pass_1_broad_scan")
+        log.add_pass(
+            "pass_1_broad_scan",
+            input_count=len(all_articles),
+            output_count=len(candidates),
+        )
 
         if not candidates:
             return RetrievalResult(
                 articles=[],
                 short_circuited=False,
                 passes_executed=passes_executed,
+                log=log,
             )
 
         # Pass 2: Triage on summaries (cheap LLM inference or deterministic)
         triaged = self._pass_2_triage(candidates, query)
         passes_executed.append("pass_2_triage")
+        log.add_pass(
+            "pass_2_triage",
+            input_count=len(candidates),
+            output_count=len(triaged),
+            used_llm=self._llm_client is not None,
+        )
 
         if not triaged:
             return RetrievalResult(
                 articles=[],
                 short_circuited=False,
                 passes_executed=passes_executed,
+                log=log,
             )
 
         # Pass 3: Deep read — full article content for top candidates
         deep_read = self._pass_3_deep_read(triaged, query)
         passes_executed.append("pass_3_deep_read")
+        log.add_pass(
+            "pass_3_deep_read",
+            input_count=len(triaged),
+            output_count=len(deep_read),
+            used_llm=self._llm_client is not None,
+        )
 
         # Pass 4: Weak match resolution — resolve borderline matches
         resolved = self._pass_4_weak_match(deep_read, query)
         passes_executed.append("pass_4_weak_match")
+        log.add_pass(
+            "pass_4_weak_match",
+            input_count=len(deep_read),
+            output_count=len(resolved),
+            used_llm=self._llm_client is not None,
+        )
 
         return RetrievalResult(
             articles=resolved,
             short_circuited=False,
             passes_executed=passes_executed,
+            log=log,
         )
 
     def _should_short_circuit(self, articles: list[dict[str, object]]) -> bool:
