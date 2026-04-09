@@ -7,10 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers import FakeEmbeddingClient, FakeLLMClient
-
 from assistonauts.agents.explorer import ExplorerAgent, ExplorerResult
 from assistonauts.archivist.service import Archivist
+from tests.helpers import FakeEmbeddingClient, FakeLLMClient
 
 
 @pytest.fixture()

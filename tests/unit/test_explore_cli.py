@@ -47,9 +47,8 @@ def workspace(tmp_path: Path) -> Path:
     summary.write_text(json.dumps({"summary": "Neural networks overview"}))
 
     # Index the article
-    from tests.helpers import FakeEmbeddingClient
-
     from assistonauts.archivist.service import Archivist
+    from tests.helpers import FakeEmbeddingClient
 
     embedding = FakeEmbeddingClient(dimensions=4)
     archivist = Archivist(ws, embedding_dimensions=4)

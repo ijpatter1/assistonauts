@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from assistonauts.tools.explorer import (
     Citation,
-    ContextBudget,
+    calculate_context_budget,
     format_citation,
     format_citations_block,
-    calculate_context_budget,
     render_answer_markdown,
 )
-
 
 # --- Citation formatter tests ---
 
@@ -92,7 +90,9 @@ class TestFormatCitationsBlock:
         ]
         result = format_citations_block(citations)
         # Should only list the article once
-        lines_with_same = [l for l in result.splitlines() if "Same Article" in l]
+        lines_with_same = [
+            line for line in result.splitlines() if "Same Article" in line
+        ]
         assert len(lines_with_same) == 1
 
 

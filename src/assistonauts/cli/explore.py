@@ -125,6 +125,7 @@ def _run_repl(explorer: ExplorerAgent) -> None:
     )
 
     last_result = None
+    conversation_history: list[dict[str, str]] = []
 
     while True:
         try:
@@ -156,10 +157,22 @@ def _run_repl(explorer: ExplorerAgent) -> None:
             _show_help()
             continue
 
-        # It's a question — explore it
-        result = explorer.explore(user_input)
-        _display_result(result)
-        last_result = result
+        # It's a question — explore it with conversation history
+        try:
+            result = explorer.explore(
+                user_input, conversation_history=conversation_history
+            )
+            _display_result(result)
+            last_result = result
+            # Accumulate history for follow-up questions
+            if result.success:
+                conversation_history.append({"role": "user", "content": user_input})
+                conversation_history.append(
+                    {"role": "assistant", "content": result.answer}
+                )
+        except Exception as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            console.print("[dim]Try again or type /quit to exit.[/dim]")
 
 
 def _display_result(result: object) -> None:
@@ -200,22 +213,21 @@ def _create_embedding_client(workspace: Path) -> EmbeddingClient | None:
     try:
         config = load_config(workspace)
         return create_embedding_client(config.embedding)
-    except Exception:
+    except Exception as exc:
+        console.print(f"[dim]Embedding init detail: {exc}[/dim]")
         return None
 
 
 def _create_llm_client(workspace: Path) -> LLMClientProtocol | None:
     """Create an LLM client from workspace config."""
     from assistonauts.config.loader import load_config
+    from assistonauts.config.resolver import resolve_llm_for_role
     from assistonauts.llm.client import LLMClient
 
     try:
         config = load_config(workspace)
-        llm_config = config.llm.get("default", {})
-        model = llm_config.get("model", None) if isinstance(llm_config, dict) else None
-        base_url = (
-            llm_config.get("base_url", None) if isinstance(llm_config, dict) else None
-        )
+        model, base_url = resolve_llm_for_role(config, "explorer")
         return LLMClient(default_model=model, base_url=base_url)
-    except Exception:
+    except Exception as exc:
+        console.print(f"[dim]LLM init detail: {exc}[/dim]")
         return None

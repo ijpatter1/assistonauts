@@ -92,8 +92,17 @@ class ExplorerAgent(Agent):
         self._embedding_client = embedding_client
         self._max_context_tokens = max_context_tokens
 
-    def explore(self, query: str) -> ExplorerResult:
+    def explore(
+        self,
+        query: str,
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> ExplorerResult:
         """Answer a question against the knowledge base.
+
+        Args:
+            query: The question to answer.
+            conversation_history: Prior Q&A pairs for conversational flow.
+                Each dict has 'role' ('user' or 'assistant') and 'content'.
 
         Pipeline:
         1. Retrieve relevant articles via multi-pass retrieval
@@ -144,7 +153,7 @@ class ExplorerAgent(Agent):
         articles_used = len(article_contexts)
 
         # Step 4: Synthesize answer via LLM
-        answer = self._synthesize(query, article_contexts)
+        answer = self._synthesize(query, article_contexts, conversation_history)
 
         # Step 5: Build citations from used articles
         citations = self._build_citations(budget.included)
@@ -176,7 +185,7 @@ class ExplorerAgent(Agent):
             full_path = self._workspace_root / path
             if not full_path.exists():
                 continue
-            content = full_path.read_text()
+            content = self.read_file(full_path)
             # Strip frontmatter for context
             body = re.sub(r"^---\n.*?\n---\n?", "", content, count=1, flags=re.DOTALL)
             title = str(article.get("title", Path(path).stem))
@@ -187,6 +196,7 @@ class ExplorerAgent(Agent):
         self,
         query: str,
         article_contexts: list[dict[str, str]],
+        conversation_history: list[dict[str, str]] | None = None,
     ) -> str:
         """Build prompt with article context and call LLM for synthesis."""
         context_block = self._format_context_block(article_contexts)
@@ -201,7 +211,13 @@ class ExplorerAgent(Agent):
             f"Reference article titles when making claims."
         )
 
-        return self.call_llm(messages=[{"role": "user", "content": prompt}])
+        # Build message list with conversation history for follow-ups
+        messages: list[dict[str, str]] = []
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": prompt})
+
+        return self.call_llm(messages=messages)
 
     def _synthesize_no_context(self, query: str) -> str:
         """Handle queries when no articles are retrieved."""
@@ -243,7 +259,7 @@ class ExplorerAgent(Agent):
 
         Returns the path to the created file.
         """
-        slug = _query_to_slug(result.query)
+        slug = _query_to_slug(result.query) or "untitled-exploration"
         explorations_dir = self._workspace_root / "wiki" / "explorations"
         explorations_dir.mkdir(parents=True, exist_ok=True)
         file_path = explorations_dir / f"{slug}.md"
@@ -266,10 +282,12 @@ class ExplorerAgent(Agent):
             f"---\n"
         )
 
-        # Build body sections
+        # Build body sections (matches _EXPLORATION_TEMPLATE in models/schema.py)
         body_parts: list[str] = [
             f"## Question\n\n{result.query}",
             f"## Analysis\n\n{result.answer}",
+            "## Findings\n\n*To be added upon promotion.*",
+            "## Open Questions\n\n*To be added upon promotion.*",
         ]
 
         # Sources section with citation links
