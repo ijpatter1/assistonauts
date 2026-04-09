@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 from rich.console import Console
 
 from assistonauts.archivist.service import Archivist
+
+if TYPE_CHECKING:
+    from assistonauts.archivist.embeddings import EmbeddingClient
 
 console = Console()
 
@@ -76,9 +80,17 @@ def index(workspace: Path, reindex: bool, embeddings: bool) -> None:
                 archivist.db.delete_article(rel_path)
 
         if embedding_client is not None:
-            changed = archivist.index_with_embeddings(
-                rel_path, embedding_client=embedding_client
-            )
+            try:
+                changed = archivist.index_with_embeddings(
+                    rel_path, embedding_client=embedding_client
+                )
+            except Exception as exc:
+                console.print(
+                    f"[yellow]Warning:[/yellow] Embedding failed ({exc!r}). "
+                    "Falling back to FTS only."
+                )
+                embedding_client = None
+                changed = archivist.index(rel_path)
         else:
             changed = archivist.index(rel_path)
 
@@ -104,24 +116,13 @@ def index(workspace: Path, reindex: bool, embeddings: bool) -> None:
 
 def _create_embedding_client(
     workspace: Path,
-) -> object | None:
+) -> EmbeddingClient | None:
     """Try to create an embedding client from workspace config."""
-    from assistonauts.archivist.embeddings import LiteLLMEmbeddingClient
+    from assistonauts.archivist.embeddings import create_embedding_client
     from assistonauts.config.loader import load_config
 
     try:
-        config = load_config(workspace / ".assistonauts" / "config.yaml")
-        emb_config = config.get("embedding", {})
-        active = emb_config.get("active", "")
-        if not active:
-            return None
-        provider = emb_config.get("providers", {}).get(active, {})
-        model = provider.get("model", "")
-        if not model:
-            return None
-        return LiteLLMEmbeddingClient(
-            model=model,
-            base_url=provider.get("base_url"),
-        )
+        config = load_config(workspace)
+        return create_embedding_client(config.embedding)
     except Exception:
         return None

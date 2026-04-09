@@ -19,11 +19,15 @@ llm:
     explorer: anthropic
 
 embedding:
-  active: ollama
+  active: gemini
   providers:
+    gemini:
+      model: gemini-embedding-2-preview
+      dimensions: 768
     ollama:
       model: nomic-embed-text
       base_url: http://localhost:11434
+      dimensions: 384
 
 cache:
   llm_responses:

@@ -6,6 +6,8 @@ import re
 from abc import ABC, abstractmethod
 from collections import Counter
 
+from assistonauts.models.config import EmbeddingConfig
+
 # Common English stop words for keyword filtering
 _STOP_WORDS = frozenset(
     "a an the is are was were be been being have has had do does did "
@@ -107,8 +109,8 @@ def generate_retrieval_keywords(
 class EmbeddingClient(ABC):
     """Abstract embedding client interface.
 
-    Implementations can wrap litellm, OpenAI, Ollama, or provide
-    fake embeddings for testing.
+    Implementations can wrap litellm, OpenAI, Ollama, google-genai,
+    or provide fake embeddings for testing.
     """
 
     @property
@@ -126,9 +128,33 @@ class EmbeddingClient(ABC):
         """Generate embeddings for a batch of texts. Default: sequential."""
         return [self.embed(t) for t in texts]
 
+    def embed_content(self, data: bytes, mime_type: str) -> list[float]:
+        """Generate an embedding for binary content (image, PDF, etc.).
+
+        Only supported by multimodal embedding providers (e.g. Gemini).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support multimodal embedding"
+        )
+
+    def embed_multimodal(self, parts: list[dict[str, object]]) -> list[float]:
+        """Generate an embedding for interleaved text + binary parts.
+
+        Each part is either {"text": "..."} or {"data": b"...", "mime_type": "..."}.
+        Only supported by multimodal embedding providers (e.g. Gemini).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support multimodal embedding"
+        )
+
 
 class LiteLLMEmbeddingClient(EmbeddingClient):
-    """Embedding client using litellm for provider-agnostic API calls."""
+    """Embedding client using litellm for provider-agnostic API calls.
+
+    Supports text embedding for all litellm providers. For providers
+    that support multimodal embedding (e.g. Gemini), also supports
+    binary content via base64 data URIs.
+    """
 
     def __init__(
         self,
@@ -144,20 +170,72 @@ class LiteLLMEmbeddingClient(EmbeddingClient):
     def dimensions(self) -> int:
         return self._dimensions
 
-    def embed(self, text: str) -> list[float]:
+    def _call_litellm(self, inputs: list[str]) -> list[list[float]]:
+        """Call litellm embedding API and return raw embedding vectors."""
         import litellm
 
-        kwargs: dict[str, object] = {"model": self._model, "input": [text]}
-        if self._base_url:
-            kwargs["api_base"] = self._base_url
-        response = litellm.embedding(**kwargs)
-        return response.data[0]["embedding"]  # type: ignore[index] — litellm returns dict-like
-
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        import litellm
-
-        kwargs: dict[str, object] = {"model": self._model, "input": texts}
+        kwargs: dict[str, object] = {"model": self._model, "input": inputs}
         if self._base_url:
             kwargs["api_base"] = self._base_url
         response = litellm.embedding(**kwargs)
         return [d["embedding"] for d in response.data]  # type: ignore[index] — litellm returns dict-like
+
+    def embed(self, text: str) -> list[float]:
+        return self._call_litellm([text])[0]
+
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        return self._call_litellm(texts)
+
+    def embed_content(self, data: bytes, mime_type: str) -> list[float]:
+        """Generate an embedding for binary content via base64 data URI.
+
+        Requires a model that supports multimodal embedding (e.g. gemini/).
+        """
+        import base64
+
+        b64 = base64.b64encode(data).decode("ascii")
+        data_uri = f"data:{mime_type};base64,{b64}"
+        return self._call_litellm([data_uri])[0]
+
+    def embed_multimodal(self, parts: list[dict[str, object]]) -> list[float]:
+        """Generate embeddings for interleaved text + binary parts.
+
+        Each part is {"text": "..."} or {"data": b"...", "mime_type": "..."}.
+        Passes all parts as separate inputs via litellm; returns the
+        first embedding. Requires a multimodal model (e.g. gemini/).
+        """
+        import base64
+
+        inputs: list[str] = []
+        for part in parts:
+            if "text" in part:
+                inputs.append(str(part["text"]))
+            elif "data" in part and "mime_type" in part:
+                raw = part["data"]
+                assert isinstance(raw, bytes)
+                b64 = base64.b64encode(raw).decode("ascii")
+                inputs.append(f"data:{part['mime_type']};base64,{b64}")
+        return self._call_litellm(inputs)[0]
+
+
+def create_embedding_client(config: EmbeddingConfig) -> EmbeddingClient | None:
+    """Factory: create an EmbeddingClient from an EmbeddingConfig.
+
+    Returns None if the config is empty or the provider is unknown.
+    """
+    if not config.active:
+        return None
+
+    provider_config = config.providers.get(config.active)
+    if not provider_config or not provider_config.model:
+        return None
+
+    model = provider_config.model
+    # Prefix with provider name if not already prefixed (e.g. "ollama/nomic-embed-text")
+    if "/" not in model and config.active != "litellm":
+        model = f"{config.active}/{model}"
+    return LiteLLMEmbeddingClient(
+        model=model,
+        base_url=provider_config.base_url,
+        dimensions=provider_config.dimensions or 768,
+    )
