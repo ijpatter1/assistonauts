@@ -2,6 +2,9 @@
 # ================================================================
 # Phase 5 UAT — Captain + Expedition Orchestration
 # Created: 2026-04-09, session-2026-04-09-004
+# Updated: 2026-04-09, session-2026-04-09-005 — added checks for
+#   plan.yaml, build-report.md, progress feedback, parse failure
+#   warning, budget halt CLI visibility
 #
 # Tests end-to-end expedition workflows: creation, build execution,
 # budget enforcement, error handling, and config validation.
@@ -234,6 +237,32 @@ HAPEOF
   verify 'test "$YAML_COUNT" -gt 0' \
     "1l: $YAML_COUNT YAML audit files in missions/"
 
+  # Check plan.yaml artifact (added during eval fix rounds)
+  verify 'test -f "$WORKSPACE/expeditions/ml-uat/plan.yaml"' \
+    "1m: plan.yaml artifact written"
+  if [ -f "$WORKSPACE/expeditions/ml-uat/plan.yaml" ]; then
+    verify 'grep -q "agent" "$WORKSPACE/expeditions/ml-uat/plan.yaml"' \
+      "1n: plan.yaml includes agent details (not just IDs)"
+  fi
+
+  # Check build-report.md artifact
+  verify 'test -f "$WORKSPACE/expeditions/ml-uat/build-report.md"' \
+    "1o: build-report.md written"
+  if [ -f "$WORKSPACE/expeditions/ml-uat/build-report.md" ]; then
+    verify 'grep -q "Discovery" "$WORKSPACE/expeditions/ml-uat/build-report.md"' \
+      "1p: build report includes iteration names"
+  fi
+
+  # Check progress feedback was in build output
+  verify 'echo "$BUILD_OUTPUT" | grep -qi "executing\|mission"' \
+    "1q: Build output shows per-mission progress"
+
+  # Check empty build warning (if no missions planned)
+  if echo "$BUILD_OUTPUT" | grep -q "0/0"; then
+    verify 'echo "$BUILD_OUTPUT" | grep -qi "warning\|no missions\|could not be parsed"' \
+      "1r: Empty build shows parse failure warning"
+  fi
+
   echo ""
 
   # ── Scenario 3: Budget Enforcement ─────────────────
@@ -286,8 +315,12 @@ BUDEOF
     "SELECT COUNT(*) FROM missions WHERE status = 'pending'" 2>/dev/null || echo "0")
   echo "  (Pending missions after budget halt: $PENDING)"
 
+  # Check budget halt message visible in CLI output
+  verify 'echo "$BUDGET_OUTPUT" | grep -qi "budget\|halt\|exceeded\|warning"' \
+    "3c: Budget status visible in CLI output"
+
   confirm "Does the build output show budget halt or fewer completed missions than planned?" \
-    "3c: Budget enforcement halted execution"
+    "3d: Budget enforcement halted execution"
 
   echo ""
 fi
