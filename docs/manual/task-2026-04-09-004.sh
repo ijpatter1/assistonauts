@@ -45,11 +45,17 @@ check_prereq assistonauts
 IMAGE_COUNT=$(ls "$INPUT_DIR"/*.png 2>/dev/null | wc -l | tr -d ' ')
 [ "$IMAGE_COUNT" -gt 0 ] || { echo "❌ No .png files found in $INPUT_DIR"; exit 1; }
 
+LOGFILE="$WORKSPACE/pipeline-results.log"
+
 echo "Input:     $IMAGE_COUNT images from $INPUT_DIR"
 echo "Workspace: $WORKSPACE"
+echo "Log:       $LOGFILE"
 echo ""
 
 SECONDS=0  # bash builtin timer
+
+echo "═══ E2E Pipeline Results — $(date) ═══" > "$LOGFILE"
+echo "" >> "$LOGFILE"
 
 # ── Stage 1: Initialize Workspace ────────────────────
 
@@ -223,10 +229,17 @@ for q in "${QUERIES[@]}"; do
     echo "$OUTPUT" | grep -v '^[[:space:]]*$' | head -10 | sed 's/^/     /'
     echo "     ..."
     QUERY_PASS=$((QUERY_PASS + 1))
+    # Log full answer
+    echo "── Q: $q" >> "$LOGFILE"
+    echo "$OUTPUT" >> "$LOGFILE"
+    echo "" >> "$LOGFILE"
   else
     echo "     ❌ Query failed (exit $EXIT_CODE)"
     echo "$OUTPUT" | tail -3 | sed 's/^/     /'
     QUERY_FAIL=$((QUERY_FAIL + 1))
+    echo "── Q: $q [FAILED exit $EXIT_CODE]" >> "$LOGFILE"
+    echo "$OUTPUT" >> "$LOGFILE"
+    echo "" >> "$LOGFILE"
   fi
   echo ""
 done
@@ -240,9 +253,13 @@ echo ""
 echo "━━━ Stage 7: File Exploration ━━━"
 
 set +e
-assistonauts explore -w "$WORKSPACE" \
+FILED_OUTPUT=$(NO_COLOR=1 assistonauts explore -w "$WORKSPACE" \
   --query "Summarize the key themes and treasures described in the book" \
-  --save 2>&1 | tail -5
+  --save 2>&1)
+echo "$FILED_OUTPUT" | tail -5
+echo "── Filed exploration" >> "$LOGFILE"
+echo "$FILED_OUTPUT" >> "$LOGFILE"
+echo "" >> "$LOGFILE"
 set -e
 
 EXPLORATION_COUNT=$(find "$WORKSPACE/wiki/explorations" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
