@@ -358,3 +358,33 @@ class TestMissionSerialization:
         assert len(m2.tasks) == 1
         assert m2.tasks[0].task_id == "t1"
         assert m2.tasks[0].order == 0
+
+    def test_stale_reason_roundtrip(self) -> None:
+        m = Mission(
+            mission_id="m-stale",
+            agent="compiler",
+            mission_type="compile",
+            inputs={},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        m.start()
+        m.complete()
+        m.mark_stale(reason="Source file changed")
+        d = m.to_dict()
+        m2 = Mission.from_dict(d)
+        assert m2.status == MissionStatus.STALE
+        assert m2.stale_reason == "Source file changed"
+
+    def test_verified_by_in_complete(self) -> None:
+        m = Mission(
+            mission_id="m-verify",
+            agent="compiler",
+            mission_type="compile",
+            inputs={},
+            acceptance_criteria=["Article written"],
+            created_by="captain",
+        )
+        m.start()
+        m.complete(verified_by="captain")
+        assert "verified_by:captain" in m.checklist

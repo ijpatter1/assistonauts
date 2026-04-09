@@ -107,3 +107,7 @@ def build(expedition_name: str, workspace: Path) -> None:
             f"{iteration.missions_completed}/{iteration.missions_planned} "
             f"({status})",
         )
+        if iteration.budget_halt_message:
+            console.print(
+                f"  [yellow]{iteration.budget_halt_message}[/yellow]",
+            )

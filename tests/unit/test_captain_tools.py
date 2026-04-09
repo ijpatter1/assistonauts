@@ -463,3 +463,25 @@ class TestStatusAggregator:
         assert "m1" in text
         assert "running" in text.lower()
         assert "compiler" in text.lower()
+
+    def test_format_for_llm_checklist_rollup(self) -> None:
+        missions = [
+            Mission(
+                mission_id="m1",
+                agent="compiler",
+                mission_type="compile",
+                inputs={},
+                acceptance_criteria=["Article written"],
+                created_by="captain",
+                checklist=[
+                    "read source",
+                    "compile article",
+                    "verified_by:captain",
+                ],
+            ),
+        ]
+        missions[0].start()
+        agg = StatusAggregator()
+        text = agg.format_for_llm(missions)
+        assert "Checklist: 3 items" in text
+        assert "1 verified" in text

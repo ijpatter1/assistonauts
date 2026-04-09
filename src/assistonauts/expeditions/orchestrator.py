@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -54,6 +55,7 @@ class BuildIteration:
     missions_failed: int = 0
     missions: list[Mission] = field(default_factory=list)
     graph: DependencyGraph | None = None
+    budget_halt_message: str = ""
 
     def is_complete(self) -> bool:
         return self.missions_completed + self.missions_failed >= self.missions_planned
@@ -184,10 +186,9 @@ class BuildOrchestrator:
             # Check budget before dispatching
             budget_status = self.budget.check()
             if not budget_status.can_proceed:
-                logger.warning(
-                    "Budget exceeded — halting iteration: %s",
-                    budget_status.message,
-                )
+                msg = f"Budget exceeded — halting: {budget_status.message}"
+                logger.warning(msg)
+                iteration.budget_halt_message = msg
                 break
             if budget_status.is_warning:
                 logger.warning("Budget warning: %s", budget_status.message)
@@ -241,6 +242,8 @@ class BuildOrchestrator:
             result.total_failed += iteration.missions_failed
 
         self._write_build_report(result)
+        self.ledger.close()
+        self.budget.tracker.close()
         return result
 
     def _execute_mission(
@@ -308,9 +311,11 @@ class BuildOrchestrator:
                 # Deterministic failures: no retry
                 if error_type == "deterministic":
                     return
-                # Transient failures: retry if attempts remain
+                # Transient failures: retry with backoff
                 if attempt < max_retries:
                     mission.retry()
+                    backoff = 2**attempt  # 1s, 2s, 4s
+                    time.sleep(backoff)
                     continue
                 return
 
@@ -323,6 +328,8 @@ class BuildOrchestrator:
                 self.ledger.save(mission)
                 if attempt < max_retries:
                     mission.retry()
+                    backoff = 2**attempt
+                    time.sleep(backoff)
                     continue
                 return
             finally:
@@ -479,7 +486,9 @@ class BuildOrchestrator:
                 if isinstance(data, dict):
                     existing = data.get("iterations", [])
             except yaml.YAMLError:
-                pass
+                logger.warning(
+                    "Corrupted plan.yaml — overwriting with fresh data",
+                )
 
         iteration_data = {
             "phase": phase.value,

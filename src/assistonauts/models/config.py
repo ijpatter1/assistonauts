@@ -164,9 +164,11 @@ class ExpeditionConfig:
         """Parse an expedition config from a dict (e.g. YAML)."""
         scope_data = data.get("scope", {})
         if isinstance(scope_data, dict):
+            raw_kw = scope_data.get("keywords", [])
+            keywords = list(raw_kw) if isinstance(raw_kw, list) else [str(raw_kw)]
             scope = ExpeditionScope(
                 description=str(scope_data.get("description", "")),
-                keywords=scope_data.get("keywords", []),
+                keywords=keywords,
             )
         else:
             scope = ExpeditionScope()
