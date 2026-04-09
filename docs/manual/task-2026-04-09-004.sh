@@ -11,8 +11,11 @@
 # the new Explorer. Validates every phase (1-4) works
 # end-to-end with real LLM calls against real content.
 #
+# Idempotent — safe to re-run. Each stage checks for existing
+# output and skips if work is already done.
+#
 # Requires: ANTHROPIC_API_KEY, GEMINI_API_KEY
-# Expected duration: 20-40 minutes (LLM-bound)
+# Expected duration: 20-40 minutes first run, <1 minute re-run
 #
 # Usage: bash docs/manual/task-2026-04-09-004.sh
 # ═══════════════════════════════════════════════════════
@@ -39,12 +42,11 @@ check_prereq assistonauts
 [ -n "${ANTHROPIC_API_KEY:-}" ] || { echo "❌ ANTHROPIC_API_KEY not set"; exit 1; }
 [ -n "${GEMINI_API_KEY:-}" ]    || { echo "❌ GEMINI_API_KEY not set"; exit 1; }
 
-IMAGE_COUNT=$(ls "$INPUT_DIR"/*.png 2>/dev/null | wc -l)
+IMAGE_COUNT=$(ls "$INPUT_DIR"/*.png 2>/dev/null | wc -l | tr -d ' ')
 [ "$IMAGE_COUNT" -gt 0 ] || { echo "❌ No .png files found in $INPUT_DIR"; exit 1; }
 
-echo "Input: $IMAGE_COUNT images from $INPUT_DIR"
+echo "Input:     $IMAGE_COUNT images from $INPUT_DIR"
 echo "Workspace: $WORKSPACE"
-echo "Batch size: $BATCH_SIZE"
 echo ""
 
 SECONDS=0  # bash builtin timer
@@ -53,52 +55,59 @@ SECONDS=0  # bash builtin timer
 
 echo "━━━ Stage 1: Init Workspace ━━━"
 if [ -d "$WORKSPACE/.assistonauts" ]; then
-  echo "  Existing workspace found at $WORKSPACE — reusing it."
-  echo "  (Set WORKSPACE to a new path or delete manually to start fresh.)"
+  echo "  ✓ Already initialized — skipping."
 else
   assistonauts init "$WORKSPACE"
-  echo "  ✓ Workspace created at $WORKSPACE"
+  echo "  ✓ Created at $WORKSPACE"
 fi
 echo ""
 
 # ── Stage 2: Ingest Images via Scout ─────────────────
 
-echo "━━━ Stage 2: Scout Ingest ($IMAGE_COUNT images) ━━━"
-echo "  This is the longest stage — each image needs vision LLM processing."
-echo ""
+echo "━━━ Stage 2: Scout Ingest ━━━"
 
-INGESTED=0
-FAILED=0
-BATCH=()
+RAW_COUNT=$(ls "$WORKSPACE"/raw/articles/*.md 2>/dev/null | wc -l | tr -d ' ')
+if [ "$RAW_COUNT" -ge "$IMAGE_COUNT" ]; then
+  echo "  ✓ $RAW_COUNT raw articles already exist (≥ $IMAGE_COUNT images) — skipping."
+else
+  echo "  $RAW_COUNT raw articles exist, $IMAGE_COUNT images to process."
+  echo "  This is the longest stage — each image needs vision LLM processing."
+  echo ""
 
-for img in $(ls "$INPUT_DIR"/*.png | sort); do
-  BATCH+=("$img")
+  INGESTED=0
+  FAILED=0
+  BATCH=()
 
-  if [ "${#BATCH[@]}" -ge "$BATCH_SIZE" ]; then
-    echo "  Ingesting batch ($INGESTED+${#BATCH[@]}/$IMAGE_COUNT)..."
-    if assistonauts scout ingest "${BATCH[@]}" -w "$WORKSPACE" 2>&1 | tail -"$BATCH_SIZE"; then
+  for img in $(ls "$INPUT_DIR"/*.png | sort); do
+    BATCH+=("$img")
+
+    if [ "${#BATCH[@]}" -ge "$BATCH_SIZE" ]; then
+      echo "  Ingesting batch ($INGESTED+${#BATCH[@]}/$IMAGE_COUNT)..."
+      if assistonauts scout ingest "${BATCH[@]}" -w "$WORKSPACE" 2>&1 | tail -"$BATCH_SIZE"; then
+        INGESTED=$((INGESTED + ${#BATCH[@]}))
+      else
+        echo "  ⚠️  Batch had errors (continuing)"
+        FAILED=$((FAILED + ${#BATCH[@]}))
+      fi
+      BATCH=()
+    fi
+  done
+
+  # Remaining batch
+  if [ "${#BATCH[@]}" -gt 0 ]; then
+    echo "  Ingesting final batch ($INGESTED+${#BATCH[@]}/$IMAGE_COUNT)..."
+    if assistonauts scout ingest "${BATCH[@]}" -w "$WORKSPACE" 2>&1 | tail -"${#BATCH[@]}"; then
       INGESTED=$((INGESTED + ${#BATCH[@]}))
     else
-      echo "  ⚠️  Batch had errors (continuing)"
       FAILED=$((FAILED + ${#BATCH[@]}))
     fi
-    BATCH=()
   fi
-done
 
-# Remaining batch
-if [ "${#BATCH[@]}" -gt 0 ]; then
-  echo "  Ingesting final batch ($INGESTED+${#BATCH[@]}/$IMAGE_COUNT)..."
-  if assistonauts scout ingest "${BATCH[@]}" -w "$WORKSPACE" 2>&1 | tail -"${#BATCH[@]}"; then
-    INGESTED=$((INGESTED + ${#BATCH[@]}))
-  else
-    FAILED=$((FAILED + ${#BATCH[@]}))
-  fi
+  RAW_COUNT=$(ls "$WORKSPACE"/raw/articles/*.md 2>/dev/null | wc -l | tr -d ' ')
+  echo ""
+  echo "  Ingested: $INGESTED, Failed: $FAILED, Raw articles: $RAW_COUNT"
 fi
 
-RAW_COUNT=$(ls "$WORKSPACE"/raw/articles/*.md 2>/dev/null | wc -l)
-echo ""
-echo "  Ingested: $INGESTED, Failed: $FAILED, Raw articles: $RAW_COUNT"
 STAGE2_TIME=$SECONDS
 echo "  Time: ${STAGE2_TIME}s"
 echo ""
@@ -112,21 +121,19 @@ fi
 
 echo "━━━ Stage 3: Plan + Compile ━━━"
 
-WIKI_COUNT=$(find "$WORKSPACE/wiki" -name "*.md" -not -path "*/explorations/*" 2>/dev/null | wc -l)
+WIKI_COUNT=$(find "$WORKSPACE/wiki" -name "*.md" -not -path "*/explorations/*" -not -path "*/exploration/*" 2>/dev/null | wc -l | tr -d ' ')
 if [ "$WIKI_COUNT" -gt 0 ]; then
-  echo "  $WIKI_COUNT wiki articles already exist — skipping compilation."
+  echo "  ✓ $WIKI_COUNT wiki articles already exist — skipping."
 else
   echo "  Compiler will analyze raw sources and produce wiki articles."
   echo ""
   assistonauts plan --execute -w "$WORKSPACE" 2>&1 | tail -20
-  WIKI_COUNT=$(find "$WORKSPACE/wiki" -name "*.md" -not -path "*/explorations/*" 2>/dev/null | wc -l)
+  WIKI_COUNT=$(find "$WORKSPACE/wiki" -name "*.md" -not -path "*/explorations/*" -not -path "*/exploration/*" 2>/dev/null | wc -l | tr -d ' ')
 fi
 
-SUMMARY_COUNT=$(find "$WORKSPACE/wiki" -name "*.summary.json" 2>/dev/null | wc -l)
-echo ""
-echo "  Wiki articles: $WIKI_COUNT"
-echo "  Summaries: $SUMMARY_COUNT"
+SUMMARY_COUNT=$(find "$WORKSPACE/wiki" -name "*.summary.json" 2>/dev/null | wc -l | tr -d ' ')
 STAGE3_TIME=$((SECONDS - STAGE2_TIME))
+echo "  Wiki articles: $WIKI_COUNT, Summaries: $SUMMARY_COUNT"
 echo "  Time: ${STAGE3_TIME}s"
 echo ""
 
@@ -139,7 +146,28 @@ fi
 
 echo "━━━ Stage 4: Index (FTS + Embeddings) ━━━"
 
-assistonauts index -w "$WORKSPACE" 2>&1 | tail -10
+# Check if all wiki articles are already indexed
+DB_PATH="$WORKSPACE/index/assistonauts.db"
+if [ -f "$DB_PATH" ]; then
+  INDEXED_COUNT=$(python3 -c "
+import sqlite3, sys
+try:
+    conn = sqlite3.connect('$DB_PATH')
+    count = conn.execute('SELECT COUNT(*) FROM articles').fetchone()[0]
+    print(count)
+except Exception:
+    print(0)
+" 2>/dev/null | tr -d ' ')
+else
+  INDEXED_COUNT=0
+fi
+
+if [ "$INDEXED_COUNT" -ge "$WIKI_COUNT" ] && [ "$INDEXED_COUNT" -gt 0 ]; then
+  echo "  ✓ $INDEXED_COUNT articles already indexed (≥ $WIKI_COUNT wiki articles) — skipping."
+else
+  echo "  $INDEXED_COUNT indexed, $WIKI_COUNT wiki articles — indexing..."
+  assistonauts index -w "$WORKSPACE" 2>&1 | tail -10
+fi
 
 STAGE4_TIME=$((SECONDS - STAGE2_TIME - STAGE3_TIME))
 echo "  Time: ${STAGE4_TIME}s"
@@ -149,11 +177,19 @@ echo ""
 
 echo "━━━ Stage 5: Curate ━━━"
 
-assistonauts curate -w "$WORKSPACE" 2>&1 | tail -5
-
-echo ""
-echo "  Structural proposals:"
-assistonauts curate --proposals -w "$WORKSPACE" 2>&1 | tail -10
+# Check if cross-references already exist (look for "See Also" sections)
+SEE_ALSO_COUNT=$(grep -rl "## See Also" "$WORKSPACE/wiki/" 2>/dev/null | wc -l | tr -d ' ')
+if [ "$SEE_ALSO_COUNT" -gt 0 ]; then
+  echo "  ✓ $SEE_ALSO_COUNT articles already have cross-references — skipping."
+  echo ""
+  echo "  Structural proposals:"
+  assistonauts curate --proposals -w "$WORKSPACE" 2>&1 | tail -10
+else
+  assistonauts curate -w "$WORKSPACE" 2>&1 | tail -5
+  echo ""
+  echo "  Structural proposals:"
+  assistonauts curate --proposals -w "$WORKSPACE" 2>&1 | tail -10
+fi
 
 STAGE5_TIME=$((SECONDS - STAGE2_TIME - STAGE3_TIME - STAGE4_TIME))
 echo ""
@@ -182,7 +218,6 @@ for q in "${QUERIES[@]}"; do
   OUTPUT=$(assistonauts explore -w "$WORKSPACE" --query "$q" 2>&1)
   EXIT_CODE=$?
   if [ "$EXIT_CODE" -eq 0 ] && [ -n "$OUTPUT" ]; then
-    # Show first 5 lines of answer
     echo "$OUTPUT" | head -5 | sed 's/^/     /'
     echo "     ..."
     QUERY_PASS=$((QUERY_PASS + 1))
@@ -208,7 +243,7 @@ assistonauts explore -w "$WORKSPACE" \
   --save 2>&1 | tail -5
 set -e
 
-EXPLORATION_COUNT=$(find "$WORKSPACE/wiki/explorations" -name "*.md" 2>/dev/null | wc -l)
+EXPLORATION_COUNT=$(find "$WORKSPACE/wiki/explorations" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
 echo "  Filed explorations: $EXPLORATION_COUNT"
 echo ""
 
@@ -238,20 +273,20 @@ verify() {
 verify "test -d '$WORKSPACE/.assistonauts'" \
   "Workspace initialized"
 
-verify "test $(ls '$WORKSPACE'/raw/articles/*.md 2>/dev/null | wc -l) -ge 10" \
-  "At least 10 raw articles ingested"
+verify "test $RAW_COUNT -ge 10" \
+  "At least 10 raw articles ingested ($RAW_COUNT)"
 
-verify "test $(find '$WORKSPACE/wiki' -name '*.md' -not -path '*/explorations/*' 2>/dev/null | wc -l) -ge 1" \
-  "At least 1 wiki article compiled"
+verify "test $WIKI_COUNT -ge 1" \
+  "At least 1 wiki article compiled ($WIKI_COUNT)"
 
 verify "test -f '$WORKSPACE/index/assistonauts.db'" \
   "Archivist database exists"
 
 verify "test $QUERY_PASS -ge 3" \
-  "At least 3 Explorer queries succeeded"
+  "At least 3 Explorer queries succeeded ($QUERY_PASS/$((QUERY_PASS + QUERY_FAIL)))"
 
-verify "test $(find '$WORKSPACE/wiki/explorations' -name '*.md' 2>/dev/null | wc -l) -ge 1" \
-  "At least 1 exploration filed"
+verify "test $EXPLORATION_COUNT -ge 1" \
+  "At least 1 exploration filed ($EXPLORATION_COUNT)"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
