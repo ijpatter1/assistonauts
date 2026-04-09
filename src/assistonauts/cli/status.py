@@ -46,7 +46,12 @@ def status(workspace: Path) -> None:
     indexed_count = 0
     total_words = 0
     if db_path.exists():
-        archivist = Archivist(workspace)
+        from assistonauts.archivist.embeddings import get_embedding_dimensions
+        from assistonauts.config.loader import load_config
+
+        config = load_config(workspace)
+        dims = get_embedding_dimensions(config.embedding)
+        archivist = Archivist(workspace, embedding_dimensions=dims)
         indexed_articles = archivist.db.list_articles()
         indexed_count = len(indexed_articles)
         total_words = sum(int(a.get("word_count", 0)) for a in indexed_articles)

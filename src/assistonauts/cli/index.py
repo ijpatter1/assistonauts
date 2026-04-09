@@ -56,7 +56,13 @@ def index(workspace: Path, reindex: bool, embeddings: bool) -> None:
         console.print("Indexed: 0, Skipped: 0")
         return
 
-    archivist = Archivist(workspace)
+    # Load config for embedding dimensions
+    from assistonauts.archivist.embeddings import get_embedding_dimensions
+    from assistonauts.config.loader import load_config
+
+    config = load_config(workspace)
+    dims = get_embedding_dimensions(config.embedding)
+    archivist = Archivist(workspace, embedding_dimensions=dims)
 
     # Set up embedding client if requested
     embedding_client = None

@@ -128,7 +128,7 @@ class TestCurateCommand:
         monkeypatch.setattr(
             curate_mod,
             "Archivist",
-            lambda workspace: FakeArchivist(),
+            lambda workspace, embedding_dimensions=384: FakeArchivist(),
         )
 
         runner = CliRunner()

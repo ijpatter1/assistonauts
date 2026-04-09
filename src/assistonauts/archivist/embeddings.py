@@ -198,11 +198,14 @@ class LiteLLMEmbeddingClient(EmbeddingClient):
         return self._call_litellm([data_uri])[0]
 
     def embed_multimodal(self, parts: list[dict[str, object]]) -> list[float]:
-        """Generate embeddings for interleaved text + binary parts.
+        """Embed multiple parts and return the first part's embedding.
 
         Each part is {"text": "..."} or {"data": b"...", "mime_type": "..."}.
-        Passes all parts as separate inputs via litellm; returns the
-        first embedding. Requires a multimodal model (e.g. gemini/).
+        Parts are embedded independently via litellm's batch API — this does
+        NOT produce a single joint embedding from interleaved content.
+        Returns the embedding of the first part.
+
+        Requires a multimodal model (e.g. gemini/).
         """
         import base64
 
@@ -212,10 +215,28 @@ class LiteLLMEmbeddingClient(EmbeddingClient):
                 inputs.append(str(part["text"]))
             elif "data" in part and "mime_type" in part:
                 raw = part["data"]
-                assert isinstance(raw, bytes)
+                if not isinstance(raw, bytes):
+                    raise TypeError(
+                        f"Expected bytes for 'data', got {type(raw).__name__}"
+                    )
                 b64 = base64.b64encode(raw).decode("ascii")
                 inputs.append(f"data:{part['mime_type']};base64,{b64}")
+        if not inputs:
+            raise ValueError("No valid parts provided to embed_multimodal")
         return self._call_litellm(inputs)[0]
+
+
+def get_embedding_dimensions(config: EmbeddingConfig) -> int:
+    """Get the embedding dimensions from the active provider config.
+
+    Returns 768 (Gemini default) if no provider is configured.
+    """
+    if not config.active:
+        return 768
+    provider_config = config.providers.get(config.active)
+    if not provider_config:
+        return 768
+    return provider_config.dimensions or 768
 
 
 def create_embedding_client(config: EmbeddingConfig) -> EmbeddingClient | None:

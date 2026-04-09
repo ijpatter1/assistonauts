@@ -97,6 +97,24 @@ class TestLiteLLMMultimodal:
             result = client.embed_multimodal([{"text": "hello"}])
         assert result == [0.1, 0.2]
 
+    def test_embed_multimodal_empty_parts_raises(self) -> None:
+        """embed_multimodal() with empty parts should raise ValueError."""
+        client = LiteLLMEmbeddingClient(
+            model="gemini/gemini-embedding-2-preview",
+            dimensions=2,
+        )
+        with pytest.raises(ValueError, match="No valid parts"):
+            client.embed_multimodal([])
+
+    def test_embed_multimodal_invalid_data_type_raises(self) -> None:
+        """embed_multimodal() with non-bytes data should raise TypeError."""
+        client = LiteLLMEmbeddingClient(
+            model="gemini/gemini-embedding-2-preview",
+            dimensions=2,
+        )
+        with pytest.raises(TypeError, match="Expected bytes"):
+            client.embed_multimodal([{"data": "not bytes", "mime_type": "image/png"}])
+
     def test_embed_uses_call_litellm(self) -> None:
         """embed() should use _call_litellm internally."""
         client = LiteLLMEmbeddingClient(
@@ -135,6 +153,52 @@ class TestLiteLLMMultimodal:
             input=["test"],
             api_base="http://custom:8080",
         )
+
+
+class TestGetEmbeddingDimensions:
+    """Test the get_embedding_dimensions helper."""
+
+    def test_gemini_config_returns_768(self) -> None:
+        from assistonauts.archivist.embeddings import get_embedding_dimensions
+
+        config = EmbeddingConfig(
+            active="gemini",
+            providers={
+                "gemini": EmbeddingProviderConfig(
+                    model="gemini-embedding-2-preview", dimensions=768
+                )
+            },
+        )
+        assert get_embedding_dimensions(config) == 768
+
+    def test_ollama_config_returns_384(self) -> None:
+        from assistonauts.archivist.embeddings import get_embedding_dimensions
+
+        config = EmbeddingConfig(
+            active="ollama",
+            providers={
+                "ollama": EmbeddingProviderConfig(
+                    model="nomic-embed-text", dimensions=384
+                )
+            },
+        )
+        assert get_embedding_dimensions(config) == 384
+
+    def test_empty_config_defaults_to_768(self) -> None:
+        from assistonauts.archivist.embeddings import get_embedding_dimensions
+
+        assert get_embedding_dimensions(EmbeddingConfig()) == 768
+
+    def test_no_dimensions_defaults_to_768(self) -> None:
+        from assistonauts.archivist.embeddings import get_embedding_dimensions
+
+        config = EmbeddingConfig(
+            active="gemini",
+            providers={
+                "gemini": EmbeddingProviderConfig(model="gemini-embedding-2-preview")
+            },
+        )
+        assert get_embedding_dimensions(config) == 768
 
 
 class TestEmbeddingClientABCMultimodal:
