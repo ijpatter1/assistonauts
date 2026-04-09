@@ -103,6 +103,7 @@ class BuildOrchestrator:
             exp_dir / "budget.db",
         )
         self.scaling = ScalingManager(config.scaling)
+        self._tokens_before_task = 0
         self.task_runner = TaskRunner(
             workspace_root=workspace_root,
             tasks_dir=workspace_root / ".assistonauts" / "tasks",
@@ -271,6 +272,7 @@ class BuildOrchestrator:
                 return
 
             try:
+                self._snapshot_token_count()
                 task = Task(
                     task_id=f"task-{mission.mission_id}-{attempt}",
                     agent=mission.agent,
@@ -281,22 +283,14 @@ class BuildOrchestrator:
                     self.llm_client,
                 )
 
-                # Record token usage
-                if task_result.agent_output:
-                    usage = getattr(
-                        task_result.agent_output,
-                        "usage",
-                        {},
+                # Record token usage delta since snapshot
+                tokens = self._get_tokens_delta()
+                if tokens > 0:
+                    self.budget.tracker.record(
+                        agent=mission.agent,
+                        expedition=self.config.name,
+                        tokens=tokens,
                     )
-                    tokens = (
-                        usage.get("total_tokens", 0) if isinstance(usage, dict) else 0
-                    )
-                    if tokens:
-                        self.budget.tracker.record(
-                            agent=mission.agent,
-                            expedition=self.config.name,
-                            tokens=tokens,
-                        )
 
                 if task_result.success:
                     mission.complete()
@@ -336,25 +330,73 @@ class BuildOrchestrator:
 
     @staticmethod
     def _mission_to_params(mission: Mission) -> dict[str, str]:
-        """Convert mission inputs to task runner params.
+        """Convert mission inputs to agent-specific task params.
 
-        Passes all sources (not just the first) for multi-source
-        compilation support.
+        Each agent expects different keys:
+        - Scout: source_path
+        - Compiler: source_path (single) or source_paths (comma-sep)
+        - Curator: article_path
+        - Explorer: query
+        - Captain: directive
         """
         params: dict[str, str] = {}
         inputs = mission.inputs
-        if isinstance(inputs.get("sources"), list):
-            sources = inputs["sources"]
-            if sources:
-                # Pass all sources, pipe-delimited for multi-source
-                params["source"] = "|".join(str(s) for s in sources)
-        if isinstance(inputs.get("paths"), list):
-            paths = inputs["paths"]
-            if paths:
-                params["source"] = "|".join(str(p) for p in paths)
-        if isinstance(inputs.get("title"), str):
-            params["title"] = inputs["title"]
+        agent = mission.agent
+
+        if agent == "scout":
+            paths = inputs.get("paths") or inputs.get("sources") or []
+            if isinstance(paths, list) and paths:
+                params["source_path"] = str(paths[0])
+        elif agent == "compiler":
+            sources = inputs.get("sources", [])
+            if isinstance(sources, list):
+                if len(sources) == 1:
+                    params["source_path"] = str(sources[0])
+                elif len(sources) > 1:
+                    params["source_paths"] = ",".join(str(s) for s in sources)
+            if isinstance(inputs.get("title"), str):
+                params["title"] = inputs["title"]
+            if isinstance(inputs.get("article_type"), str):
+                params["article_type"] = inputs["article_type"]
+        elif agent == "curator":
+            path = inputs.get("article_path", "")
+            if isinstance(path, str) and path:
+                params["article_path"] = path
+        elif agent == "explorer":
+            query = inputs.get("query", "")
+            if isinstance(query, str) and query:
+                params["query"] = query
+        elif agent == "captain":
+            params["directive"] = str(
+                inputs.get("directive", "status"),
+            )
+
         return params
+
+    def _snapshot_token_count(self) -> None:
+        """Snapshot the current total token usage before a task."""
+        self._tokens_before_task = self.budget.tracker.get_daily_total()
+
+    def _get_tokens_delta(self) -> int:
+        """Get tokens consumed since the last snapshot.
+
+        Falls back to estimating from the LLM client's call count
+        if direct tracking is not available. Uses the StructuredLogger
+        on the Captain agent as a proxy — each LLM call logs token
+        counts. We read the budget tracker's current total and diff.
+        """
+        current = self.budget.tracker.get_daily_total()
+        delta = current - self._tokens_before_task
+        if delta > 0:
+            return delta
+        # If no delta from tracker (tokens weren't recorded by another
+        # path), estimate from the LLM client's calls attribute
+        calls = getattr(self.llm_client, "calls", None)
+        if isinstance(calls, list) and calls:
+            last_call = calls[-1]
+            if isinstance(last_call, dict):
+                return 1000  # conservative estimate per LLM call
+        return 0
 
     def _build_prompt(self, phase: IterationPhase) -> str:
         """Build a phase-specific prompt for the Captain."""

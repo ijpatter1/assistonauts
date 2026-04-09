@@ -395,3 +395,109 @@ class TestBuildExecution:
         prompt = client.calls[0]["messages"][0]["content"]
         assert "Test Article" in prompt
         assert "An article about testing" in prompt
+
+    def test_plan_yaml_written(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        client = FakeLLMClient(responses=["no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        orch.plan_iteration(IterationPhase.DISCOVERY)
+
+        plan_path = workspace / "expeditions" / "test-exp" / "plan.yaml"
+        assert plan_path.exists()
+        import yaml
+
+        data = yaml.safe_load(plan_path.read_text())
+        assert data["expedition"] == "test-exp"
+        assert len(data["iterations"]) == 1
+        assert data["iterations"][0]["phase"] == "discovery"
+
+    def test_build_report_written(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        client = FakeLLMClient(responses=["no yaml"] * 3)
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        orch.run_build()
+
+        report_path = workspace / "expeditions" / "test-exp" / "build-report.md"
+        assert report_path.exists()
+        content = report_path.read_text()
+        assert "test-exp" in content
+        assert "Discovery" in content
+        assert "Structuring" in content
+        assert "Refinement" in content
+
+    def test_mission_to_params_scout(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        from assistonauts.expeditions.orchestrator import (
+            BuildOrchestrator,
+        )
+        from assistonauts.missions.models import Mission
+
+        m = Mission(
+            mission_id="test",
+            agent="scout",
+            mission_type="ingest",
+            inputs={"paths": ["/tmp/a.pdf", "/tmp/b.pdf"]},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = BuildOrchestrator._mission_to_params(m)
+        assert params["source_path"] == "/tmp/a.pdf"
+
+    def test_mission_to_params_compiler_multi(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        from assistonauts.missions.models import Mission
+
+        m = Mission(
+            mission_id="test",
+            agent="compiler",
+            mission_type="compile",
+            inputs={
+                "sources": ["a.md", "b.md"],
+                "title": "Test",
+            },
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = BuildOrchestrator._mission_to_params(m)
+        assert params["source_paths"] == "a.md,b.md"
+        assert params["title"] == "Test"
+
+    def test_mission_to_params_curator(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        from assistonauts.missions.models import Mission
+
+        m = Mission(
+            mission_id="test",
+            agent="curator",
+            mission_type="cross_reference",
+            inputs={"article_path": "wiki/concept/test.md"},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = BuildOrchestrator._mission_to_params(m)
+        assert params["article_path"] == "wiki/concept/test.md"
