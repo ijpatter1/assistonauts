@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
+import yaml
+
 from assistonauts.agents.base import LLMClientProtocol
 from assistonauts.agents.captain import CaptainAgent, parse_plan_response
 from assistonauts.expeditions.budget import BudgetEnforcer
@@ -131,7 +133,13 @@ class BuildOrchestrator:
         )
 
         missions, dependencies = parse_plan_response(response)
-        graph = build_graph_from_plan(missions, dependencies)
+        if not missions:
+            logger.warning(
+                "No missions planned for %s iteration — "
+                "the LLM response could not be parsed into a valid plan",
+                phase.value,
+            )
+        graph = build_graph_from_plan(dependencies)
 
         iteration = BuildIteration(
             phase=phase,
@@ -140,6 +148,10 @@ class BuildOrchestrator:
             graph=graph,
         )
         self._iterations.append(iteration)
+
+        # Write plan.yaml artifact
+        self._write_plan_yaml(phase, missions, dependencies)
+
         return iteration
 
     def execute_iteration(
@@ -229,70 +241,116 @@ class BuildOrchestrator:
 
         return result
 
-    def _execute_mission(self, mission: Mission) -> None:
-        """Execute a single mission via the TaskRunner."""
-        mission.start()
-        self.ledger.save(mission)
+    def _execute_mission(
+        self,
+        mission: Mission,
+        max_retries: int = 3,
+    ) -> None:
+        """Execute a single mission via the TaskRunner.
 
-        # Acquire a scaling slot
-        instance_id = self.scaling.acquire(mission.agent)
-        if instance_id is None:
-            mission.fail(
-                error_type="transient",
-                error_message=f"No available {mission.agent} instance",
-            )
-            self.ledger.save(mission)
-            return
+        Retries transient failures up to max_retries times.
+        Deterministic failures fail-fast with no retry.
+        """
+        for attempt in range(max_retries + 1):
+            if mission.status == MissionStatus.PENDING:
+                mission.start()
+                self.ledger.save(mission)
 
-        try:
-            task = Task(
-                task_id=f"task-{mission.mission_id}",
-                agent=mission.agent,
-                params=self._mission_to_params(mission),
-            )
-            task_result = self.task_runner.run(task, self.llm_client)
-
-            # Record token usage from the task execution
-            if task_result.agent_output:
-                usage = getattr(task_result.agent_output, "usage", {})
-                tokens = usage.get("total_tokens", 0) if isinstance(usage, dict) else 0
-                if tokens:
-                    self.budget.tracker.record(
-                        agent=mission.agent,
-                        expedition=self.config.name,
-                        tokens=tokens,
-                    )
-
-            if task_result.success:
-                mission.complete()
-            else:
+            instance_id = self.scaling.acquire(mission.agent)
+            if instance_id is None:
                 mission.fail(
-                    error_type=task_result.error_type or "deterministic",
-                    error_message=task_result.error_message,
-                    retries=task_result.retry_count,
+                    error_type="transient",
+                    error_message=f"No available {mission.agent} instance",
+                    retries=attempt,
                 )
-        except Exception as exc:
-            mission.fail(
-                error_type="transient",
-                error_message=str(exc),
-            )
-        finally:
-            self.scaling.release(mission.agent, instance_id)
-            self.ledger.save(mission)
+                self.ledger.save(mission)
+                if attempt < max_retries:
+                    mission.retry()
+                    continue
+                return
+
+            try:
+                task = Task(
+                    task_id=f"task-{mission.mission_id}-{attempt}",
+                    agent=mission.agent,
+                    params=self._mission_to_params(mission),
+                )
+                task_result = self.task_runner.run(
+                    task,
+                    self.llm_client,
+                )
+
+                # Record token usage
+                if task_result.agent_output:
+                    usage = getattr(
+                        task_result.agent_output,
+                        "usage",
+                        {},
+                    )
+                    tokens = (
+                        usage.get("total_tokens", 0) if isinstance(usage, dict) else 0
+                    )
+                    if tokens:
+                        self.budget.tracker.record(
+                            agent=mission.agent,
+                            expedition=self.config.name,
+                            tokens=tokens,
+                        )
+
+                if task_result.success:
+                    mission.complete()
+                    self.ledger.save(mission)
+                    return
+
+                error_type = task_result.error_type or "deterministic"
+                mission.fail(
+                    error_type=error_type,
+                    error_message=task_result.error_message,
+                    retries=attempt,
+                )
+                self.ledger.save(mission)
+
+                # Deterministic failures: no retry
+                if error_type == "deterministic":
+                    return
+                # Transient failures: retry if attempts remain
+                if attempt < max_retries:
+                    mission.retry()
+                    continue
+                return
+
+            except Exception as exc:
+                mission.fail(
+                    error_type="transient",
+                    error_message=str(exc),
+                    retries=attempt,
+                )
+                self.ledger.save(mission)
+                if attempt < max_retries:
+                    mission.retry()
+                    continue
+                return
+            finally:
+                self.scaling.release(mission.agent, instance_id)
 
     @staticmethod
     def _mission_to_params(mission: Mission) -> dict[str, str]:
-        """Convert mission inputs to task runner params."""
+        """Convert mission inputs to task runner params.
+
+        Passes all sources (not just the first) for multi-source
+        compilation support.
+        """
         params: dict[str, str] = {}
         inputs = mission.inputs
         if isinstance(inputs.get("sources"), list):
             sources = inputs["sources"]
             if sources:
-                params["source"] = str(sources[0])
+                # Pass all sources, pipe-delimited for multi-source
+                params["source"] = "|".join(str(s) for s in sources)
         if isinstance(inputs.get("paths"), list):
             paths = inputs["paths"]
             if paths:
-                params["source"] = str(paths[0])
+                params["source"] = "|".join(str(p) for p in paths)
         if isinstance(inputs.get("title"), str):
             params["title"] = inputs["title"]
         return params
@@ -359,6 +417,41 @@ class BuildOrchestrator:
         for ls in self.config.sources.local:
             parts.append(f"Local: {ls.path} ({ls.pattern})")
         return "; ".join(parts) if parts else "No sources configured"
+
+    def _write_plan_yaml(
+        self,
+        phase: IterationPhase,
+        missions: list[Mission],
+        dependencies: list[tuple[str, str]],
+    ) -> None:
+        """Write the plan artifact to expeditions/<name>/plan.yaml."""
+        exp_dir = self.workspace_root / "expeditions" / self.config.name
+        plan_path = exp_dir / "plan.yaml"
+
+        # Append to existing plan or create new
+        existing: list[dict[str, object]] = []
+        if plan_path.exists():
+            try:
+                data = yaml.safe_load(plan_path.read_text())
+                if isinstance(data, dict):
+                    existing = data.get("iterations", [])
+            except yaml.YAMLError:
+                pass
+
+        iteration_data = {
+            "phase": phase.value,
+            "missions": [m.mission_id for m in missions],
+            "dependencies": [{"from": d[0], "to": d[1]} for d in dependencies],
+        }
+        existing.append(iteration_data)
+
+        plan_data = {
+            "expedition": self.config.name,
+            "iterations": existing,
+        }
+        plan_path.write_text(
+            yaml.dump(plan_data, default_flow_style=False),
+        )
 
     def _load_article_summaries(self) -> list[tuple[str, str]]:
         """Load compiled article summaries from the wiki directory."""

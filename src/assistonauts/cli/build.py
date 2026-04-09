@@ -81,7 +81,15 @@ def build(expedition_name: str, workspace: Path) -> None:
     )
 
     console.print("Running build phase (Discovery → Structuring → Refinement)...\n")
-    result = orchestrator.run_build()
+
+    try:
+        result = orchestrator.run_build()
+    except Exception as exc:
+        console.print(
+            f"[red]Build failed:[/red] {exc}\n"
+            "Check LLM provider configuration and API keys.",
+        )
+        return
 
     console.print(
         f"\n[bold]Build complete:[/bold] "
@@ -91,8 +99,11 @@ def build(expedition_name: str, workspace: Path) -> None:
 
     for iteration in result.iterations:
         status = "done" if iteration.is_complete() else "partial"
+        label = iteration.phase.value
+        if iteration.missions_planned == 0:
+            label += " (no missions planned)"
         console.print(
-            f"  {iteration.phase.value}: "
+            f"  {label}: "
             f"{iteration.missions_completed}/{iteration.missions_planned} "
             f"({status})",
         )

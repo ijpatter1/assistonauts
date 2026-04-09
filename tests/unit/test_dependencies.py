@@ -99,7 +99,7 @@ class TestBuildGraphFromPlan:
             _make_mission("m3", agent="compiler"),
         ]
         deps = [("m1", "m2"), ("m1", "m3")]
-        graph = build_graph_from_plan(missions, deps)
+        graph = build_graph_from_plan(deps)
         order = graph.topological_order(
             [m.mission_id for m in missions],
         )
@@ -107,7 +107,7 @@ class TestBuildGraphFromPlan:
         assert order.index("m1") < order.index("m3")
 
     def test_empty(self) -> None:
-        graph = build_graph_from_plan([], [])
+        graph = build_graph_from_plan([])
         assert graph.topological_order([]) == []
 
     def test_cascading_chain(self) -> None:
@@ -121,7 +121,7 @@ class TestBuildGraphFromPlan:
             ("compile", "reindex"),
             ("reindex", "link"),
         ]
-        graph = build_graph_from_plan(missions, deps)
+        graph = build_graph_from_plan(deps)
         order = graph.topological_order(
             [m.mission_id for m in missions],
         )

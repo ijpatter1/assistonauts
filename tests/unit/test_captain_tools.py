@@ -314,6 +314,18 @@ class TestBudgetTracker:
         )
         assert tracker.is_exceeded()
 
+    def test_budget_exceeded_at_exact_limit(
+        self,
+        tracker: BudgetTracker,
+    ) -> None:
+        """Hard cap triggers at exactly the limit, not just above."""
+        tracker.record(
+            agent="compiler",
+            expedition="e",
+            tokens=100_000,
+        )
+        assert tracker.is_exceeded()
+
     def test_remaining_budget(self, tracker: BudgetTracker) -> None:
         tracker.record(agent="compiler", expedition="e", tokens=40_000)
         assert tracker.remaining() == 60_000

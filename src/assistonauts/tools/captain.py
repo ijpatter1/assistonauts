@@ -322,7 +322,7 @@ class BudgetTracker:
         return total >= self.daily_token_limit * self.warning_threshold
 
     def is_exceeded(self, date: str | None = None) -> bool:
-        return self.get_daily_total(date) > self.daily_token_limit
+        return self.get_daily_total(date) >= self.daily_token_limit
 
     def remaining(self, date: str | None = None) -> int:
         return max(

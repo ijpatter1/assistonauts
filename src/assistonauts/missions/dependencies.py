@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from assistonauts.missions.models import Mission
-
 
 class DependencyGraph:
     """Directed acyclic graph for mission dependency resolution.
@@ -82,10 +80,9 @@ class DependencyGraph:
 
 
 def build_graph_from_plan(
-    missions: list[Mission],
     dependencies: list[tuple[str, str]],
 ) -> DependencyGraph:
-    """Build a DependencyGraph from a Captain plan result.
+    """Build a DependencyGraph from dependency tuples.
 
     dependencies is a list of (depends_on, dependent) tuples.
     """
