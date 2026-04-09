@@ -278,7 +278,7 @@ class CuratorAgent(Agent):
             entry["retrieval"] = retrieval_log.to_dict()
 
         with open(log_path, "a") as f:
-            f.write(json.dumps(entry) + "\n")
+            f.write(json.dumps(entry, default=str) + "\n")
 
     def _write_see_also(self, path: Path, slugs: list[str]) -> None:
         """Append wiki-links to an article's See Also section via write_file."""

@@ -39,6 +39,9 @@ cache:
 
 _GITIGNORE = """\
 .assistonauts/cache/
+.assistonauts/logs/
+.assistonauts/explorer/
+.assistonauts/curator/
 index/assistonauts.db
 __pycache__/
 *.pyc

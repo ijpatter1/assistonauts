@@ -270,6 +270,18 @@ class CompilerAgent(Agent):
         self._expedition_scope = expedition_scope
         self._setup_persistent_logger(workspace_root)
 
+    def _log_llm_response(self, response: object) -> None:
+        """Log an LLM call that bypassed call_llm() (e.g., summary, plan)."""
+        assert self.logger is not None
+        usage = getattr(response, "usage", {})
+        p_tokens = usage.get("prompt_tokens", 0) if isinstance(usage, dict) else 0
+        c_tokens = usage.get("completion_tokens", 0) if isinstance(usage, dict) else 0
+        self.logger.log_llm_call(
+            model=getattr(response, "model", "unknown"),
+            prompt_tokens=p_tokens,
+            completion_tokens=c_tokens,
+        )
+
     def compile(
         self,
         source_path: Path,
@@ -386,6 +398,7 @@ class CompilerAgent(Agent):
             messages=[{"role": "user", "content": summary_msg}],
             system=_SUMMARY_SYSTEM_PROMPT,
         )
+        self._log_llm_response(summary_response)
         content_summary = summary_response.content
 
         # Persist content summary alongside the article
@@ -547,6 +560,7 @@ class CompilerAgent(Agent):
             messages=[{"role": "user", "content": summary_msg}],
             system=_SUMMARY_SYSTEM_PROMPT,
         )
+        self._log_llm_response(summary_response)
         content_summary = summary_response.content
 
         # Persist content summary

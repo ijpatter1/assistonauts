@@ -299,7 +299,7 @@ class ExplorerAgent(Agent):
             entry["retrieval"] = retrieval_log.to_dict()
 
         with open(log_path, "a") as f:
-            f.write(json.dumps(entry) + "\n")
+            f.write(json.dumps(entry, default=str) + "\n")
 
     def file_exploration(self, result: ExplorerResult) -> Path:
         """Save an exploration result to wiki/explorations/ with frontmatter.
