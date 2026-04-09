@@ -189,8 +189,8 @@ import re
 m = re.search(r'float\[(\d+)\]', sql)
 print(m.group(1) if m else '0')
 " 2>/dev/null || echo "0")
-  verify 'test "$EMBEDDING_DIM" -eq 768' \
-    "Embedding dimensions are 768 (Gemini default, got $EMBEDDING_DIM)"
+  verify 'test "$EMBEDDING_DIM" -eq 3072' \
+    "Embedding dimensions are 3072 (Gemini default, got $EMBEDDING_DIM)"
 else
   echo "  ⊘ Skipped embedding checks (GEMINI_API_KEY not set)"
 fi

@@ -229,14 +229,14 @@ class LiteLLMEmbeddingClient(EmbeddingClient):
 def get_embedding_dimensions(config: EmbeddingConfig) -> int:
     """Get the embedding dimensions from the active provider config.
 
-    Returns 768 (Gemini default) if no provider is configured.
+    Returns 3072 (Gemini Embedding 2 default) if no provider is configured.
     """
     if not config.active:
-        return 768
+        return 3072
     provider_config = config.providers.get(config.active)
     if not provider_config:
-        return 768
-    return provider_config.dimensions or 768
+        return 3072
+    return provider_config.dimensions or 3072
 
 
 def create_embedding_client(config: EmbeddingConfig) -> EmbeddingClient | None:
@@ -258,5 +258,5 @@ def create_embedding_client(config: EmbeddingConfig) -> EmbeddingClient | None:
     return LiteLLMEmbeddingClient(
         model=model,
         base_url=provider_config.base_url,
-        dimensions=provider_config.dimensions or 768,
+        dimensions=provider_config.dimensions or 3072,
     )

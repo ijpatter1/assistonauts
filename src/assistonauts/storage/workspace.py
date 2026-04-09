@@ -23,7 +23,7 @@ embedding:
   providers:
     gemini:
       model: gemini-embedding-2-preview
-      dimensions: 768
+      dimensions: 3072
     ollama:
       model: nomic-embed-text
       base_url: http://localhost:11434

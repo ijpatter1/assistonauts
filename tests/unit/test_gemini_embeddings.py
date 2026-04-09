@@ -158,18 +158,18 @@ class TestLiteLLMMultimodal:
 class TestGetEmbeddingDimensions:
     """Test the get_embedding_dimensions helper."""
 
-    def test_gemini_config_returns_768(self) -> None:
+    def test_gemini_config_returns_3072(self) -> None:
         from assistonauts.archivist.embeddings import get_embedding_dimensions
 
         config = EmbeddingConfig(
             active="gemini",
             providers={
                 "gemini": EmbeddingProviderConfig(
-                    model="gemini-embedding-2-preview", dimensions=768
+                    model="gemini-embedding-2-preview", dimensions=3072
                 )
             },
         )
-        assert get_embedding_dimensions(config) == 768
+        assert get_embedding_dimensions(config) == 3072
 
     def test_ollama_config_returns_384(self) -> None:
         from assistonauts.archivist.embeddings import get_embedding_dimensions
@@ -184,12 +184,12 @@ class TestGetEmbeddingDimensions:
         )
         assert get_embedding_dimensions(config) == 384
 
-    def test_empty_config_defaults_to_768(self) -> None:
+    def test_empty_config_defaults_to_3072(self) -> None:
         from assistonauts.archivist.embeddings import get_embedding_dimensions
 
-        assert get_embedding_dimensions(EmbeddingConfig()) == 768
+        assert get_embedding_dimensions(EmbeddingConfig()) == 3072
 
-    def test_no_dimensions_defaults_to_768(self) -> None:
+    def test_no_dimensions_defaults_to_3072(self) -> None:
         from assistonauts.archivist.embeddings import get_embedding_dimensions
 
         config = EmbeddingConfig(
@@ -198,7 +198,7 @@ class TestGetEmbeddingDimensions:
                 "gemini": EmbeddingProviderConfig(model="gemini-embedding-2-preview")
             },
         )
-        assert get_embedding_dimensions(config) == 768
+        assert get_embedding_dimensions(config) == 3072
 
 
 class TestEmbeddingClientABCMultimodal:
@@ -241,17 +241,17 @@ class TestCreateEmbeddingClientFactory:
             providers={
                 "gemini": EmbeddingProviderConfig(
                     model="gemini-embedding-2-preview",
-                    dimensions=768,
+                    dimensions=3072,
                 ),
             },
         )
         client = create_embedding_client(config)
         assert isinstance(client, LiteLLMEmbeddingClient)
         assert client._model == "gemini/gemini-embedding-2-preview"
-        assert client.dimensions == 768
+        assert client.dimensions == 3072
 
     def test_gemini_provider_default_dimensions(self) -> None:
-        """gemini provider without explicit dimensions should default to 768."""
+        """gemini provider without explicit dimensions should default to 3072."""
         config = EmbeddingConfig(
             active="gemini",
             providers={
@@ -260,7 +260,7 @@ class TestCreateEmbeddingClientFactory:
         )
         client = create_embedding_client(config)
         assert isinstance(client, LiteLLMEmbeddingClient)
-        assert client.dimensions == 768
+        assert client.dimensions == 3072
 
     def test_ollama_provider_creates_litellm_client(self) -> None:
         config = EmbeddingConfig(
