@@ -330,9 +330,11 @@ class ExplorerAgent(Agent):
         else:
             sources_yaml = "sources: []"
 
+        # Quote the title to prevent YAML injection from special characters
+        safe_title = result.query.replace('"', '\\"')
         frontmatter = (
             f"---\n"
-            f"title: {result.query}\n"
+            f'title: "{safe_title}"\n'
             f"type: exploration\n"
             f"{sources_yaml}\n"
             f"created_at: {date.today().isoformat()}\n"

@@ -58,7 +58,7 @@ _DIRECTORIES: list[str] = [
     "wiki/concept",
     "wiki/entity",
     "wiki/log",
-    "wiki/exploration",
+    "wiki/explorations",
     "index",
     "audits/findings",
     "expeditions",

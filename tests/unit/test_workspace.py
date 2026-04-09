@@ -39,7 +39,7 @@ class TestInitWorkspace:
         """init creates wiki/ subdirectories for article types."""
         init_workspace(tmp_workspace)
 
-        for sub in ["concept", "entity", "log", "exploration"]:
+        for sub in ["concept", "entity", "log", "explorations"]:
             assert (tmp_workspace / "wiki" / sub).is_dir(), f"Missing wiki/{sub}"
 
     def test_creates_audits_subdirectories(self, tmp_workspace: Path) -> None:
