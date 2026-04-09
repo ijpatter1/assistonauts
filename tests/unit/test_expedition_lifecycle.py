@@ -126,7 +126,24 @@ expedition:
         }
         config = ExpeditionConfig.from_dict(data)
         assert len(config.sources.local) == 1
-        # RSS and GitHub are parsed but not rejected
+
+    def test_unknown_source_types_warn(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="assistonauts.models.config"):
+            data = {
+                "name": "test",
+                "sources": {
+                    "local": [{"path": "/tmp", "pattern": "*.md"}],
+                    "rss": [{"url": "https://example.com"}],
+                    "github": [{"repo": "a/b"}, {"repo": "c/d"}],
+                },
+            }
+            ExpeditionConfig.from_dict(data)
+
+        assert any("rss" in r.message.lower() for r in caplog.records)
+        assert any("github" in r.message.lower() for r in caplog.records)
+        assert any("2 entries" in r.message for r in caplog.records)
 
 
 # --- Expedition directory creation ---

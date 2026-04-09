@@ -76,7 +76,8 @@ class Mission:
             msg = f"Cannot start mission in state {self.status.value}"
             raise ValueError(msg)
         self.status = MissionStatus.RUNNING
-        self.started_at = datetime.now(UTC)
+        if self.started_at is None:
+            self.started_at = datetime.now(UTC)
 
     def complete(self, verified_by: str = "") -> None:
         """Mark mission as completed.

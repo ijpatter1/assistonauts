@@ -80,6 +80,16 @@ def build(expedition_name: str, workspace: Path) -> None:
         llm_client=llm_client,
     )
 
+    # Enable orchestrator logging to console for progress feedback
+    import logging
+
+    orch_logger = logging.getLogger("assistonauts.expeditions.orchestrator")
+    if not orch_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("  %(message)s"))
+        orch_logger.addHandler(handler)
+        orch_logger.setLevel(logging.INFO)
+
     console.print("Running build phase (Discovery → Structuring → Refinement)...\n")
 
     try:

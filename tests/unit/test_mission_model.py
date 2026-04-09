@@ -388,3 +388,43 @@ class TestMissionSerialization:
         m.start()
         m.complete(verified_by="captain")
         assert "verified_by:captain" in m.checklist
+
+    def test_failure_record_roundtrip(self) -> None:
+        m = Mission(
+            mission_id="m-fail-rt",
+            agent="compiler",
+            mission_type="compile",
+            inputs={},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        m.start()
+        m.fail(
+            error_type="deterministic",
+            error_message="Context overflow: 210K tokens",
+            retries=0,
+        )
+        d = m.to_dict()
+        m2 = Mission.from_dict(d)
+        assert m2.status == MissionStatus.FAILED
+        assert m2.failure is not None
+        assert m2.failure.error_type == "deterministic"
+        assert m2.failure.error_message == "Context overflow: 210K tokens"
+        assert m2.failure.retries == 0
+        assert m2.failure.failed_at is not None
+
+    def test_started_at_preserved_on_retry(self) -> None:
+        m = Mission(
+            mission_id="m-retry",
+            agent="scout",
+            mission_type="ingest",
+            inputs={},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        m.start()
+        original_started = m.started_at
+        m.fail(error_type="transient", error_message="timeout")
+        m.retry()
+        m.start()
+        assert m.started_at == original_started

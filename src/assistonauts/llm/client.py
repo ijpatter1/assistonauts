@@ -89,6 +89,7 @@ class LLMClient:
         self._cache: LLMResponseCache | None = (
             LLMResponseCache(cache_path) if cache_path else None
         )
+        self.total_tokens_used: int = 0
 
     @property
     def mode(self) -> str:
@@ -151,6 +152,12 @@ class LLMClient:
                 content=response.content,
                 usage=response.usage,
             )
+
+        # Track cumulative token usage
+        if isinstance(response.usage, dict):
+            self.total_tokens_used += response.usage.get(
+                "prompt_tokens", 0
+            ) + response.usage.get("completion_tokens", 0)
 
         return response
 

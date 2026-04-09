@@ -105,7 +105,6 @@ class BuildOrchestrator:
             exp_dir / "budget.db",
         )
         self.scaling = ScalingManager(config.scaling)
-        self._tokens_before_task = 0
         self.task_runner = TaskRunner(
             workspace_root=workspace_root,
             tasks_dir=workspace_root / ".assistonauts" / "tasks",
@@ -193,6 +192,21 @@ class BuildOrchestrator:
             if budget_status.is_warning:
                 logger.warning("Budget warning: %s", budget_status.message)
 
+            # Check if auto-scaling would trigger
+            queue_depth = len(pending)
+            for agent_type in {
+                m.agent for m in iteration.missions if m.mission_id in pending
+            }:
+                if self.scaling.should_scale_up(
+                    agent_type,
+                    queue_depth,
+                ):
+                    logger.info(
+                        "Scale-up triggered for %s (queue: %d)",
+                        agent_type,
+                        queue_depth,
+                    )
+
             # Find ready missions
             ready = graph.ready_missions(pending, completed)
             if not ready:
@@ -205,6 +219,12 @@ class BuildOrchestrator:
 
             for mid in sorted(ready):
                 mission = next(m for m in iteration.missions if m.mission_id == mid)
+                logger.info(
+                    "Executing %s (%s/%s)",
+                    mission.mission_id,
+                    mission.agent,
+                    mission.mission_type,
+                )
                 self._execute_mission(mission)
 
                 if mission.status == MissionStatus.COMPLETED:
@@ -275,7 +295,11 @@ class BuildOrchestrator:
                 return
 
             try:
-                self._snapshot_token_count()
+                tokens_before = getattr(
+                    self.llm_client,
+                    "total_tokens_used",
+                    0,
+                )
                 task = Task(
                     task_id=f"task-{mission.mission_id}-{attempt}",
                     agent=mission.agent,
@@ -286,8 +310,13 @@ class BuildOrchestrator:
                     self.llm_client,
                 )
 
-                # Record token usage delta since snapshot
-                tokens = self._get_tokens_delta()
+                # Record actual token usage from LLM client
+                tokens_after = getattr(
+                    self.llm_client,
+                    "total_tokens_used",
+                    0,
+                )
+                tokens = tokens_after - tokens_before
                 if tokens > 0:
                     self.budget.tracker.record(
                         agent=mission.agent,
@@ -296,7 +325,11 @@ class BuildOrchestrator:
                     )
 
                 if task_result.success:
-                    mission.complete(verified_by=mission.agent)
+                    # Agent self-declares completion. Captain
+                    # verification against acceptance_criteria is a
+                    # separate step (LLM judgment call, wired when
+                    # Captain operations mode is implemented).
+                    mission.complete()
                     self.ledger.save(mission)
                     return
 
@@ -379,31 +412,6 @@ class BuildOrchestrator:
             )
 
         return params
-
-    def _snapshot_token_count(self) -> None:
-        """Snapshot the current total token usage before a task."""
-        self._tokens_before_task = self.budget.tracker.get_daily_total()
-
-    def _get_tokens_delta(self) -> int:
-        """Get tokens consumed since the last snapshot.
-
-        Falls back to estimating from the LLM client's call count
-        if direct tracking is not available. Uses the StructuredLogger
-        on the Captain agent as a proxy — each LLM call logs token
-        counts. We read the budget tracker's current total and diff.
-        """
-        current = self.budget.tracker.get_daily_total()
-        delta = current - self._tokens_before_task
-        if delta > 0:
-            return delta
-        # If no delta from tracker (tokens weren't recorded by another
-        # path), estimate from the LLM client's calls attribute
-        calls = getattr(self.llm_client, "calls", None)
-        if isinstance(calls, list) and calls:
-            last_call = calls[-1]
-            if isinstance(last_call, dict):
-                return 1000  # conservative estimate per LLM call
-        return 0
 
     def _build_prompt(self, phase: IterationPhase) -> str:
         """Build a phase-specific prompt for the Captain."""
@@ -511,9 +519,12 @@ class BuildOrchestrator:
             "expedition": self.config.name,
             "iterations": existing,
         }
-        plan_path.write_text(
-            yaml.dump(plan_data, default_flow_style=False),
-        )
+        try:
+            plan_path.write_text(
+                yaml.dump(plan_data, default_flow_style=False),
+            )
+        except OSError:
+            logger.warning("Failed to write plan.yaml — continuing")
 
     def _write_build_report(self, result: BuildPhaseResult) -> None:
         """Write a build report to expeditions/<name>/build-report.md."""
@@ -547,7 +558,10 @@ class BuildOrchestrator:
                 )
             lines.append("")
 
-        report_path.write_text("\n".join(lines))
+        try:
+            report_path.write_text("\n".join(lines))
+        except OSError:
+            logger.warning("Failed to write build report — continuing")
 
     def _load_article_summaries(self) -> list[tuple[str, str]]:
         """Load compiled article summaries from the wiki directory."""

@@ -113,6 +113,7 @@ class StationedConfig:
     triggers: dict[str, list[str] | dict[str, list[str] | str]] = field(
         default_factory=dict,
     )
+    reporting: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -218,6 +219,9 @@ class ExpeditionConfig:
             trigs = stationed_data.get("triggers", {})
             if isinstance(trigs, dict):
                 stationed.triggers = trigs
+            reporting = stationed_data.get("reporting", {})
+            if isinstance(reporting, dict):
+                stationed.reporting = reporting
 
         scaling_data = data.get("scaling", {})
         scaling = ScalingConfig()

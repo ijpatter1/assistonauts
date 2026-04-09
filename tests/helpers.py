@@ -32,6 +32,7 @@ class FakeLLMClient:
         self._responses = list(responses or ["default response"])
         self._call_count = 0
         self.calls: list[dict[str, object]] = []
+        self.total_tokens_used: int = 0
 
     def complete(
         self,
@@ -43,7 +44,9 @@ class FakeLLMClient:
         self.calls.append({"messages": messages, "model": model, "system": system})
         idx = min(self._call_count, len(self._responses) - 1)
         self._call_count += 1
-        return FakeResponse(self._responses[idx])
+        resp = FakeResponse(self._responses[idx])
+        self.total_tokens_used += 15  # prompt_tokens(10) + completion_tokens(5)
+        return resp
 
 
 class FakeEmbeddingClient(EmbeddingClient):

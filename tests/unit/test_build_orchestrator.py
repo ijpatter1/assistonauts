@@ -419,6 +419,31 @@ class TestBuildExecution:
         assert len(data["iterations"]) == 1
         assert data["iterations"][0]["phase"] == "discovery"
 
+    def test_corrupted_plan_yaml_recovery(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Corrupted plan.yaml is overwritten, not crash."""
+        client = FakeLLMClient(responses=["no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        # Write corrupted plan.yaml
+        plan_path = workspace / "expeditions" / "test-exp" / "plan.yaml"
+        plan_path.parent.mkdir(parents=True, exist_ok=True)
+        plan_path.write_text("{{{invalid yaml")
+
+        # Should not crash — overwrites with fresh data
+        orch.plan_iteration(IterationPhase.DISCOVERY)
+        import yaml
+
+        data = yaml.safe_load(plan_path.read_text())
+        assert data["expedition"] == "test-exp"
+
     def test_build_report_written(
         self,
         workspace: Path,
