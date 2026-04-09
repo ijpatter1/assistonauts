@@ -126,6 +126,18 @@ class TestExplorerQueryLogging:
         assert "passes_executed" in entry
         assert isinstance(entry["passes_executed"], list)
 
+    def test_log_entry_has_retrieval_log(self, indexed_workspace: Path) -> None:
+        """Log entry should include full retrieval log with pass details."""
+        explorer = _make_explorer(indexed_workspace)
+        explorer.explore("What are neural networks?")
+
+        log_path = indexed_workspace / ".assistonauts" / "explorer" / "queries.jsonl"
+        entry = json.loads(log_path.read_text().splitlines()[0])
+
+        assert "retrieval" in entry
+        assert "passes" in entry["retrieval"]
+        assert "total_articles" in entry["retrieval"]
+
     def test_failed_explore_still_logs(self, indexed_workspace: Path) -> None:
         """Even empty-KB queries should be logged."""
         # Use a workspace with no indexed articles

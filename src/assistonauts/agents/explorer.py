@@ -8,6 +8,7 @@ synthesizes answers with citations to specific wiki articles.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -16,7 +17,7 @@ from pathlib import Path
 from assistonauts.agents.base import Agent, LLMClientProtocol
 from assistonauts.archivist.embeddings import EmbeddingClient
 from assistonauts.archivist.service import Archivist
-from assistonauts.rag.multi_pass import MultiPassRetriever
+from assistonauts.rag.multi_pass import MultiPassRetriever, RetrievalLog
 from assistonauts.tools.explorer import (
     Citation,
     ContextBudget,
@@ -268,38 +269,44 @@ class ExplorerAgent(Agent):
         self,
         result: ExplorerResult,
         passes_executed: list[str] | None = None,
-        retrieval_log: object | None = None,
+        retrieval_log: RetrievalLog | None = None,
     ) -> None:
         """Append a query record to .assistonauts/explorer/queries.jsonl.
 
         Every explore() call is logged automatically for audit trail,
         regardless of whether the user saves the exploration.
+        Best-effort — logging failures never crash the primary operation.
         """
-        log_dir = self._workspace_root / ".assistonauts" / "explorer"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_path = log_dir / "queries.jsonl"
+        try:
+            log_dir = self._workspace_root / ".assistonauts" / "explorer"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / "queries.jsonl"
 
-        entry: dict[str, object] = {
-            "timestamp": datetime.now(UTC).isoformat(),
-            "query": result.query,
-            "answer": result.answer,
-            "citations": [
-                {"title": c.title, "path": c.path, "section": c.section}
-                for c in result.citations
-            ],
-            "articles_retrieved": result.articles_retrieved,
-            "articles_used": result.articles_used,
-            "context_tokens_used": result.context_tokens_used,
-            "passes_executed": passes_executed or [],
-            "success": result.success,
-        }
+            entry: dict[str, object] = {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "query": result.query,
+                "answer": result.answer,
+                "citations": [
+                    {"title": c.title, "path": c.path, "section": c.section}
+                    for c in result.citations
+                ],
+                "articles_retrieved": result.articles_retrieved,
+                "articles_used": result.articles_used,
+                "context_tokens_used": result.context_tokens_used,
+                "passes_executed": passes_executed or [],
+                "success": result.success,
+            }
 
-        # Include full retrieval log if available
-        if retrieval_log is not None and hasattr(retrieval_log, "to_dict"):
-            entry["retrieval"] = retrieval_log.to_dict()
+            # Include full retrieval log if available
+            if retrieval_log is not None:
+                entry["retrieval"] = retrieval_log.to_dict()
 
-        with open(log_path, "a") as f:
-            f.write(json.dumps(entry, default=str) + "\n")
+            with open(log_path, "a") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Failed to write explorer query log", exc_info=True
+            )
 
     def file_exploration(self, result: ExplorerResult) -> Path:
         """Save an exploration result to wiki/explorations/ with frontmatter.

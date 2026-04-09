@@ -144,6 +144,13 @@ class TestCuratorLogging:
             )
             lines = [line for line in log_path.read_text().splitlines() if line.strip()]
             assert len(lines) == 2
+
+            first = json.loads(lines[0])
+            second = json.loads(lines[1])
+            assert first["article"] == "wiki/concept/alpha.md"
+            assert second["article"] == "wiki/concept/beta.md"
+            # Second entry should have evaluated alpha as a candidate
+            assert any("alpha" in c for c in second["candidates_evaluated"])
         finally:
             curator.close()
 
