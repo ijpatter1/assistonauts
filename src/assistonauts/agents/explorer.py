@@ -7,9 +7,10 @@ synthesizes answers with citations to specific wiki articles.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from assistonauts.agents.base import Agent, LLMClientProtocol
@@ -133,7 +134,7 @@ class ExplorerAgent(Agent):
         if not retrieval.articles:
             # No articles found — still answer but without context
             answer = self._synthesize_no_context(query)
-            return ExplorerResult(
+            result = ExplorerResult(
                 success=True,
                 query=query,
                 answer=answer,
@@ -141,6 +142,8 @@ class ExplorerAgent(Agent):
                 articles_retrieved=0,
                 articles_used=0,
             )
+            self._log_query(result, passes_executed=retrieval.passes_executed)
+            return result
 
         # Step 2: Calculate context budget
         budget = calculate_context_budget(
@@ -160,7 +163,7 @@ class ExplorerAgent(Agent):
 
         formatted = render_answer_markdown(answer, citations, query=query)
 
-        return ExplorerResult(
+        result = ExplorerResult(
             success=True,
             query=query,
             answer=answer,
@@ -170,6 +173,8 @@ class ExplorerAgent(Agent):
             articles_retrieved=articles_retrieved,
             articles_used=articles_used,
         )
+        self._log_query(result, passes_executed=retrieval.passes_executed)
+        return result
 
     def _read_article_contents(
         self,
@@ -249,6 +254,38 @@ class ExplorerAgent(Agent):
                 Citation(title=title, path=path, relevance=relevance or None)
             )
         return citations
+
+    def _log_query(
+        self,
+        result: ExplorerResult,
+        passes_executed: list[str] | None = None,
+    ) -> None:
+        """Append a query record to .assistonauts/explorer/queries.jsonl.
+
+        Every explore() call is logged automatically for audit trail,
+        regardless of whether the user saves the exploration.
+        """
+        log_dir = self._workspace_root / ".assistonauts" / "explorer"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / "queries.jsonl"
+
+        entry = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "query": result.query,
+            "answer": result.answer,
+            "citations": [
+                {"title": c.title, "path": c.path, "section": c.section}
+                for c in result.citations
+            ],
+            "articles_retrieved": result.articles_retrieved,
+            "articles_used": result.articles_used,
+            "context_tokens_used": result.context_tokens_used,
+            "passes_executed": passes_executed or [],
+            "success": result.success,
+        }
+
+        with open(log_path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
 
     def file_exploration(self, result: ExplorerResult) -> Path:
         """Save an exploration result to wiki/explorations/ with frontmatter.
