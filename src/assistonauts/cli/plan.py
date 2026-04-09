@@ -54,17 +54,12 @@ def plan(workspace: Path, execute: bool) -> None:
         console.print("No raw source files found in raw/articles/.")
         return
 
-    batch_size = 15
-    num_batches = (len(sources) + batch_size - 1) // batch_size
-    console.print(
-        f"Analyzing {len(sources)} source files "
-        f"({num_batches} batches of {batch_size})..."
-    )
+    console.print(f"Analyzing {len(sources)} source files...")
 
     llm_client = _create_llm_client(workspace, "compiler")
     compiler = CompilerAgent(llm_client=llm_client, workspace_root=workspace)
 
-    compilation_plan = compiler.plan(sources, batch_size=batch_size)
+    compilation_plan = compiler.plan(sources)
 
     if not compilation_plan.articles:
         console.print("[yellow]No articles proposed.[/yellow]")

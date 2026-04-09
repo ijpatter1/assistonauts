@@ -588,20 +588,12 @@ class CompilerAgent(Agent):
             message=(f"Compiled {len(resolved)} sources → {manifest_key}"),
         )
 
-    def plan(
-        self,
-        source_paths: list[Path],
-        batch_size: int = 15,
-    ) -> CompilationPlan:
+    def plan(self, source_paths: list[Path]) -> CompilationPlan:
         """Analyze raw sources and propose a compilation plan.
 
         Reads each source, sends content + schema info to LLM,
         and asks it to propose article groupings, types, and titles.
         Returns a CompilationPlan that can be executed via compile_multi().
-
-        For large corpora, sources are batched to avoid exceeding LLM
-        context limits. Each batch is planned independently and the
-        resulting plans are merged.
 
         If the LLM response can't be parsed, falls back to one article
         per source, all typed as concept.
@@ -611,26 +603,6 @@ class CompilerAgent(Agent):
 
         resolved = [p.resolve() for p in source_paths]
 
-        # Batch sources to keep prompts within context limits
-        batches = [
-            resolved[i : i + batch_size] for i in range(0, len(resolved), batch_size)
-        ]
-
-        all_articles: list[PlannedArticle] = []
-        for batch_idx, batch in enumerate(batches):
-            logger.info(
-                "Planning batch %d/%d (%d sources)",
-                batch_idx + 1,
-                len(batches),
-                len(batch),
-            )
-            batch_plan = self._plan_batch(batch)
-            all_articles.extend(batch_plan.articles)
-
-        return CompilationPlan(articles=all_articles)
-
-    def _plan_batch(self, resolved: list[Path]) -> CompilationPlan:
-        """Plan a single batch of sources via LLM."""
         # Build source name → path lookup for resolving LLM references
         source_lookup: dict[str, Path] = {}
         for p in resolved:
