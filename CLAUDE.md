@@ -19,7 +19,7 @@ Assistonauts is a framework for building and maintaining LLM-powered knowledge b
 
 ## Current Phase
 
-**Phase 4 — Explorer + Interactive Mode** (Phase 4 complete, pending merge)
+**Phase 5 — Captain + Expedition Orchestration** (Phase 5 complete, pending merge)
 
 See `docs/REQUIREMENTS.md` for the full development plan.
 See `docs/ARCHITECTURE.md` for technical architecture details.
@@ -40,7 +40,8 @@ assistonauts/
 │   ├── ARCHITECTURE.md             # Technical architecture
 │   ├── PHASE_STATUS.md             # Living phase completion tracker
 │   ├── assistonauts-spec.md        # Original product spec
-│   └── sessions/                   # Session handoff artifacts
+│   ├── sessions/                   # Session handoff artifacts
+│   └── uat/                        # Phase UAT scripts
 ├── src/
 │   └── assistonauts/
 │       ├── __init__.py
@@ -54,6 +55,8 @@ assistonauts/
 │       ├── storage/                # Workspace management, file I/O, ownership
 │       ├── archivist/              # Knowledge base OS (Phase 3)
 │       ├── tasks/                  # Task runner, state machine (Phase 2)
+│       ├── missions/               # Mission model, state machine, dependencies (Phase 5)
+│       ├── expeditions/            # Expedition lifecycle, orchestrator, scaling, budget (Phase 5)
 │       ├── rag/                    # Multi-pass retrieval (Phase 3)
 │       └── models/                 # Data models (configs, tasks, etc.)
 ├── tests/
