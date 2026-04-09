@@ -143,7 +143,7 @@ class CaptainAgent(Agent):
         )
 
         response = self.call_llm([{"role": "user", "content": prompt}])
-        missions, dependencies = _parse_plan_response(response)
+        missions, dependencies = parse_plan_response(response)
 
         return CaptainResult(
             success=True,
@@ -152,10 +152,13 @@ class CaptainAgent(Agent):
         )
 
 
-def _parse_plan_response(
+def parse_plan_response(
     response: str,
 ) -> tuple[list[Mission], list[tuple[str, str]]]:
-    """Parse Captain's YAML plan response into Mission objects."""
+    """Parse Captain's YAML plan response into Mission objects.
+
+    Skips malformed mission entries (missing id or agent).
+    """
     # Strip markdown code fences
     cleaned = re.sub(r"```ya?ml?\n?", "", response)
     cleaned = re.sub(r"```\n?", "", cleaned)
@@ -175,9 +178,14 @@ def _parse_plan_response(
         if not isinstance(md, dict):
             continue
 
+        mission_id = str(md.get("id", "")).strip()
+        agent = str(md.get("agent", "")).strip()
+        if not mission_id or not agent:
+            continue  # skip malformed entries
+
         mission = Mission(
-            mission_id=str(md.get("id", "")),
-            agent=str(md.get("agent", "")),
+            mission_id=mission_id,
+            agent=agent,
             mission_type=str(md.get("type", "")),
             inputs=md.get("inputs", {}),
             acceptance_criteria=md.get("acceptance_criteria", []),

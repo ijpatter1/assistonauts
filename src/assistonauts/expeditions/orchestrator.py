@@ -19,7 +19,7 @@ from enum import Enum
 from pathlib import Path
 
 from assistonauts.agents.base import LLMClientProtocol
-from assistonauts.agents.captain import CaptainAgent, _parse_plan_response
+from assistonauts.agents.captain import CaptainAgent, parse_plan_response
 from assistonauts.expeditions.budget import BudgetEnforcer
 from assistonauts.expeditions.scaling import ScalingManager
 from assistonauts.missions.dependencies import (
@@ -130,7 +130,7 @@ class BuildOrchestrator:
             [{"role": "user", "content": prompt}],
         )
 
-        missions, dependencies = _parse_plan_response(response)
+        missions, dependencies = parse_plan_response(response)
         graph = build_graph_from_plan(missions, dependencies)
 
         iteration = BuildIteration(

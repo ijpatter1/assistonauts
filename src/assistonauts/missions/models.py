@@ -67,6 +67,7 @@ class Mission:
     started_at: datetime | None = None
     completed_at: datetime | None = None
     failure: FailureRecord | None = None
+    stale_reason: str = ""
 
     # --- State transitions ---
 
@@ -105,6 +106,7 @@ class Mission:
             msg = f"Cannot mark stale mission in state {self.status.value}"
             raise ValueError(msg)
         self.status = MissionStatus.STALE
+        self.stale_reason = reason
 
     def retry(self) -> None:
         if self.status != MissionStatus.FAILED:
@@ -171,37 +173,50 @@ class Mission:
 
     @classmethod
     def from_dict(cls, data: dict[str, dict[str, object]]) -> Mission:
-        md = data["mission"]
+        # Cast to dict[str, Any]-like access — from_dict receives
+        # JSON-deserialized data where inner values are str/int/list/dict,
+        # but the outer signature types them as object for generality.
+        md: dict[str, object] = dict(data["mission"])
         tasks = []
-        if "tasks" in md:
-            for td in md["tasks"]:  # type: ignore[union-attr]
-                tasks.append(
-                    MissionTask(
-                        task_id=td["task_id"],  # type: ignore[index]
-                        agent=td["agent"],  # type: ignore[index]
-                        params=td["params"],  # type: ignore[index]
-                        order=td["order"],  # type: ignore[index]
-                        status=TaskStatus(td["status"]),  # type: ignore[index]
+        raw_tasks = md.get("tasks", [])
+        if isinstance(raw_tasks, list):
+            for td in raw_tasks:
+                if isinstance(td, dict):
+                    tasks.append(
+                        MissionTask(
+                            task_id=str(td["task_id"]),
+                            agent=str(td["agent"]),
+                            params=dict(td["params"]),
+                            order=int(td["order"]),
+                            status=TaskStatus(str(td["status"])),
+                        )
                     )
-                )
         failure = None
-        if "failure" in md:
-            fd = md["failure"]  # type: ignore[assignment]
+        raw_failure = md.get("failure")
+        if isinstance(raw_failure, dict):
             failure = FailureRecord(
-                error_type=fd["type"],  # type: ignore[index]
-                error_message=fd["error"],  # type: ignore[index]
-                retries=fd["retries"],  # type: ignore[index]
-                failed_at=datetime.fromisoformat(fd["failed_at"]),  # type: ignore[index]
+                error_type=str(raw_failure["type"]),
+                error_message=str(raw_failure["error"]),
+                retries=int(raw_failure["retries"]),
+                failed_at=datetime.fromisoformat(
+                    str(raw_failure["failed_at"]),
+                ),
             )
         return cls(
             mission_id=str(md["id"]),
             agent=str(md["agent"]),
             mission_type=str(md["type"]),
             status=MissionStatus(str(md["status"])),
-            priority=str(md.get("priority", "normal")),  # type: ignore[union-attr]
-            inputs=md["inputs"],  # type: ignore[arg-type]
-            acceptance_criteria=md["acceptance_criteria"],  # type: ignore[arg-type]
-            checklist=md.get("checklist", []),  # type: ignore[union-attr, arg-type]
+            priority=str(md.get("priority", "normal")),
+            inputs=dict(md["inputs"]) if isinstance(md["inputs"], dict) else {},
+            acceptance_criteria=(
+                list(md["acceptance_criteria"])
+                if isinstance(md["acceptance_criteria"], list)
+                else []
+            ),
+            checklist=(
+                list(md["checklist"]) if isinstance(md.get("checklist"), list) else []
+            ),
             created_by=str(md["created_by"]),
             created_at=datetime.fromisoformat(str(md["created_at"])),
             started_at=(

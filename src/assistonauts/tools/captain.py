@@ -212,7 +212,8 @@ class MissionLedger:
         return [Mission.from_dict(json.loads(r[0])) for r in rows]
 
     def _write_yaml(self, mission: Mission) -> None:
-        assert self.yaml_dir is not None
+        if self.yaml_dir is None:
+            return
         path = self.yaml_dir / f"{mission.mission_id}.yaml"
         path.write_text(
             yaml.dump(mission.to_dict(), default_flow_style=False),
@@ -431,14 +432,12 @@ class StatusAggregator:
         ]
 
         status_dict = summary["by_status"]
-        assert isinstance(status_dict, dict)
-        if status_dict:
+        if isinstance(status_dict, dict) and status_dict:
             status_parts = [f"{v} {k}" for k, v in status_dict.items()]
             lines.append(f"Status: {', '.join(status_parts)}")
 
         agent_dict = summary["by_agent"]
-        assert isinstance(agent_dict, dict)
-        if agent_dict:
+        if isinstance(agent_dict, dict) and agent_dict:
             agent_parts = [f"{v} {k}" for k, v in agent_dict.items()]
             lines.append(f"By agent: {', '.join(agent_parts)}")
 
