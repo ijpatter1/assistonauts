@@ -78,12 +78,20 @@ class Mission:
         self.status = MissionStatus.RUNNING
         self.started_at = datetime.now(UTC)
 
-    def complete(self) -> None:
+    def complete(self, verified_by: str = "") -> None:
+        """Mark mission as completed.
+
+        Two-level completion: the agent self-declares completion, then
+        the Captain verifies against acceptance criteria. The verified_by
+        field records who confirmed completion (empty = agent only).
+        """
         if self.status != MissionStatus.RUNNING:
             msg = f"Cannot complete mission in state {self.status.value}"
             raise ValueError(msg)
         self.status = MissionStatus.COMPLETED
         self.completed_at = datetime.now(UTC)
+        if verified_by:
+            self.checklist.append(f"verified_by:{verified_by}")
 
     def fail(
         self,

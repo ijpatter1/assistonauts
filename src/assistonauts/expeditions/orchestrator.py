@@ -239,6 +239,7 @@ class BuildOrchestrator:
             result.total_completed += iteration.missions_completed
             result.total_failed += iteration.missions_failed
 
+        self._write_build_report(result)
         return result
 
     def _execute_mission(
@@ -452,6 +453,40 @@ class BuildOrchestrator:
         plan_path.write_text(
             yaml.dump(plan_data, default_flow_style=False),
         )
+
+    def _write_build_report(self, result: BuildPhaseResult) -> None:
+        """Write a build report to expeditions/<name>/build-report.md."""
+        exp_dir = self.workspace_root / "expeditions" / self.config.name
+        report_path = exp_dir / "build-report.md"
+
+        lines = [
+            f"# Build Report — {self.config.name}",
+            "",
+            f"**Scope:** {self.config.scope.description}",
+            f"**Total missions:** {result.total_missions}",
+            f"**Completed:** {result.total_completed}",
+            f"**Failed:** {result.total_failed}",
+            "",
+            "## Iterations",
+            "",
+        ]
+
+        for it in result.iterations:
+            status = "complete" if it.is_complete() else "partial"
+            lines.append(f"### {it.phase.value.title()} ({status})")
+            lines.append(
+                f"- Planned: {it.missions_planned}, "
+                f"Completed: {it.missions_completed}, "
+                f"Failed: {it.missions_failed}"
+            )
+            for m in it.missions:
+                lines.append(
+                    f"  - [{m.mission_id}] {m.agent}/{m.mission_type}"
+                    f" — {m.status.value}"
+                )
+            lines.append("")
+
+        report_path.write_text("\n".join(lines))
 
     def _load_article_summaries(self) -> list[tuple[str, str]]:
         """Load compiled article summaries from the wiki directory."""

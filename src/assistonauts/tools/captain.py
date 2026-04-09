@@ -19,6 +19,7 @@ from typing import ClassVar
 
 import yaml
 
+from assistonauts.missions.dependencies import DependencyGraph
 from assistonauts.missions.models import Mission, MissionStatus
 from assistonauts.tasks.runner import TaskStatus
 
@@ -39,10 +40,7 @@ class MissionQueueManager:
 
     def __init__(self) -> None:
         self._queue: list[Mission] = []
-        # dependency_id -> set of mission_ids that depend on it
-        self._deps: dict[str, set[str]] = defaultdict(set)
-        # mission_id -> set of dependency_ids it depends on
-        self._depends_on: dict[str, set[str]] = defaultdict(set)
+        self._graph = DependencyGraph()
         self._completed: set[str] = set()
 
     def enqueue(self, mission: Mission) -> None:
@@ -67,7 +65,7 @@ class MissionQueueManager:
     def size(self) -> int:
         return len(self._queue)
 
-    # --- Dependencies ---
+    # --- Dependencies (delegates to DependencyGraph) ---
 
     def add_dependency(
         self,
@@ -75,49 +73,20 @@ class MissionQueueManager:
         dependent: str,
     ) -> None:
         """Record that `dependent` cannot start until `depends_on` completes."""
-        self._deps[depends_on].add(dependent)
-        self._depends_on[dependent].add(depends_on)
+        self._graph.add_edge(depends_on, dependent)
 
     def get_dependencies(self, mission_id: str) -> set[str]:
-        return set(self._depends_on.get(mission_id, set()))
+        return self._graph.dependencies(mission_id)
 
     def mark_completed(self, mission_id: str) -> None:
         self._completed.add(mission_id)
 
     def is_ready(self, mission_id: str) -> bool:
-        deps = self._depends_on.get(mission_id, set())
-        return deps.issubset(self._completed)
-
-    # --- Topological sort ---
+        return self._graph.is_ready(mission_id, self._completed)
 
     def topological_sort(self, mission_ids: list[str]) -> list[str]:
-        """Return mission_ids in dependency order (Kahn's algorithm)."""
-        id_set = set(mission_ids)
-        in_degree: dict[str, int] = {mid: 0 for mid in id_set}
-        adj: dict[str, list[str]] = {mid: [] for mid in id_set}
-
-        for mid in id_set:
-            for dep in self._depends_on.get(mid, set()):
-                if dep in id_set:
-                    in_degree[mid] += 1
-                    adj[dep].append(mid)
-
-        queue = [mid for mid in id_set if in_degree[mid] == 0]
-        result: list[str] = []
-
-        while queue:
-            queue.sort()  # deterministic order for ties
-            node = queue.pop(0)
-            result.append(node)
-            for neighbor in adj[node]:
-                in_degree[neighbor] -= 1
-                if in_degree[neighbor] == 0:
-                    queue.append(neighbor)
-
-        if len(result) != len(id_set):
-            msg = "Cycle detected in mission dependencies"
-            raise ValueError(msg)
-        return result
+        """Return mission_ids in dependency order."""
+        return self._graph.topological_order(mission_ids)
 
     # --- Internal ---
 
@@ -149,6 +118,10 @@ class MissionLedger:
         self._conn = sqlite3.connect(str(db_path))
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._create_tables()
+
+    def close(self) -> None:
+        """Close the SQLite connection."""
+        self._conn.close()
 
     def _create_tables(self) -> None:
         self._conn.execute("""
@@ -244,6 +217,10 @@ class BudgetTracker:
         self._conn = sqlite3.connect(str(db_path))
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._create_tables()
+
+    def close(self) -> None:
+        """Close the SQLite connection."""
+        self._conn.close()
 
     def _create_tables(self) -> None:
         self._conn.execute("""
@@ -452,6 +429,11 @@ class StatusAggregator:
                 f"— {m.status.value} "
                 f"(criteria: {criteria_str})",
             )
+            if m.checklist:
+                checked = sum(1 for c in m.checklist if c.startswith("verified_by:"))
+                lines.append(
+                    f"    Checklist: {len(m.checklist)} items ({checked} verified)",
+                )
             if m.tasks:
                 done = sum(1 for t in m.tasks if t.status == TaskStatus.COMPLETED)
                 lines.append(
