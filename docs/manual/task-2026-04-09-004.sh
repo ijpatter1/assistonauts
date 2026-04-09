@@ -171,20 +171,24 @@ QUERIES=(
 QUERY_PASS=0
 QUERY_FAIL=0
 
+set +e  # Don't abort on individual query failures
 for q in "${QUERIES[@]}"; do
   echo "  Q: $q"
   OUTPUT=$(assistonauts explore -w "$WORKSPACE" --query "$q" 2>&1)
-  if [ $? -eq 0 ] && [ -n "$OUTPUT" ]; then
-    # Show first 3 lines of answer
+  EXIT_CODE=$?
+  if [ "$EXIT_CODE" -eq 0 ] && [ -n "$OUTPUT" ]; then
+    # Show first 5 lines of answer
     echo "$OUTPUT" | head -5 | sed 's/^/     /'
     echo "     ..."
-    ((QUERY_PASS++))
+    QUERY_PASS=$((QUERY_PASS + 1))
   else
-    echo "     ❌ Query failed"
-    ((QUERY_FAIL++))
+    echo "     ❌ Query failed (exit $EXIT_CODE)"
+    echo "$OUTPUT" | tail -3 | sed 's/^/     /'
+    QUERY_FAIL=$((QUERY_FAIL + 1))
   fi
   echo ""
 done
+set -e
 
 echo "  Queries: $QUERY_PASS passed, $QUERY_FAIL failed"
 
@@ -193,9 +197,11 @@ echo "  Queries: $QUERY_PASS passed, $QUERY_FAIL failed"
 echo ""
 echo "━━━ Stage 7: File Exploration ━━━"
 
+set +e
 assistonauts explore -w "$WORKSPACE" \
   --query "Summarize the key themes and treasures described in the book" \
   --save 2>&1 | tail -5
+set -e
 
 EXPLORATION_COUNT=$(find "$WORKSPACE/wiki/explorations" -name "*.md" 2>/dev/null | wc -l)
 echo "  Filed explorations: $EXPLORATION_COUNT"

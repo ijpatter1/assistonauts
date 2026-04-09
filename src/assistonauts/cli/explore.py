@@ -227,7 +227,12 @@ def _create_llm_client(workspace: Path) -> LLMClientProtocol | None:
     try:
         config = load_config(workspace)
         model, base_url = resolve_llm_for_role(config, "explorer")
-        return LLMClient(default_model=model, base_url=base_url)
+        return LLMClient(
+            provider_config={},
+            mode="live",
+            default_model=model,
+            base_url=base_url,
+        )
     except Exception as exc:
         console.print(f"[dim]LLM init detail: {exc}[/dim]")
         return None
