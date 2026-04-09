@@ -1,6 +1,9 @@
 """Data models for configuration files."""
 
+import logging
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -183,6 +186,16 @@ class ExpeditionConfig:
                             path=str(ls.get("path", "")),
                             pattern=str(ls.get("pattern", "*")),
                         )
+                    )
+            # Warn about unsupported source types (deferred to Phase 7)
+            deferred = {"rss", "github", "web"}
+            for src_type in deferred:
+                if src_type in sources_data:
+                    logger.warning(
+                        "Source type '%s' is not yet supported "
+                        "(deferred to Phase 7) — ignoring %d entries",
+                        src_type,
+                        len(sources_data[src_type]),
                     )
         sources = ExpeditionSources(local=local_sources)
 

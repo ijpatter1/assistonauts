@@ -296,7 +296,7 @@ class BuildOrchestrator:
                     )
 
                 if task_result.success:
-                    mission.complete()
+                    mission.complete(verified_by=mission.agent)
                     self.ledger.save(mission)
                     return
 
@@ -490,9 +490,19 @@ class BuildOrchestrator:
                     "Corrupted plan.yaml — overwriting with fresh data",
                 )
 
-        iteration_data = {
+        iteration_data: dict[str, object] = {
             "phase": phase.value,
-            "missions": [m.mission_id for m in missions],
+            "missions": [
+                {
+                    "id": m.mission_id,
+                    "agent": m.agent,
+                    "type": m.mission_type,
+                    "priority": m.priority,
+                    "inputs": m.inputs,
+                    "acceptance_criteria": m.acceptance_criteria,
+                }
+                for m in missions
+            ],
             "dependencies": [{"from": d[0], "to": d[1]} for d in dependencies],
         }
         existing.append(iteration_data)
