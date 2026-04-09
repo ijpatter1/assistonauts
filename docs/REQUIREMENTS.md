@@ -85,11 +85,11 @@ Note: The codebase currently uses "mission" where it means "task" (the Phase 2 `
 6. Manifest management — full lineage tracking, staleness graphs, embedding version tracking, summary staleness detection
 7. Multi-pass retrieval system — shared module (`rag/multi_pass.py`) with Pass 1 (broad scan, zero inference), Pass 2 (triage on summaries, cheap inference), Pass 3 (deep read, targeted inference), Pass 4 (weak match resolution)
 8. Short-circuit mode — bypass multi-pass for small knowledge bases (below configurable article/word count threshold), load all articles directly
-9. Curator agent — role implementation with system prompt, singleton enforcement, cross-referencing pipeline, proposal generation for structural needs
+9. Curator agent — role implementation with system prompt, singleton enforcement, cross-referencing pipeline (bidirectional: updates both the target article AND existing articles that should reference it), uses multi-pass retrieval system for link discovery (not raw hybrid_search), strong/weak match distinction (strong → bidirectional backlinks, weak → "See also" only), proposal generation for structural needs
 10. Curator toolkit — backlink scanner (parse links, build graph, identify backlink targets), graph analyzer (connectivity metrics, orphan detection, cluster density)
 11. Embedding cache — embedding version tracking, recompute only when content hash changes
 12. LLM response cache — SHA-256 prompt hash keying, SQLite backend, configurable TTL, flush per agent/expedition
-13. Retroactive cross-referencing — Curator pass over all Phase 1-2 articles to add backlinks and "See also" sections now that the index exists
+13. Retroactive cross-referencing — Curator pass over all indexed articles to add bidirectional backlinks and "See also" sections, using multi-pass retrieval for link discovery
 14. CLI: `assistonauts status` — expedition and knowledge base status overview
 15. Image ingestion in Scout — vision model support (Gemma 4 via litellm) for image files (.png, .jpg, .jpeg, .gif, .webp), sends images to multimodal LLM for text extraction and markdown conversion, integrates with existing Scout ingestion pipeline
 16. CLI: `assistonauts index` — index all wiki articles into the Archivist (FTS + embeddings), with `--reindex` flag to force reindexing of unchanged articles
