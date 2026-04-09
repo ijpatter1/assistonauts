@@ -1,7 +1,7 @@
 # Phase Status Tracker
 
 > **Current Phase: 4 — Explorer + Interactive Mode**
-> Last updated: 2026-04-09, session-2026-04-09-002
+> Last updated: 2026-04-09, session-2026-04-09-003
 > Phase 1 merged to main 2026-04-07
 > Phase 2 merged to main 2026-04-08
 > Phase 3 merged to main 2026-04-09
@@ -75,12 +75,12 @@ _Goal: Build the Archivist (deterministic knowledge base operating system), hybr
 _Goal: Build the Explorer agent for query synthesis and an interactive REPL for human-driven Q&A against the knowledge base._
 
 - ✅ 2026-04-09, session-2026-04-09-002 — Gemini Embedding 2 integration — litellm multimodal via base64 data URIs, config-driven factory, dimensions wiring, CLI fixes (prerequisite)
-- ⬜ Explorer agent — role implementation with system prompt, query flow via multi-pass retrieval, answer synthesis with citations to specific wiki articles
-- ⬜ Explorer toolkit — citation formatter, context budget calculator (recommend include/exclude to fit context window), output renderer (markdown, Marp slides, matplotlib charts)
-- ⬜ Exploration filing — save valuable answers to `wiki/explorations/` with proper frontmatter, indexed by Archivist but not cross-linked into main wiki until promoted
-- ⬜ Interactive REPL — Click-based CLI session for human-driven Q&A, conversational flow, optional answer filing
-- ⬜ Explorer contract tests and recorded fixtures — structural validation (citations to real articles, answer format, context budget respected)
-- ⬜ CLI: `assistonauts explore <expedition-name>` — launch interactive Explorer session
+- ✅ 2026-04-09, session-2026-04-09-003 — Explorer agent — role implementation with system prompt, query flow via multi-pass retrieval, answer synthesis with citations to specific wiki articles
+- ✅ 2026-04-09, session-2026-04-09-003 — Explorer toolkit — citation formatter, context budget calculator (recommend include/exclude to fit context window), output renderer (markdown, Marp slides, matplotlib chart data)
+- ✅ 2026-04-09, session-2026-04-09-003 — Exploration filing — save valuable answers to `wiki/explorations/` with proper frontmatter, indexed by Archivist but not cross-linked into main wiki until promoted
+- ✅ 2026-04-09, session-2026-04-09-003 — Interactive REPL — Click-based CLI session for human-driven Q&A, conversational flow, optional answer filing
+- ✅ 2026-04-09, session-2026-04-09-003 — Explorer contract tests and recorded fixtures — structural validation (citations to real articles, answer format, context budget respected)
+- ✅ 2026-04-09, session-2026-04-09-003 — CLI: `assistonauts explore` — launch interactive Explorer session
 
 ---
 
