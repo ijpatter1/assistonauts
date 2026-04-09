@@ -88,15 +88,15 @@ _Goal: Build the Explorer agent for query synthesis and an interactive REPL for 
 
 _Goal: Build the Captain agent for expedition orchestration, the mission state machine, and the scaling/budget systems. The Captain creates missions and sequences tasks; editorial decisions are delegated to Compiler plan mode._
 
-- ⬜ Captain agent — role implementation with two operational modes (planning mode for expedition decomposition into missions, operations mode for routine triage), system prompt with full state visibility
-- ⬜ Captain toolkit — task queue manager (priority queue, dependency graph, topological sort), mission ledger (SQLite-backed mission state persistence), token budget tracker, schedule runner (cron evaluation), status aggregator
-- ⬜ Iterative planning — plan → execute batch → observe → replan cycle. Captain creates missions, calls Compiler plan mode for editorial triage, sequences resulting tasks
-- ⬜ Expedition lifecycle — `expedition.yaml` parsing, build phase orchestration across all agents, phase transition (build → stationed) as explicit human decision
-- ⬜ Mission state machine — full lifecycle with acceptance criteria, agent-level checklists, status rollup to Captain view. Missions contain ordered task sequences; tasks use Phase 2 task runner
-- ⬜ Task dependency resolution — topological sort, foundational concepts compiled before articles that reference them, cascading task chains from Curator proposals
-- ⬜ Deterministic scaling system — concurrent instances for Scout/Compiler/Explorer, Curator singleton enforcement, queue depth triggers, max instances, cooldown. Note: SQLite write concurrency is a known ceiling (see spec)
-- ⬜ Deterministic budget system — daily token limits, per-agent tracking, warning thresholds, notifications to Captain for station logs
-- ⬜ CLI: `assistonauts expedition create`, `assistonauts build` — create expeditions and run build phase
+- ⬜ Captain agent — planning + operations modes, owns `expeditions/` + `station-logs/`, reads everything, frontier model via config, human directive routing
+- ⬜ Captain toolkit — (a) mission queue manager with dependency graph + topological sort, (b) mission ledger (SQLite source of truth, dual-write YAML audit), (c) token budget tracker (per-agent + per-expedition), (d) schedule runner (cron eval), (e) status aggregator (LLM-digestible structured summaries)
+- ⬜ Iterative planning — named iterations: Discovery (ingest + first compile), Structuring (Captain LLM reads summaries, identifies foundational concepts, dependency ordering), Refinement (Curator batch cross-ref, Inspector hook). Variable iteration count, observe step is LLM call
+- ⬜ Expedition lifecycle — full `expedition.yaml` parsing (scope, sources, stationed.resources, scaling config), directory setup under `expeditions/<name>/`, build phase orchestration, build→stationed transition as human decision
+- ⬜ Mission state machine — full model (id, agent, type, status incl. STALE, priority, inputs, acceptance_criteria, checklist, created_by/at), two-level completion (agent declares, Captain verifies), failure rollup, missions contain ordered task sequences via TaskRunner
+- ⬜ Task dependency resolution — topological sort, Captain LLM identifies foundational concepts, cascading chain infrastructure (compile→reindex→link)
+- ⬜ Deterministic scaling system — config-driven (no LLM), singleton enforcement for Captain+Curator+Inspector, auto_scale rules, WAL mode on SQLite
+- ⬜ Deterministic budget system — warning threshold (default 0.8) + hard cap at daily_token_limit, per-agent + per-expedition + date tracking
+- ⬜ CLI: `assistonauts expedition create --config <path>`, `assistonauts build <expedition-name>`
 
 ---
 

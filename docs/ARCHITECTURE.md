@@ -397,7 +397,41 @@ Explorer agent (`agents/explorer.py`) with query flow via multi-pass retrieval. 
 
 ### Phase 5 — Captain + Expedition Orchestration
 
-Captain agent (`agents/captain.py`) with planning and operations modes. Creates missions (multi-step objectives) that decompose into ordered task sequences. Mission ledger (`ledger.db`) in SQLite for mission-level state persistence; individual tasks use YAML audit trails from the Phase 2 task runner. Task queue manager with dependency graph and topological sort. Captain delegates editorial decisions (article types, groupings, titles) to Compiler plan mode. Deterministic scaling system for concurrent agent instances. Budget tracking system. Expedition lifecycle orchestration.
+**New packages:**
+
+- `src/assistonauts/missions/` — mission models, state machine, planner
+  - `models.py` — Mission dataclass (id, agent, type, status, priority, inputs, acceptance_criteria, checklist, created_by, created_at), MissionStatus enum (PENDING, RUNNING, COMPLETED, FAILED, STALE)
+  - `ledger.py` — SQLite-backed mission ledger (source of truth), dual-write with YAML audit trail
+  - `planner.py` — Captain's iterative planning logic (Discovery, Structuring, Refinement iterations)
+  - `dependencies.py` — dependency graph construction, topological sort
+- `src/assistonauts/expeditions/` — expedition lifecycle management
+  - `orchestrator.py` — build phase orchestration, iteration execution
+  - `config.py` — extended `ExpeditionConfig` with stationed.resources, scaling config
+
+**Captain agent** (`agents/captain.py`): Two operational modes — planning (expedition decomposition into missions) and operations (routine triage in stationed phase). Owns `expeditions/` + `station-logs/`, readable_dirs = all workspace dirs. Wired to frontier model via `captain` role in config. Does NOT write wiki articles, process raw sources, manage index, or edit other agents' files. Accepts human directives and translates to missions.
+
+**Captain toolkit** (`tools/captain.py`): Five deterministic tools:
+
+1. Mission queue manager — priority queue, dependency graph, topological sort for sequencing
+2. Mission ledger — SQLite source of truth with atomic reads/writes. YAML mission files as human-readable audit trail. Dual-write pattern: ledger is authoritative, YAML records what happened and why
+3. Token budget tracker — running tally per (agent, expedition, date). Warning at configurable threshold (default 0.8), hard cap at daily_token_limit
+4. Schedule runner — cron expression evaluation. Trigger matching deferred to Phase 7
+5. Status aggregator — reads mission ledger + agent statuses, produces LLM-digestible structured summaries for Captain reasoning. Rolls up agent checklists into mission-level acceptance criteria views
+
+**Mission model:** Separate from Task (composition, not replacement). Each Mission holds an ordered list of Task references executed via the Phase 2 TaskRunner. Mission states: pending→running→completed, running→failed (transient: retry max 3, deterministic: review queue), completed→stale (when inputs change). Two-level completion: agent self-declares against checklist, Captain verifies against mission-level criteria.
+
+**Iterative planning:** Named iteration phases:
+
+- **Discovery:** Scout ingests all sources, Compiler compiles first batch, Archivist indexes
+- **Structuring:** Captain LLM reads compiled summaries, identifies foundational concepts, sequences remaining compilations with dependency ordering
+- **Refinement:** Curator retroactive cross-referencing (batched, not incremental — multi-pass against incomplete corpus is wasteful), Inspector sweep as hook/placeholder for Phase 6
+- Iteration count is variable. Exit condition: all sources processed, all linking passes done.
+
+**Scaling:** Deterministic, config-driven, no LLM calls. Parses `scaling` config block. Singleton enforcement for Captain, Curator, Inspector. Auto-scale for Scout, Compiler, Explorer (queue_depth trigger, max_instances, cooldown). WAL mode on all SQLite databases. Archivist excluded from scaling (system component).
+
+**Budget:** Reads from `scaling.budget`. Warning threshold + hard cap. Per-agent and per-expedition tracking with daily reset.
+
+**Expedition lifecycle:** `expedition.yaml` parsed into extended `ExpeditionConfig` (scope, sources including local/rss/github/web, stationed.resources, scaling). `expedition create` sets up `expeditions/<name>/` with plan.yaml, missions/, review/. Build→stationed transition as explicit human decision with build report.
 
 ### Phase 6 — Inspector + Quality + Review
 
