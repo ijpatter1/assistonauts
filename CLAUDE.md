@@ -19,7 +19,7 @@ Assistonauts is a framework for building and maintaining LLM-powered knowledge b
 
 ## Current Phase
 
-**Phase 4 — Explorer + Interactive Mode** (Phase 3 complete, pending merge)
+**Phase 4 — Explorer + Interactive Mode** (Phase 4 complete, pending merge)
 
 See `docs/REQUIREMENTS.md` for the full development plan.
 See `docs/ARCHITECTURE.md` for technical architecture details.
