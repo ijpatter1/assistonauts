@@ -111,12 +111,17 @@ fi
 # ── Stage 3: Plan + Compile ──────────────────────────
 
 echo "━━━ Stage 3: Plan + Compile ━━━"
-echo "  Compiler will analyze raw sources and produce wiki articles."
-echo ""
-
-assistonauts plan --execute -w "$WORKSPACE" 2>&1 | tail -20
 
 WIKI_COUNT=$(find "$WORKSPACE/wiki" -name "*.md" -not -path "*/explorations/*" 2>/dev/null | wc -l)
+if [ "$WIKI_COUNT" -gt 0 ]; then
+  echo "  $WIKI_COUNT wiki articles already exist — skipping compilation."
+else
+  echo "  Compiler will analyze raw sources and produce wiki articles."
+  echo ""
+  assistonauts plan --execute -w "$WORKSPACE" 2>&1 | tail -20
+  WIKI_COUNT=$(find "$WORKSPACE/wiki" -name "*.md" -not -path "*/explorations/*" 2>/dev/null | wc -l)
+fi
+
 SUMMARY_COUNT=$(find "$WORKSPACE/wiki" -name "*.summary.json" 2>/dev/null | wc -l)
 echo ""
 echo "  Wiki articles: $WIKI_COUNT"
