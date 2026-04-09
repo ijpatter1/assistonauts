@@ -7,10 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers import FakeEmbeddingClient, FakeLLMClient
-
 from assistonauts.agents.curator import CuratorAgent
 from assistonauts.archivist.service import Archivist
+from tests.helpers import FakeEmbeddingClient, FakeLLMClient
 
 
 @pytest.fixture()
@@ -143,7 +142,7 @@ class TestCuratorLogging:
                 / "curator"
                 / "cross-references.jsonl"
             )
-            lines = [l for l in log_path.read_text().splitlines() if l.strip()]
+            lines = [line for line in log_path.read_text().splitlines() if line.strip()]
             assert len(lines) == 2
         finally:
             curator.close()

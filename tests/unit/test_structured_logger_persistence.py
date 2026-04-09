@@ -5,11 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tests.helpers import FakeEmbeddingClient, FakeLLMClient
-
 from assistonauts.agents.explorer import ExplorerAgent
 from assistonauts.agents.scout import ScoutAgent
 from assistonauts.archivist.service import Archivist
+from tests.helpers import FakeEmbeddingClient, FakeLLMClient
 
 
 class TestLoggerPersistence:
@@ -71,7 +70,7 @@ class TestLoggerPersistence:
         agent.explore("A question?")
 
         log_file = ws / ".assistonauts" / "logs" / "explorer.jsonl"
-        lines = [l for l in log_file.read_text().splitlines() if l.strip()]
+        lines = [line for line in log_file.read_text().splitlines() if line.strip()]
         assert len(lines) >= 1
 
         entry = json.loads(lines[0])

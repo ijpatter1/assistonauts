@@ -6,10 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers import FakeEmbeddingClient, FakeLLMClient
-
 from assistonauts.archivist.service import Archivist
 from assistonauts.rag.multi_pass import MultiPassRetriever, RetrievalLog
+from tests.helpers import FakeEmbeddingClient
 
 
 @pytest.fixture()

@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tests.helpers import FakeLLMClient
-
 from assistonauts.agents.scout import ScoutAgent
+from tests.helpers import FakeLLMClient
 
 
 class TestScoutLogging:
@@ -28,7 +27,9 @@ class TestScoutLogging:
         log_file = ws / ".assistonauts" / "logs" / "scout.jsonl"
         assert log_file.exists()
         entries = [
-            json.loads(l) for l in log_file.read_text().splitlines() if l.strip()
+            json.loads(line)
+            for line in log_file.read_text().splitlines()
+            if line.strip()
         ]
 
         conversion_entries = [e for e in entries if e["event"] == "document_conversion"]
@@ -53,7 +54,9 @@ class TestScoutLogging:
 
         log_file = ws / ".assistonauts" / "logs" / "scout.jsonl"
         entries = [
-            json.loads(l) for l in log_file.read_text().splitlines() if l.strip()
+            json.loads(line)
+            for line in log_file.read_text().splitlines()
+            if line.strip()
         ]
 
         skip_entries = [e for e in entries if e["event"] == "ingest_skipped"]
@@ -77,8 +80,10 @@ class TestScoutLogging:
 
         log_file = ws / ".assistonauts" / "logs" / "scout.jsonl"
         entries = [
-            json.loads(l) for l in log_file.read_text().splitlines() if l.strip()
+            json.loads(line)
+            for line in log_file.read_text().splitlines()
+            if line.strip()
         ]
 
-        conversion = [e for e in entries if e["event"] == "document_conversion"][0]
+        conversion = next(e for e in entries if e["event"] == "document_conversion")
         assert conversion["source_bytes"] > 0
