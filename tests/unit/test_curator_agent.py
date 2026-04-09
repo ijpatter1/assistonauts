@@ -165,7 +165,60 @@ class TestCuratorCrossReference:
             archivist=archivist,
             embedding_client=embedding_client,
         )
-        assert len(result.links_added) >= 0  # May be 0 if already linked
+        assert "frequency-domain" in result.links_added
+
+    def test_cross_reference_writes_see_also_to_file(
+        self,
+        workspace: Path,
+        archivist: Archivist,
+        embedding_client: FakeEmbeddingClient,
+    ) -> None:
+        """cross_reference() must actually write See Also to the article file."""
+        _populate_kb(workspace, archivist, embedding_client)
+        llm = FakeLLMClient(responses=["## See Also\n\n- [[frequency-domain]]"])
+        curator = CuratorAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+        )
+        curator.cross_reference(
+            "wiki/concepts/spectral-analysis.md",
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        content = (workspace / "wiki/concepts/spectral-analysis.md").read_text()
+        assert "## See Also" in content
+        assert "[[frequency-domain]]" in content
+
+    def test_cross_reference_appends_to_existing_see_also(
+        self,
+        workspace: Path,
+        archivist: Archivist,
+        embedding_client: FakeEmbeddingClient,
+    ) -> None:
+        """New links must be appended even if See Also already exists."""
+        _populate_kb(workspace, archivist, embedding_client)
+
+        # Pre-populate See Also with a different link
+        article_path = workspace / "wiki/concepts/spectral-analysis.md"
+        original = article_path.read_text()
+        article_path.write_text(
+            original.rstrip() + "\n\n## See Also\n\n- [[existing-link]]\n"
+        )
+
+        llm = FakeLLMClient(responses=["## See Also\n\n- [[frequency-domain]]"])
+        curator = CuratorAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+        )
+        result = curator.cross_reference(
+            "wiki/concepts/spectral-analysis.md",
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        content = article_path.read_text()
+        assert "[[existing-link]]" in content, "Existing links must be preserved"
+        assert "[[frequency-domain]]" in content, "New links must be appended"
+        assert "frequency-domain" in result.links_added
 
     def test_run_task(
         self,
@@ -206,6 +259,109 @@ class TestCuratorSingleton:
         curator2 = CuratorAgent(llm_client=llm, workspace_root=workspace)
         assert curator2.role == "curator"
         curator2.close()
+
+
+class TestCuratorMultiPass:
+    """Test that cross-referencing uses multi-pass retrieval."""
+
+    def test_cross_reference_uses_multi_pass(
+        self,
+        workspace: Path,
+        archivist: Archivist,
+        embedding_client: FakeEmbeddingClient,
+    ) -> None:
+        """cross_reference() should route through MultiPassRetriever."""
+        _populate_kb(workspace, archivist, embedding_client)
+        llm = FakeLLMClient(responses=["## See Also\n\n- [[frequency-domain]]"])
+        curator = CuratorAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        result = curator.cross_reference(
+            "wiki/concepts/spectral-analysis.md",
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        assert result.success is True
+        # Multi-pass should still find related articles and produce links
+        content = (workspace / "wiki/concepts/spectral-analysis.md").read_text()
+        assert "## See Also" in content
+
+
+class TestCuratorBidirectional:
+    """Test bidirectional linking for strong matches."""
+
+    def test_strong_match_updates_both_articles(
+        self,
+        workspace: Path,
+        archivist: Archivist,
+        embedding_client: FakeEmbeddingClient,
+    ) -> None:
+        """Strong matches should add backlinks to the related article too."""
+        _populate_kb(workspace, archivist, embedding_client)
+        # LLM response for cross-referencing: first for link suggestions,
+        # then for classifying strong/weak (STRONG response)
+        llm = FakeLLMClient(
+            responses=[
+                "STRONG [[frequency-domain]]: closely related topic",
+            ]
+        )
+        curator = CuratorAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        result = curator.cross_reference(
+            "wiki/concepts/spectral-analysis.md",
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        assert result.success is True
+
+        # Target article should have See Also
+        target = (workspace / "wiki/concepts/spectral-analysis.md").read_text()
+        assert "[[frequency-domain]]" in target
+
+        # Related article should have backlink to target (bidirectional)
+        related = (workspace / "wiki/concepts/frequency-domain.md").read_text()
+        assert "[[spectral-analysis]]" in related
+
+    def test_weak_match_only_updates_target(
+        self,
+        workspace: Path,
+        archivist: Archivist,
+        embedding_client: FakeEmbeddingClient,
+    ) -> None:
+        """Weak matches should only add See Also to the target, not backlinks."""
+        _populate_kb(workspace, archivist, embedding_client)
+        llm = FakeLLMClient(
+            responses=[
+                "WEAK [[frequency-domain]]: tangentially related",
+            ]
+        )
+        curator = CuratorAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        result = curator.cross_reference(
+            "wiki/concepts/spectral-analysis.md",
+            archivist=archivist,
+            embedding_client=embedding_client,
+        )
+        assert result.success is True
+
+        # Target should have See Also
+        target = (workspace / "wiki/concepts/spectral-analysis.md").read_text()
+        assert "[[frequency-domain]]" in target
+
+        # Related article should NOT have backlink (weak match)
+        related = (workspace / "wiki/concepts/frequency-domain.md").read_text()
+        assert "[[spectral-analysis]]" not in related
 
 
 class TestCuratorGenerateProposals:

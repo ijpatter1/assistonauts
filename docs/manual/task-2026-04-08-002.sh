@@ -2,6 +2,7 @@
 # ═══════════════════════════════════════════════════════
 # End-to-End Pipeline Test: "There's Treasure Inside"
 # Created: 2026-04-08, session-2026-04-08-005
+# Updated: 2026-04-09 — added curate cross-referencing step + verification
 # Phase: 3
 # Blocks: Nothing — validation task for Phase 4 readiness
 #
@@ -107,10 +108,18 @@ echo "Step 6: Indexing articles..."
 assistonauts index -w "$WORKSPACE"
 echo "  ✓ Indexing complete"
 
-# ── Step 7: Structural analysis ──────────────────────
+# ── Step 7: Cross-reference articles ─────────────────
 
 echo ""
-echo "Step 7: Running structural analysis..."
+echo "Step 7: Running Curator cross-referencing..."
+echo "  (uses multi-pass retrieval + LLM to classify STRONG/WEAK links)"
+assistonauts curate -w "$WORKSPACE"
+echo "  ✓ Cross-referencing complete"
+
+# ── Step 7b: Structural analysis ─────────────────────
+
+echo ""
+echo "Step 7b: Running structural analysis..."
 assistonauts curate --proposals -w "$WORKSPACE"
 
 # ── Step 8: Status overview ──────────────────────────
@@ -160,6 +169,14 @@ verify 'test "$DB_ARTICLES" -ge 1' \
 
 verify 'test -f "$WORKSPACE/index/manifest.json"' \
   "Manifest file exists"
+
+XREF_COUNT=$(grep -rl '\[\[' "$WORKSPACE/wiki/" 2>/dev/null | wc -l)
+verify 'test "$XREF_COUNT" -ge 1' \
+  "At least 1 article has cross-references ($XREF_COUNT found)"
+
+SEE_ALSO_COUNT=$(grep -rl '## See Also' "$WORKSPACE/wiki/" 2>/dev/null | wc -l)
+verify 'test "$SEE_ALSO_COUNT" -ge 1' \
+  "At least 1 article has See Also section ($SEE_ALSO_COUNT found)"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
