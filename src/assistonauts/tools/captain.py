@@ -398,7 +398,11 @@ class StatusAggregator:
             "by_agent": dict(by_agent),
         }
 
-    def format_for_llm(self, missions: list[Mission]) -> str:
+    def format_for_llm(
+        self,
+        missions: list[Mission],
+        graph: DependencyGraph | None = None,
+    ) -> str:
         """Produce LLM-digestible structured text summary."""
         if not missions:
             return "No missions in ledger."
@@ -431,8 +435,9 @@ class StatusAggregator:
             )
             if m.checklist:
                 checked = sum(1 for c in m.checklist if c.startswith("verified_by:"))
+                suffix = f" ({checked} verified)" if checked > 0 else ""
                 lines.append(
-                    f"    Checklist: {len(m.checklist)} items ({checked} verified)",
+                    f"    Checklist: {len(m.checklist)} items{suffix}",
                 )
             if m.tasks:
                 done = sum(1 for t in m.tasks if t.status == TaskStatus.COMPLETED)
@@ -443,5 +448,11 @@ class StatusAggregator:
                 lines.append(
                     f"    FAILED: {m.failure.error_type} — {m.failure.error_message}",
                 )
+            if graph:
+                deps = graph.dependencies(m.mission_id)
+                if deps:
+                    lines.append(
+                        f"    Blocked by: {', '.join(sorted(deps))}",
+                    )
 
         return "\n".join(lines)

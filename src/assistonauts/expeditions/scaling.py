@@ -8,6 +8,7 @@ Curator, and Inspector. Manages instance pools for scalable agents
 from __future__ import annotations
 
 import re
+import time
 import uuid
 
 from assistonauts.models.config import SINGLETONS, ScalingConfig
@@ -46,6 +47,7 @@ class ScalingManager:
     def __init__(self, config: ScalingConfig) -> None:
         self.config = config
         self._pools: dict[str, AgentPool] = {}
+        self._last_scale_up: dict[str, float] = {}
 
     def _get_pool(self, agent_type: str) -> AgentPool:
         if agent_type not in self._pools:
@@ -78,7 +80,20 @@ class ScalingManager:
         trigger = self.config.auto_scale.trigger
         threshold = _parse_trigger(trigger)
         pool = self._get_pool(agent_type)
-        return queue_depth > threshold and pool.active_count() < pool.max_instances
+
+        if queue_depth <= threshold:
+            return False
+        if pool.active_count() >= pool.max_instances:
+            return False
+
+        # Enforce cooldown
+        cooldown_secs = self.config.auto_scale.cooldown_minutes * 60
+        last = self._last_scale_up.get(agent_type, 0.0)
+        if time.monotonic() - last < cooldown_secs:
+            return False
+
+        self._last_scale_up[agent_type] = time.monotonic()
+        return True
 
     def active_counts(self) -> dict[str, int]:
         """Return active instance counts per agent type."""

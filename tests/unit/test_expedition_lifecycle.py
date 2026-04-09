@@ -107,6 +107,18 @@ expedition:
         assert config.scaling.budget.daily_token_limit == 50_000
         assert config.scaling.budget.warning_threshold == 0.9
 
+    def test_stationed_reporting_parsed(self) -> None:
+        data = {
+            "name": "rpt-test",
+            "stationed": {
+                "reporting": {
+                    "station_log": "weekly",
+                },
+            },
+        }
+        config = ExpeditionConfig.from_dict(data)
+        assert config.stationed.reporting == {"station_log": "weekly"}
+
     def test_minimal_config(self) -> None:
         data = {"name": "test", "description": "test expedition"}
         config = ExpeditionConfig.from_dict(data)

@@ -480,7 +480,7 @@ class TestBuildExecution:
             mission_id="test",
             agent="scout",
             mission_type="ingest",
-            inputs={"paths": ["/tmp/a.pdf", "/tmp/b.pdf"]},
+            inputs={"paths": ["/tmp/a.pdf"]},
             acceptance_criteria=[],
             created_by="captain",
         )
@@ -526,3 +526,76 @@ class TestBuildExecution:
         )
         params = BuildOrchestrator._mission_to_params(m)
         assert params["article_path"] == "wiki/concept/test.md"
+
+    def test_mission_to_params_explorer(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        from assistonauts.missions.models import Mission
+
+        m = Mission(
+            mission_id="test",
+            agent="explorer",
+            mission_type="query",
+            inputs={"query": "What is ML?"},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = BuildOrchestrator._mission_to_params(m)
+        assert params["query"] == "What is ML?"
+
+    def test_mission_to_params_captain(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        from assistonauts.missions.models import Mission
+
+        m = Mission(
+            mission_id="test",
+            agent="captain",
+            mission_type="plan",
+            inputs={"directive": "plan"},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = BuildOrchestrator._mission_to_params(m)
+        assert params["directive"] == "plan"
+
+    def test_mission_to_params_scout_multi_path(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        from assistonauts.missions.models import Mission
+
+        m = Mission(
+            mission_id="test",
+            agent="scout",
+            mission_type="ingest",
+            inputs={"paths": ["/tmp/a.pdf", "/tmp/b.pdf", "/tmp/c.pdf"]},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = BuildOrchestrator._mission_to_params(m)
+        assert params["source_path"] == "/tmp/a.pdf,/tmp/b.pdf,/tmp/c.pdf"
+
+    def test_validate_params_missing_source(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        from assistonauts.missions.models import Mission
+
+        m = Mission(
+            mission_id="test",
+            agent="compiler",
+            mission_type="compile",
+            inputs={},  # missing sources
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = BuildOrchestrator._mission_to_params(m)
+        with pytest.raises(ValueError, match="compiler requires"):
+            BuildOrchestrator._validate_params(m, params)

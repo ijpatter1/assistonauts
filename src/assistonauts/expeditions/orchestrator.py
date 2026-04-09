@@ -312,15 +312,48 @@ class BuildOrchestrator:
                     "total_tokens_used",
                     0,
                 )
-                task = Task(
-                    task_id=f"task-{mission.mission_id}-{attempt}",
-                    agent=mission.agent,
-                    params=self._mission_to_params(mission),
-                )
-                task_result = self.task_runner.run(
-                    task,
-                    self.llm_client,
-                )
+                params = self._mission_to_params(mission)
+                self._validate_params(mission, params)
+
+                # Scout multi-path: run one task per path
+                all_paths = params.get("source_path", "")
+                if mission.agent == "scout" and "," in all_paths:
+                    sub_results = []
+                    for i, p in enumerate(all_paths.split(",")):
+                        sub_task = Task(
+                            task_id=(f"task-{mission.mission_id}-{attempt}-{i}"),
+                            agent="scout",
+                            params={"source_path": p.strip()},
+                        )
+                        sub_results.append(
+                            self.task_runner.run(
+                                sub_task,
+                                self.llm_client,
+                            ),
+                        )
+                    task_result = sub_results[-1]
+                    task_result = type(task_result)(
+                        success=all(r.success for r in sub_results),
+                        status=task_result.status,
+                        error_type=next(
+                            (r.error_type for r in sub_results if not r.success),
+                            "",
+                        ),
+                        error_message=next(
+                            (r.error_message for r in sub_results if not r.success),
+                            "",
+                        ),
+                    )
+                else:
+                    task = Task(
+                        task_id=f"task-{mission.mission_id}-{attempt}",
+                        agent=mission.agent,
+                        params=params,
+                    )
+                    task_result = self.task_runner.run(
+                        task,
+                        self.llm_client,
+                    )
 
                 # Record actual token usage from LLM client
                 tokens_after = getattr(
@@ -398,7 +431,10 @@ class BuildOrchestrator:
         if agent == "scout":
             paths = inputs.get("paths") or inputs.get("sources") or []
             if isinstance(paths, list) and paths:
-                params["source_path"] = str(paths[0])
+                # Scout processes one file at a time. For multi-path
+                # missions, pass all paths comma-separated. The
+                # execute loop runs one task per path.
+                params["source_path"] = ",".join(str(p) for p in paths)
         elif agent == "compiler":
             sources = inputs.get("sources", [])
             if isinstance(sources, list):
@@ -424,6 +460,39 @@ class BuildOrchestrator:
             )
 
         return params
+
+    @staticmethod
+    def _validate_params(
+        mission: Mission,
+        params: dict[str, str],
+    ) -> None:
+        """Validate that required params are present for the agent.
+
+        Raises ValueError with diagnostic message if a required key
+        is missing — fail-fast before dispatching a doomed task.
+        """
+        required: dict[str, list[str]] = {
+            "scout": ["source_path"],
+            "compiler": [],  # source_path OR source_paths
+            "curator": ["article_path"],
+            "explorer": ["query"],
+        }
+        agent = mission.agent
+        if agent == "compiler" and not (
+            "source_path" in params or "source_paths" in params
+        ):
+            msg = (
+                f"Mission {mission.mission_id}: compiler requires "
+                f"'sources' in inputs, got {mission.inputs}"
+            )
+            raise ValueError(msg)
+        for key in required.get(agent, []):
+            if key not in params or not params[key]:
+                msg = (
+                    f"Mission {mission.mission_id}: {agent} requires "
+                    f"'{key}' in params, got {params}"
+                )
+                raise ValueError(msg)
 
     def _build_prompt(self, phase: IterationPhase) -> str:
         """Build a phase-specific prompt for the Captain."""

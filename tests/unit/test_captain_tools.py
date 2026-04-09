@@ -376,6 +376,13 @@ class TestScheduleRunner:
         assert runner.matches("0 0 * * 4", dt)
         assert not runner.matches("0 0 * * 1", dt)
 
+    def test_matches_sunday(self) -> None:
+        runner = ScheduleRunner()
+        # 2026-04-12 is Sunday (day 0 in cron, 0=Sunday)
+        dt = datetime(2026, 4, 12, 0, 0, tzinfo=UTC)
+        assert runner.matches("0 0 * * 0", dt)
+        assert not runner.matches("0 0 * * 6", dt)
+
     def test_matches_day_of_month(self) -> None:
         runner = ScheduleRunner()
         dt = datetime(2026, 4, 15, 0, 0, tzinfo=UTC)
@@ -485,3 +492,49 @@ class TestStatusAggregator:
         text = agg.format_for_llm(missions)
         assert "Checklist: 3 items" in text
         assert "1 verified" in text
+
+    def test_format_for_llm_no_verified_suppressed(self) -> None:
+        missions = [
+            Mission(
+                mission_id="m1",
+                agent="compiler",
+                mission_type="compile",
+                inputs={},
+                acceptance_criteria=[],
+                created_by="captain",
+                checklist=["step 1", "step 2"],
+            ),
+        ]
+        missions[0].start()
+        agg = StatusAggregator()
+        text = agg.format_for_llm(missions)
+        assert "Checklist: 2 items" in text
+        assert "verified" not in text
+
+    def test_format_for_llm_with_dependencies(self) -> None:
+        from assistonauts.missions.dependencies import DependencyGraph
+
+        missions = [
+            Mission(
+                mission_id="m1",
+                agent="scout",
+                mission_type="ingest",
+                inputs={},
+                acceptance_criteria=[],
+                created_by="captain",
+            ),
+            Mission(
+                mission_id="m2",
+                agent="compiler",
+                mission_type="compile",
+                inputs={},
+                acceptance_criteria=[],
+                created_by="captain",
+            ),
+        ]
+        missions[0].start()
+        graph = DependencyGraph()
+        graph.add_edge("m1", "m2")
+        agg = StatusAggregator()
+        text = agg.format_for_llm(missions, graph=graph)
+        assert "Blocked by: m1" in text
