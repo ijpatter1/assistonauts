@@ -77,6 +77,14 @@ def _resolve_agent(
         from assistonauts.agents.captain import CaptainAgent
 
         return CaptainAgent(llm_client=llm_client, workspace_root=workspace_root)
+    elif agent_name == "curator":
+        from assistonauts.agents.curator import CuratorAgent
+
+        return CuratorAgent(llm_client=llm_client, workspace_root=workspace_root)
+    elif agent_name == "explorer":
+        from assistonauts.agents.explorer import ExplorerAgent
+
+        return ExplorerAgent(llm_client=llm_client, workspace_root=workspace_root)
     else:
         raise DeterministicError(f"Unknown agent: {agent_name}")
 

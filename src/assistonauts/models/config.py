@@ -163,14 +163,13 @@ class ExpeditionConfig:
     def from_dict(cls, data: dict[str, object]) -> "ExpeditionConfig":
         """Parse an expedition config from a dict (e.g. YAML)."""
         scope_data = data.get("scope", {})
-        scope = ExpeditionScope(
-            description=str(scope_data.get("description", ""))  # type: ignore[union-attr]
-            if isinstance(scope_data, dict)
-            else "",
-            keywords=scope_data.get("keywords", [])  # type: ignore[union-attr]
-            if isinstance(scope_data, dict)
-            else [],
-        )
+        if isinstance(scope_data, dict):
+            scope = ExpeditionScope(
+                description=str(scope_data.get("description", "")),
+                keywords=scope_data.get("keywords", []),
+            )
+        else:
+            scope = ExpeditionScope()
 
         sources_data = data.get("sources", {})
         local_sources = []

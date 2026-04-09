@@ -151,6 +151,8 @@ class Mission:
             d["started_at"] = self.started_at.isoformat()
         if self.completed_at:
             d["completed_at"] = self.completed_at.isoformat()
+        if self.stale_reason:
+            d["stale_reason"] = self.stale_reason
         if self.failure:
             d["failure"] = {
                 "type": self.failure.error_type,
@@ -229,6 +231,7 @@ class Mission:
                 if "completed_at" in md
                 else None
             ),
+            stale_reason=str(md.get("stale_reason", "")),
             tasks=tasks,
             failure=failure,
         )

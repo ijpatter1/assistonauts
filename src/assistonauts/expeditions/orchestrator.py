@@ -145,12 +145,16 @@ class BuildOrchestrator:
     def execute_iteration(
         self,
         iteration: BuildIteration,
+        prior_completed: set[str] | None = None,
     ) -> BuildIteration:
         """Execute all missions in an iteration in dependency order.
 
         Dispatches each ready mission to its agent via the TaskRunner,
         records results in the ledger, checks the budget before each
         mission, and handles failures.
+
+        prior_completed: mission IDs completed in earlier iterations,
+        so cross-iteration dependencies resolve correctly.
         """
         if not iteration.missions:
             return iteration
@@ -159,7 +163,7 @@ class BuildOrchestrator:
         for m in iteration.missions:
             self.ledger.save(m)
 
-        completed: set[str] = set()
+        completed: set[str] = set(prior_completed or set())
         pending = {m.mission_id for m in iteration.missions}
         graph = iteration.graph or DependencyGraph()
 
@@ -200,12 +204,24 @@ class BuildOrchestrator:
         return iteration
 
     def run_build(self) -> BuildPhaseResult:
-        """Run the full build phase: plan and execute all iterations."""
+        """Run the full build phase: plan and execute all iterations.
+
+        Carries completed mission IDs across iterations so that
+        Structuring missions can depend on Discovery output.
+        """
         result = BuildPhaseResult()
+        all_completed: set[str] = set()
 
         for phase in self.iteration_sequence():
             iteration = self.plan_iteration(phase)
-            iteration = self.execute_iteration(iteration)
+            iteration = self.execute_iteration(
+                iteration,
+                prior_completed=all_completed,
+            )
+            # Carry forward completed missions
+            for m in iteration.missions:
+                if m.status == MissionStatus.COMPLETED:
+                    all_completed.add(m.mission_id)
             result.iterations.append(iteration)
             result.total_missions += iteration.missions_planned
             result.total_completed += iteration.missions_completed
@@ -235,6 +251,17 @@ class BuildOrchestrator:
                 params=self._mission_to_params(mission),
             )
             task_result = self.task_runner.run(task, self.llm_client)
+
+            # Record token usage from the task execution
+            if task_result.agent_output:
+                usage = getattr(task_result.agent_output, "usage", {})
+                tokens = usage.get("total_tokens", 0) if isinstance(usage, dict) else 0
+                if tokens:
+                    self.budget.tracker.record(
+                        agent=mission.agent,
+                        expedition=self.config.name,
+                        tokens=tokens,
+                    )
 
             if task_result.success:
                 mission.complete()
