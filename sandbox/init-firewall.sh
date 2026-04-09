@@ -55,18 +55,18 @@ PROJECT_DOMAINS=(
 # ─────────────────────────────────────────────
 
 GCLOUD_DOMAINS=(
-    # "oauth2.googleapis.com"
-    # "accounts.google.com"
-    # "www.googleapis.com"
-    # "bigquery.googleapis.com"
-    # "pubsub.googleapis.com"
-    # "run.googleapis.com"
-    # "storage.googleapis.com"
-    # "cloudresourcemanager.googleapis.com"
-    # "iam.googleapis.com"
-    # "dataform.googleapis.com"
-    # "tagmanager.googleapis.com"
-    # "aiplatform.googleapis.com"
+    "oauth2.googleapis.com"
+    "accounts.google.com"
+    "www.googleapis.com"
+    "bigquery.googleapis.com"
+    "pubsub.googleapis.com"
+    "run.googleapis.com"
+    "storage.googleapis.com"
+    "cloudresourcemanager.googleapis.com"
+    "iam.googleapis.com"
+    "dataform.googleapis.com"
+    "tagmanager.googleapis.com"
+    "aiplatform.googleapis.com"
 )
 
 # ─────────────────────────────────────────────
