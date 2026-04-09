@@ -238,16 +238,28 @@ class BuildOrchestrator:
         return iteration
 
     def run_build(self) -> BuildPhaseResult:
-        """Run the full build phase: plan and execute all iterations.
+        """Run the full build phase with variable iteration count.
 
-        Carries completed mission IDs across iterations so that
-        Structuring missions can depend on Discovery output.
+        Runs Discovery → Structuring → Refinement, but skips later
+        iterations if exit conditions are met early (all sources
+        processed, no new missions to plan). The spec says iteration
+        count is variable — small expeditions may complete in 2.
         """
         result = BuildPhaseResult()
         all_completed: set[str] = set()
 
         for phase in self.iteration_sequence():
             iteration = self.plan_iteration(phase)
+
+            # Exit condition: no new work to do in this iteration
+            if iteration.missions_planned == 0 and phase != IterationPhase.DISCOVERY:
+                logger.info(
+                    "Skipping %s — no missions planned (exit condition met)",
+                    phase.value,
+                )
+                result.iterations.append(iteration)
+                continue
+
             iteration = self.execute_iteration(
                 iteration,
                 prior_completed=all_completed,

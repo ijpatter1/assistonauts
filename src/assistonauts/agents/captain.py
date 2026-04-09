@@ -49,7 +49,7 @@ When asked to create a mission plan, output YAML in this format:
 missions:
   - id: mission-NNN
     agent: scout|compiler|curator|explorer
-    type: ingest_sources|compile_article|cross_reference|...
+    type: ingest_sources|compile_article|cross_reference|query
     inputs:
       key: value
     acceptance_criteria:
@@ -58,6 +58,12 @@ missions:
     depends_on:  # optional
       - mission-NNN
 ```
+
+Agent-specific input keys (use these exactly):
+- scout: inputs.paths (list of file paths to ingest)
+- compiler: inputs.sources (list of raw source paths), inputs.title, inputs.article_type
+- curator: inputs.article_path (single wiki article path)
+- explorer: inputs.query (question string)
 """
 
 
