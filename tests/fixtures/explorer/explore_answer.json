@@ -1,0 +1,5 @@
+{
+  "content": "Machine learning is a branch of artificial intelligence that focuses on building systems that learn from data, as described in the \"Machine Learning Fundamentals\" article. Rather than being explicitly programmed for specific tasks, ML systems identify patterns in training data and use those patterns to make predictions or decisions.\n\nThe key approaches include:\n\n- **Supervised learning** uses labeled examples to learn input-output mappings\n- **Unsupervised learning** discovers hidden structure without labels\n- **Reinforcement learning** learns through trial-and-error with reward signals\n\nAccording to the knowledge base, feature engineering and model evaluation are critical components of the ML pipeline. The \"Backpropagation\" article explains how neural networks — one of the most powerful supervised learning methods — are trained using gradient computation via the chain rule.",
+  "model": "gpt-3.5-turbo",
+  "usage": { "prompt_tokens": 800, "completion_tokens": 200 }
+}

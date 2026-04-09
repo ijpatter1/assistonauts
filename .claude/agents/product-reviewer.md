@@ -1,9 +1,9 @@
 ---
-tools:
-  - Read
-  - Glob
-  - Grep
-  - Bash
+name: product-reviewer
+description: Product reviewer for completed features. Invoke after finishing a feature or work session to get an independent, skeptical assessment of the work. Use @evaluator or /evaluate to trigger.
+tools: Read, Glob, Grep, Bash
+model: inherit
+memory: project
 hooks:
   PreToolUse:
     - matcher: "Bash"

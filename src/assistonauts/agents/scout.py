@@ -75,6 +75,7 @@ class ScoutAgent(Agent):
         )
         self._workspace_root = workspace_root
         self._manifest_path = index_dir / "manifest.json"
+        self._setup_persistent_logger(workspace_root)
 
     def ingest(
         self,
@@ -102,6 +103,12 @@ class ScoutAgent(Agent):
 
         # Check if content has changed
         if not manifest.has_changed(source_path, manifest_key):
+            assert self.logger is not None
+            self.logger.log(
+                "ingest_skipped",
+                source=source_path.name,
+                reason="content_unchanged",
+            )
             return IngestResult(
                 success=True,
                 skipped=True,
@@ -112,10 +119,25 @@ class ScoutAgent(Agent):
             )
 
         # Convert to markdown — use vision model for images
+        source_size = source_path.stat().st_size
         if is_image_file(source_path):
             content = convert_image(source_path, self.llm_client)
+            assert self.logger is not None
+            self.logger.log(
+                "image_conversion",
+                source=source_path.name,
+                source_bytes=source_size,
+                output_chars=len(content),
+            )
         else:
             content = convert_document(source_path)
+            assert self.logger is not None
+            self.logger.log(
+                "document_conversion",
+                source=source_path.name,
+                source_bytes=source_size,
+                output_chars=len(content),
+            )
 
         # Add frontmatter
         now = datetime.now(UTC).isoformat()

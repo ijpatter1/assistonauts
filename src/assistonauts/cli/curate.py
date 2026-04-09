@@ -19,12 +19,22 @@ def _create_curator(workspace: Path) -> CuratorAgent:  # noqa: F821 — lazy imp
     a CuratorAgent ready for cross-referencing.
     """
     from assistonauts.agents.curator import CuratorAgent
-    from assistonauts.archivist.embeddings import LiteLLMEmbeddingClient
+    from assistonauts.archivist.embeddings import (
+        LiteLLMEmbeddingClient,
+        create_embedding_client,
+        get_embedding_dimensions,
+    )
     from assistonauts.cli.task import _create_llm_client
+    from assistonauts.config.loader import load_config
 
     llm_client = _create_llm_client(workspace, "curator")
-    archivist = Archivist(workspace)
-    embedding_client = LiteLLMEmbeddingClient()
+    config = load_config(workspace)
+    dims = get_embedding_dimensions(config.embedding)
+    archivist = Archivist(workspace, embedding_dimensions=dims)
+
+    embedding_client = (
+        create_embedding_client(config.embedding) or LiteLLMEmbeddingClient()
+    )
 
     return CuratorAgent(
         llm_client=llm_client,
@@ -56,7 +66,12 @@ def curate(workspace: Path, proposals: bool) -> None:
         console.print(f"[red]Error:[/red] Workspace not found at {workspace}")
         raise SystemExit(1)
 
-    archivist = Archivist(workspace)
+    from assistonauts.archivist.embeddings import get_embedding_dimensions
+    from assistonauts.config.loader import load_config
+
+    config = load_config(workspace)
+    dims = get_embedding_dimensions(config.embedding)
+    archivist = Archivist(workspace, embedding_dimensions=dims)
     all_articles = archivist.db.list_articles()
 
     if proposals:

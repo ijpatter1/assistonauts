@@ -26,6 +26,7 @@ class EmbeddingProviderConfig:
 
     model: str = ""
     base_url: str | None = None
+    dimensions: int | None = None
 
 
 @dataclass

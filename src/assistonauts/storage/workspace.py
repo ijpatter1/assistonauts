@@ -19,11 +19,15 @@ llm:
     explorer: anthropic
 
 embedding:
-  active: ollama
+  active: gemini
   providers:
+    gemini:
+      model: gemini-embedding-2-preview
+      dimensions: 3072
     ollama:
       model: nomic-embed-text
       base_url: http://localhost:11434
+      dimensions: 384
 
 cache:
   llm_responses:
@@ -35,6 +39,9 @@ cache:
 
 _GITIGNORE = """\
 .assistonauts/cache/
+.assistonauts/logs/
+.assistonauts/explorer/
+.assistonauts/curator/
 index/assistonauts.db
 __pycache__/
 *.pyc
@@ -51,7 +58,7 @@ _DIRECTORIES: list[str] = [
     "wiki/concept",
     "wiki/entity",
     "wiki/log",
-    "wiki/exploration",
+    "wiki/explorations",
     "index",
     "audits/findings",
     "expeditions",

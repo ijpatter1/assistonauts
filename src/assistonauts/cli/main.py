@@ -6,6 +6,7 @@ import click
 from rich.console import Console
 
 from assistonauts.cli.curate import curate
+from assistonauts.cli.explore import explore
 from assistonauts.cli.index import index
 from assistonauts.cli.plan import plan
 from assistonauts.cli.scout import scout
@@ -28,6 +29,7 @@ cli.add_command(plan)
 cli.add_command(status)
 cli.add_command(index)
 cli.add_command(curate)
+cli.add_command(explore)
 
 
 @cli.command()

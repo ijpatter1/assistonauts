@@ -8,14 +8,17 @@ articles and LLM inference to determine which connections to add.
 
 from __future__ import annotations
 
+import json
+import logging
 import threading
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 from assistonauts.agents.base import Agent, LLMClientProtocol
 from assistonauts.archivist.embeddings import EmbeddingClient
 from assistonauts.archivist.service import Archivist
-from assistonauts.rag.multi_pass import MultiPassRetriever
+from assistonauts.rag.multi_pass import MultiPassRetriever, RetrievalLog
 from assistonauts.tools.curator import analyze_graph, parse_links, scan_backlink_targets
 
 _CURATOR_SYSTEM_PROMPT = """\
@@ -100,6 +103,7 @@ class CuratorAgent(Agent):
         self._workspace_root = workspace_root
         self._archivist = archivist
         self._embedding_client = embedding_client
+        self._setup_persistent_logger(workspace_root)
 
     def close(self) -> None:
         """Release the singleton lock so a new instance can be created."""
@@ -221,7 +225,7 @@ class CuratorAgent(Agent):
             backlinks_added.append(slug)
             modified_paths.append(backlink_path)
 
-        return CuratorResult(
+        result = CuratorResult(
             success=True,
             output_path=full_path,
             output_paths=modified_paths,
@@ -233,6 +237,55 @@ class CuratorAgent(Agent):
                 f"{len(backlinks_added)} backlinks."
             ),
         )
+
+        self._log_cross_reference(
+            article_path=article_path,
+            candidates=[Path(str(c["path"])).stem for c in candidates],
+            strong_links=strong_links,
+            weak_links=weak_links,
+            backlinks_added=backlinks_added,
+            retrieval_log=retrieval_result.log,
+        )
+
+        return result
+
+    def _log_cross_reference(
+        self,
+        article_path: str,
+        candidates: list[str],
+        strong_links: list[str],
+        weak_links: list[str],
+        backlinks_added: list[str],
+        retrieval_log: RetrievalLog | None = None,
+    ) -> None:
+        """Append a cross-reference decision record to .assistonauts/curator/.
+
+        Every cross_reference() call is logged for audit trail.
+        Best-effort — logging failures never crash the primary operation.
+        """
+        try:
+            log_dir = self._workspace_root / ".assistonauts" / "curator"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / "cross-references.jsonl"
+
+            entry: dict[str, object] = {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "article": article_path,
+                "candidates_evaluated": candidates,
+                "strong_links": strong_links,
+                "weak_links": weak_links,
+                "backlinks_added": backlinks_added,
+            }
+
+            if retrieval_log is not None:
+                entry["retrieval"] = retrieval_log.to_dict()
+
+            with open(log_path, "a") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Failed to write curator audit log", exc_info=True
+            )
 
     def _write_see_also(self, path: Path, slugs: list[str]) -> None:
         """Append wiki-links to an article's See Also section via write_file."""

@@ -96,9 +96,12 @@ def _parse_embedding_config(raw: object) -> EmbeddingConfig:
     providers: dict[str, EmbeddingProviderConfig] = {}
     for name, pdata in raw.get("providers", {}).items():
         if isinstance(pdata, dict):
+            dims_raw = pdata.get("dimensions")
+            dims = int(dims_raw) if dims_raw is not None else None
             providers[name] = EmbeddingProviderConfig(
                 model=pdata.get("model", ""),
                 base_url=pdata.get("base_url"),
+                dimensions=dims,
             )
 
     return EmbeddingConfig(

@@ -3,6 +3,7 @@
 # End-to-End Pipeline Test: "There's Treasure Inside"
 # Created: 2026-04-08, session-2026-04-08-005
 # Updated: 2026-04-09 — added curate cross-referencing step + verification
+# Updated: 2026-04-09 — added GEMINI_API_KEY check + embedding verification
 # Phase: 3
 # Blocks: Nothing — validation task for Phase 4 readiness
 #
@@ -32,6 +33,7 @@ check_prereq() {
 check_prereq assistonauts
 check_prereq python3
 [ -n "${ANTHROPIC_API_KEY:-}" ] || { echo "❌ ANTHROPIC_API_KEY not set"; exit 1; }
+[ -n "${GEMINI_API_KEY:-}" ] || { echo "⚠️  GEMINI_API_KEY not set — embeddings will fall back to FTS only"; }
 
 # Check input files exist
 EXPECTED_FILES=(
@@ -166,6 +168,32 @@ print(db.execute('SELECT count(*) FROM articles').fetchone()[0])
 " 2>/dev/null || echo "0")
 verify 'test "$DB_ARTICLES" -ge 1' \
   "At least 1 article indexed in DB ($DB_ARTICLES found)"
+
+if [ -n "${GEMINI_API_KEY:-}" ]; then
+  EMBEDDING_COUNT=$(python3 -c "
+import sqlite3, sqlite_vec
+db = sqlite3.connect('$WORKSPACE/index/assistonauts.db')
+db.enable_load_extension(True)
+sqlite_vec.load(db)
+db.enable_load_extension(False)
+print(db.execute('SELECT count(*) FROM articles_vec').fetchone()[0])
+" 2>/dev/null || echo "0")
+  verify 'test "$EMBEDDING_COUNT" -ge 1' \
+    "At least 1 article has embeddings in articles_vec ($EMBEDDING_COUNT found)"
+
+  EMBEDDING_DIM=$(python3 -c "
+import sqlite3
+db = sqlite3.connect('$WORKSPACE/index/assistonauts.db')
+sql = db.execute(\"SELECT sql FROM sqlite_master WHERE name='articles_vec'\").fetchone()[0]
+import re
+m = re.search(r'float\[(\d+)\]', sql)
+print(m.group(1) if m else '0')
+" 2>/dev/null || echo "0")
+  verify 'test "$EMBEDDING_DIM" -eq 3072' \
+    "Embedding dimensions are 3072 (Gemini default, got $EMBEDDING_DIM)"
+else
+  echo "  ⊘ Skipped embedding checks (GEMINI_API_KEY not set)"
+fi
 
 verify 'test -f "$WORKSPACE/index/manifest.json"' \
   "Manifest file exists"

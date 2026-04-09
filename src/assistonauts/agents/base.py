@@ -74,6 +74,29 @@ class Agent:
         if self.logger is None:
             self.logger = StructuredLogger(role=self.role)
 
+    def _setup_persistent_logger(self, workspace_root: Path) -> None:
+        """Upgrade the logger to write persistent .jsonl files.
+
+        Call this from subclass __init__ after super().__init__()
+        when the workspace root is known.
+
+        Logging uses two tiers:
+        1. StructuredLogger writes generic events (llm_call, file_write,
+           tool_invoke) to .assistonauts/logs/<role>.jsonl.
+        2. Domain-specific logs (Explorer queries, Curator decisions) are
+           written separately to .assistonauts/<role>/ with richer data.
+
+        Both tiers write outside the agent's owned_dirs — this is
+        intentional: logs are shared infrastructure, not agent-owned
+        content. They are gitignored by default.
+        """
+        log_dir = workspace_root / ".assistonauts" / "logs"
+        # Preserve task_id from any previously configured logger
+        existing_task_id = getattr(self.logger, "_task_id", None)
+        self.logger = StructuredLogger(
+            role=self.role, log_dir=log_dir, task_id=existing_task_id
+        )
+
     def run_task(self, task: dict[str, str]) -> AgentResult:
         """Execute a task. Subclasses must override."""
         raise NotImplementedError(f"Agent '{self.role}' must implement run_task()")
