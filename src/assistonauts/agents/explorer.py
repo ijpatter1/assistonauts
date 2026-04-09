@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
 from assistonauts.agents.base import Agent, LLMClientProtocol
@@ -233,6 +234,58 @@ class ExplorerAgent(Agent):
             )
         return citations
 
+    def file_exploration(self, result: ExplorerResult) -> Path:
+        """Save an exploration result to wiki/explorations/ with frontmatter.
+
+        Creates a markdown file following the exploration article template:
+        frontmatter (title, type, sources, created_at), Question section,
+        Analysis section, and Sources section.
+
+        Returns the path to the created file.
+        """
+        slug = _query_to_slug(result.query)
+        explorations_dir = self._workspace_root / "wiki" / "explorations"
+        explorations_dir.mkdir(parents=True, exist_ok=True)
+        file_path = explorations_dir / f"{slug}.md"
+
+        # Build frontmatter
+        sources_yaml = ""
+        if result.citations:
+            source_lines = "\n".join(f"  - {c.path}" for c in result.citations)
+            sources_yaml = f"sources:\n{source_lines}"
+        else:
+            sources_yaml = "sources: []"
+
+        frontmatter = (
+            f"---\n"
+            f"title: {result.query}\n"
+            f"type: exploration\n"
+            f"{sources_yaml}\n"
+            f"created_at: {date.today().isoformat()}\n"
+            f"status: exploration\n"
+            f"---\n"
+        )
+
+        # Build body sections
+        body_parts: list[str] = [
+            f"## Question\n\n{result.query}",
+            f"## Analysis\n\n{result.answer}",
+        ]
+
+        # Sources section with citation links
+        if result.citations:
+            source_lines_md = "\n".join(
+                f"- [{c.title}]({c.path})" for c in result.citations
+            )
+            body_parts.append(f"## Sources\n\n{source_lines_md}")
+        else:
+            body_parts.append("## Sources\n\nNo sources cited.")
+
+        content = frontmatter + "\n" + "\n\n".join(body_parts) + "\n"
+        self.write_file(file_path, content)
+
+        return file_path
+
     def run_task(self, task: dict[str, str]) -> ExplorerResult:
         """Execute an Explorer task.
 
@@ -240,3 +293,13 @@ class ExplorerAgent(Agent):
         """
         query = task.get("query", "")
         return self.explore(query)
+
+
+def _query_to_slug(query: str, max_length: int = 80) -> str:
+    """Convert a query string to a URL-safe slug for file naming."""
+    slug = query.lower().strip()
+    slug = re.sub(r"[^\w\s-]", "", slug)  # Remove non-word chars except hyphens
+    slug = re.sub(r"[\s_]+", "-", slug)  # Replace whitespace/underscores with hyphens
+    slug = re.sub(r"-+", "-", slug)  # Collapse multiple hyphens
+    slug = slug.strip("-")
+    return slug[:max_length]
