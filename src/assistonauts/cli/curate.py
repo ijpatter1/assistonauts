@@ -12,6 +12,28 @@ from assistonauts.archivist.service import Archivist
 console = Console()
 
 
+def _create_curator(workspace: Path) -> CuratorAgent:  # noqa: F821 — lazy import
+    """Create a fully-wired CuratorAgent from workspace config.
+
+    Loads LLM config, creates an Archivist + EmbeddingClient, and returns
+    a CuratorAgent ready for cross-referencing.
+    """
+    from assistonauts.agents.curator import CuratorAgent
+    from assistonauts.archivist.embeddings import LiteLLMEmbeddingClient
+    from assistonauts.cli.task import _create_llm_client
+
+    llm_client = _create_llm_client(workspace, "curator")
+    archivist = Archivist(workspace)
+    embedding_client = LiteLLMEmbeddingClient()
+
+    return CuratorAgent(
+        llm_client=llm_client,
+        workspace_root=workspace,
+        archivist=archivist,
+        embedding_client=embedding_client,
+    )
+
+
 @click.command()
 @click.option(
     "-w",
@@ -46,13 +68,17 @@ def curate(workspace: Path, proposals: bool) -> None:
         return
 
     console.print(f"Cross-referencing {len(all_articles)} indexed articles...")
-    console.print(
-        "[dim]Note: Curator requires an LLM. "
-        "Skipping LLM-dependent cross-referencing in CLI-only mode.[/dim]"
-    )
-    console.print(
-        "[dim]Use `--proposals` to see structural improvement suggestions.[/dim]"
-    )
+
+    curator = _create_curator(workspace)
+    try:
+        results = curator.retroactive_cross_reference()
+        total_links = sum(len(r.links_added) for r in results)
+        console.print(
+            f"[green]Done.[/green] Processed {len(results)} articles, "
+            f"added {total_links} cross-references."
+        )
+    finally:
+        curator.close()
 
 
 def _show_proposals(workspace: Path, archivist: Archivist) -> None:
