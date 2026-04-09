@@ -1,7 +1,7 @@
 # Phase Status Tracker
 
-> **Current Phase: 3 — Archivist System + Curator + Hybrid RAG**
-> Last updated: 2026-04-08, session-2026-04-08-003
+> **Current Phase: 4 — Explorer + Interactive Mode** (Phase 3 complete, pending merge of curator-fixes branch)
+> Last updated: 2026-04-09, session-2026-04-09-001
 > Phase 1 merged to main 2026-04-07
 > Phase 2 merged to main 2026-04-08
 
