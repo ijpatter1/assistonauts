@@ -215,10 +215,12 @@ QUERY_FAIL=0
 set +e  # Don't abort on individual query failures
 for q in "${QUERIES[@]}"; do
   echo "  Q: $q"
-  OUTPUT=$(assistonauts explore -w "$WORKSPACE" --query "$q" 2>&1)
+  # NO_COLOR disables Rich formatting so we get plain text
+  OUTPUT=$(NO_COLOR=1 assistonauts explore -w "$WORKSPACE" --query "$q" 2>&1)
   EXIT_CODE=$?
   if [ "$EXIT_CODE" -eq 0 ] && [ -n "$OUTPUT" ]; then
-    echo "$OUTPUT" | head -5 | sed 's/^/     /'
+    # Strip blank lines, show first 10 content lines
+    echo "$OUTPUT" | grep -v '^[[:space:]]*$' | head -10 | sed 's/^/     /'
     echo "     ..."
     QUERY_PASS=$((QUERY_PASS + 1))
   else
