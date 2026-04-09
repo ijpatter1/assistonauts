@@ -73,6 +73,10 @@ def _resolve_agent(
         from assistonauts.agents.scout import ScoutAgent
 
         return ScoutAgent(llm_client=llm_client, workspace_root=workspace_root)
+    elif agent_name == "captain":
+        from assistonauts.agents.captain import CaptainAgent
+
+        return CaptainAgent(llm_client=llm_client, workspace_root=workspace_root)
     else:
         raise DeterministicError(f"Unknown agent: {agent_name}")
 
