@@ -2,7 +2,7 @@
 
 All functions are deterministic (no LLM inference). They format citations,
 calculate which articles fit within a token budget, and render answers
-as markdown.
+as markdown, Marp slides, or matplotlib charts.
 """
 
 from __future__ import annotations
@@ -132,3 +132,73 @@ def render_answer_markdown(
         parts.append(citations_block)
 
     return "\n".join(parts)
+
+
+def render_answer_marp(
+    answer: str,
+    citations: list[Citation],
+    query: str | None = None,
+) -> str:
+    """Render an Explorer answer as Marp slide deck markdown.
+
+    Produces a Marp-compatible markdown document with:
+    - Title slide with the query
+    - Content slides from the answer (split on headings)
+    - Sources slide with citations
+    """
+    parts: list[str] = [
+        "---",
+        "marp: true",
+        "theme: default",
+        "---",
+        "",
+    ]
+
+    # Title slide
+    if query:
+        parts.append(f"# {query}")
+    else:
+        parts.append("# Exploration")
+    parts.extend(["", "---", ""])
+
+    # Content slides — split on double newlines for slide breaks
+    paragraphs = answer.split("\n\n")
+    for para in paragraphs:
+        if para.strip():
+            parts.append(para.strip())
+            parts.extend(["", "---", ""])
+
+    # Sources slide
+    if citations:
+        parts.append("# Sources")
+        parts.append("")
+        seen: set[str] = set()
+        for citation in citations:
+            if citation.path not in seen:
+                seen.add(citation.path)
+                parts.append(f"- {format_citation(citation)}")
+        parts.append("")
+
+    return "\n".join(parts)
+
+
+def render_answer_chart_data(
+    citations: list[Citation],
+) -> dict[str, list[str | float]]:
+    """Prepare data for a matplotlib chart of citation sources.
+
+    Returns a dict with 'labels' and 'values' keys suitable for
+    matplotlib bar charts showing which articles were cited.
+
+    Requires matplotlib to be installed for actual rendering.
+    Chart rendering is handled by the caller — this function only
+    prepares the data structure.
+    """
+    seen: dict[str, int] = {}
+    for citation in citations:
+        key = citation.title
+        seen[key] = seen.get(key, 0) + 1
+
+    labels = list(seen.keys())
+    values = [float(v) for v in seen.values()]
+    return {"labels": labels, "values": values}

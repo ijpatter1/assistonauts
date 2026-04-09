@@ -7,7 +7,9 @@ from assistonauts.tools.explorer import (
     calculate_context_budget,
     format_citation,
     format_citations_block,
+    render_answer_chart_data,
     render_answer_markdown,
+    render_answer_marp,
 )
 
 # --- Citation formatter tests ---
@@ -204,3 +206,57 @@ class TestRenderAnswerMarkdown:
             query="What is machine learning?",
         )
         assert "What is machine learning?" in result
+
+
+class TestRenderAnswerMarp:
+    def test_marp_has_frontmatter(self) -> None:
+        result = render_answer_marp("Answer.", [])
+        assert "marp: true" in result
+
+    def test_marp_has_title_slide(self) -> None:
+        result = render_answer_marp("Answer.", [], query="What is ML?")
+        assert "# What is ML?" in result
+
+    def test_marp_has_slide_separators(self) -> None:
+        result = render_answer_marp("Paragraph one.\n\nParagraph two.", [])
+        assert result.count("---") >= 3  # frontmatter + slide breaks
+
+    def test_marp_has_sources_slide(self) -> None:
+        citations = [Citation(title="A", path="wiki/concept/a.md")]
+        result = render_answer_marp("Answer.", citations)
+        assert "# Sources" in result
+        assert "A" in result
+
+    def test_marp_deduplicates_citations(self) -> None:
+        citations = [
+            Citation(title="A", path="wiki/concept/a.md"),
+            Citation(title="A", path="wiki/concept/a.md", section="Details"),
+        ]
+        result = render_answer_marp("Answer.", citations)
+        source_lines = [line for line in result.splitlines() if line.startswith("- ")]
+        assert len(source_lines) == 1
+
+
+class TestRenderAnswerChartData:
+    def test_empty_citations(self) -> None:
+        data = render_answer_chart_data([])
+        assert data["labels"] == []
+        assert data["values"] == []
+
+    def test_single_citation(self) -> None:
+        citations = [Citation(title="Article A", path="wiki/concept/a.md")]
+        data = render_answer_chart_data(citations)
+        assert data["labels"] == ["Article A"]
+        assert data["values"] == [1.0]
+
+    def test_duplicate_citations_counted(self) -> None:
+        citations = [
+            Citation(title="A", path="wiki/concept/a.md"),
+            Citation(title="A", path="wiki/concept/a.md", section="Details"),
+            Citation(title="B", path="wiki/entity/b.md"),
+        ]
+        data = render_answer_chart_data(citations)
+        assert "A" in data["labels"]
+        assert "B" in data["labels"]
+        idx_a = data["labels"].index("A")
+        assert data["values"][idx_a] == 2.0
