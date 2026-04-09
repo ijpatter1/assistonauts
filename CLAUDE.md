@@ -25,7 +25,7 @@ See `docs/REQUIREMENTS.md` for the full development plan.
 See `docs/ARCHITECTURE.md` for technical architecture details.
 See `docs/PHASE_STATUS.md` for current completion state.
 
-Work on the current phase only. Do not implement features from future phases. If you encounter a dependency on a future phase, note it in your session handoff and move on.
+Do not implement features from future phases. If you encounter a dependency on a future phase, note it in your session handoff and move on. Fixes and improvements to prior phase deliverables are not restricted. If the current phase's work reveals a bug, gap, or quality issue in an earlier phase's deliverable, fix it — these are refinements to completed work, not scope creep. Use /change to classify and route appropriately.
 
 Do not modify sections of this file during active development. CLAUDE.md updates happen during /handoff via the freshness check — the agent proposes changes and the user approves. This prevents mid-session drift while keeping the file current.
 
