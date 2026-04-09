@@ -21,7 +21,7 @@ set -euo pipefail
 # ── User Configuration ───────────────────────────────
 
 INPUT_DIR="${INPUT_DIR:-input_artifacts}"
-WORKSPACE="${WORKSPACE:-/tmp/treasure-kb}"
+WORKSPACE="${WORKSPACE:-test-kb}"
 BATCH_SIZE="${BATCH_SIZE:-10}"  # images per scout ingest call
 
 # ── Prerequisites ────────────────────────────────────
