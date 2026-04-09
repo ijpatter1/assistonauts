@@ -397,6 +397,15 @@ class BuildOrchestrator:
                     continue
                 return
 
+            except ValueError as exc:
+                # Deterministic: bad params, malformed input — no retry
+                mission.fail(
+                    error_type="deterministic",
+                    error_message=str(exc),
+                    retries=0,
+                )
+                self.ledger.save(mission)
+                return
             except Exception as exc:
                 mission.fail(
                     error_type="transient",

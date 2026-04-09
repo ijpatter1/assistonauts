@@ -71,7 +71,7 @@ class ScalingManager:
         agent_type: str,
         queue_depth: int,
     ) -> bool:
-        """Check if auto-scaling should trigger for this agent."""
+        """Check if auto-scaling should trigger (pure query, no side effects)."""
         if agent_type in SINGLETONS:
             return False
         if agent_type not in self.config.agents:
@@ -89,11 +89,11 @@ class ScalingManager:
         # Enforce cooldown
         cooldown_secs = self.config.auto_scale.cooldown_minutes * 60
         last = self._last_scale_up.get(agent_type, 0.0)
-        if time.monotonic() - last < cooldown_secs:
-            return False
+        return time.monotonic() - last >= cooldown_secs
 
+    def record_scale_up(self, agent_type: str) -> None:
+        """Record that a scale-up occurred (starts cooldown timer)."""
         self._last_scale_up[agent_type] = time.monotonic()
-        return True
 
     def active_counts(self) -> dict[str, int]:
         """Return active instance counts per agent type."""

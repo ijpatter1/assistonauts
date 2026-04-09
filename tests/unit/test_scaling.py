@@ -116,6 +116,22 @@ class TestScalingManager:
         assert counts["scout"] == 1
         assert counts["compiler"] == 2
 
+    def test_cooldown_blocks_rapid_scale_up(self) -> None:
+        config = ScalingConfig(
+            agents={"compiler": "auto"},
+            auto_scale=AutoScaleConfig(
+                trigger="queue_depth > 2",
+                max_instances=3,
+                cooldown_minutes=10,  # 10 minutes
+            ),
+        )
+        mgr = ScalingManager(config)
+        # First call: should trigger (no prior scale-up)
+        assert mgr.should_scale_up("compiler", queue_depth=5)
+        mgr.record_scale_up("compiler")
+        # Immediate second call: blocked by cooldown
+        assert not mgr.should_scale_up("compiler", queue_depth=5)
+
     def test_unknown_agent_gets_singleton(self) -> None:
         config = ScalingConfig(agents={})
         mgr = ScalingManager(config)

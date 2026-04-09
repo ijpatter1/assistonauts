@@ -101,6 +101,14 @@ def build(expedition_name: str, workspace: Path) -> None:
         )
         return
 
+    if result.total_missions == 0:
+        console.print(
+            "\n[yellow]Warning:[/yellow] Build produced no missions. "
+            "The Captain's LLM responses could not be parsed into "
+            "valid mission plans. Check LLM configuration and model "
+            "quality.\n",
+        )
+
     console.print(
         f"\n[bold]Build complete:[/bold] "
         f"{result.total_completed}/{result.total_missions} missions completed, "
