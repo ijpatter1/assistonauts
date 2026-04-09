@@ -52,9 +52,13 @@ SECONDS=0  # bash builtin timer
 # ── Stage 1: Initialize Workspace ────────────────────
 
 echo "━━━ Stage 1: Init Workspace ━━━"
-rm -rf "$WORKSPACE"
-assistonauts init "$WORKSPACE"
-echo "  ✓ Workspace created at $WORKSPACE"
+if [ -d "$WORKSPACE/.assistonauts" ]; then
+  echo "  Existing workspace found at $WORKSPACE — reusing it."
+  echo "  (Set WORKSPACE to a new path or delete manually to start fresh.)"
+else
+  assistonauts init "$WORKSPACE"
+  echo "  ✓ Workspace created at $WORKSPACE"
+fi
 echo ""
 
 # ── Stage 2: Ingest Images via Scout ─────────────────

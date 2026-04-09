@@ -98,12 +98,15 @@ Rules:
 """
 
 
-def _prepare_image(path: Path, max_bytes: int = 4_500_000) -> bytes:
+def _prepare_image(path: Path, max_bytes: int = 3_500_000) -> bytes:
     """Read an image, resizing if it exceeds max_bytes.
 
     Uses Pillow to progressively downscale large images while
     maintaining aspect ratio and readability for vision models.
     Returns the image as PNG or JPEG bytes.
+
+    The default limit (3.5MB) accounts for base64 inflation (~33%),
+    keeping the encoded payload under the 5MB API limit.
     """
     raw = path.read_bytes()
     if len(raw) <= max_bytes:
@@ -165,11 +168,12 @@ def convert_image(
             f"Supported: {', '.join(sorted(_IMAGE_EXTENSIONS))}"
         )
 
-    # Read image, resize if needed to stay under API limits (5MB)
+    # Read image, resize if needed to stay under API limits (5MB).
+    # Target 3.5MB raw to stay under 5MB after base64 inflation (~33%).
     raw_bytes = path.read_bytes()
-    image_bytes = _prepare_image(path, max_bytes=4_500_000)
+    image_bytes = _prepare_image(path, max_bytes=3_500_000)
     # If we had to resize, it's now JPEG regardless of original format
-    if len(raw_bytes) > 4_500_000:
+    if len(raw_bytes) > 3_500_000:
         mime_type = "image/jpeg"
     else:
         mime_type = _IMAGE_MIME_TYPES.get(path.suffix.lower(), "image/png")
