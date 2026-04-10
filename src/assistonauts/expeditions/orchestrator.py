@@ -239,7 +239,11 @@ class BuildOrchestrator:
 
         return iteration
 
-    def run_build(self, max_iterations: int = 5) -> BuildPhaseResult:
+    def run_build(
+        self,
+        max_iterations: int = 5,
+        dry_run: bool = False,
+    ) -> BuildPhaseResult:
         """Run the full build phase with variable iteration count.
 
         Sequence: Discovery first, then Structuring → Refinement cycles
@@ -247,10 +251,22 @@ class BuildOrchestrator:
         Small expeditions exit after 2 (D, S). Large ones may need 4-5
         (D, S, R, S, R) when Refinement reveals additional structuring
         needs.
+
+        If dry_run=True, plans Discovery but does not execute any
+        missions. Useful for previewing the build plan.
         """
         result = BuildPhaseResult()
         all_completed: set[str] = set()
         iteration_count = 0
+
+        if dry_run:
+            iteration = self.plan_iteration(IterationPhase.DISCOVERY)
+            result.iterations.append(iteration)
+            result.total_missions += iteration.missions_planned
+            self._write_build_report(result)
+            self.ledger.close()
+            self.budget.tracker.close()
+            return result
 
         # Discovery always runs first
         iteration_count += 1

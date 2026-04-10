@@ -21,7 +21,13 @@ console = Console()
     default=".",
     help="Workspace root directory.",
 )
-def build(expedition_name: str, workspace: Path) -> None:
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Show Discovery plan without executing missions.",
+)
+def build(expedition_name: str, workspace: Path, dry_run: bool) -> None:
     """Run the build phase for an expedition."""
     workspace = workspace.resolve()
     exp_dir = workspace / "expeditions" / expedition_name
@@ -90,10 +96,15 @@ def build(expedition_name: str, workspace: Path) -> None:
         orch_logger.addHandler(handler)
         orch_logger.setLevel(logging.INFO)
 
-    console.print("Running build phase (Discovery → Structuring → Refinement)...\n")
+    if dry_run:
+        console.print("[bold]Dry run:[/bold] planning Discovery only...\n")
+    else:
+        console.print(
+            "Running build phase (Discovery → Structuring → Refinement)...\n",
+        )
 
     try:
-        result = orchestrator.run_build()
+        result = orchestrator.run_build(dry_run=dry_run)
     except Exception as exc:
         console.print(
             f"[red]Build failed:[/red] {exc}\n"

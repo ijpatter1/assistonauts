@@ -98,6 +98,7 @@ _Goal: Build the Captain agent for expedition orchestration, the mission state m
 - ✅ 2026-04-09, session-2026-04-09-004 — Deterministic scaling system — config-driven (no LLM), singleton enforcement for Captain+Curator+Inspector, auto_scale rules, WAL mode on SQLite
 - ✅ 2026-04-09, session-2026-04-09-004 — Deterministic budget system — warning threshold (default 0.8) + hard cap at daily_token_limit, per-agent + per-expedition + date tracking
 - ✅ 2026-04-09, session-2026-04-09-004 — CLI: `assistonauts expedition create --config <path>`, `assistonauts build <expedition-name>`
+- ✅ 2026-04-10, session-2026-04-10-001 — CLI: `assistonauts build --dry-run` — show Discovery plan without executing
 
 ---
 

@@ -692,6 +692,45 @@ class TestBuildExecution:
         data = yaml.safe_load(plan_path.read_text())
         assert data["expedition"] == "test-exp"
 
+    def test_dry_run_plans_without_executing(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Dry run plans Discovery but does not execute missions."""
+        plan_response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-scout-001\n"
+            "    agent: scout\n"
+            "    type: ingest\n"
+            "    inputs:\n"
+            "      paths:\n"
+            "        - /tmp/test.pdf\n"
+            "    acceptance_criteria:\n"
+            "      - Source ingested\n"
+            "    priority: high\n"
+            "```\n"
+        )
+        client = FakeLLMClient(responses=[plan_response])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        result = orch.run_build(dry_run=True)
+
+        # Should have 1 iteration (Discovery only)
+        assert len(result.iterations) == 1
+        assert result.iterations[0].phase == IterationPhase.DISCOVERY
+        # Missions planned but not executed
+        assert result.iterations[0].missions_planned == 1
+        assert result.iterations[0].missions_completed == 0
+        assert result.iterations[0].missions_failed == 0
+        # Missions should still be in PENDING state
+        assert result.iterations[0].missions[0].status == MissionStatus.PENDING
+
     def test_build_report_written(
         self,
         workspace: Path,
