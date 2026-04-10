@@ -829,6 +829,102 @@ class TestBuildExecution:
         params = BuildOrchestrator._mission_to_params(m)
         assert params["source_path"] == "/tmp/a.pdf,/tmp/b.pdf,/tmp/c.pdf"
 
+    def test_multi_path_scout_splits_into_sub_tasks(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Scout multi-path splits comma-separated paths into sub-tasks."""
+        # Create real source files
+        source_a = workspace / "a.md"
+        source_b = workspace / "b.md"
+        source_c = workspace / "c.md"
+        for f in [source_a, source_b, source_c]:
+            f.write_text(f"# {f.stem}\n\nContent.")
+        (workspace / "index" / "manifest.json").write_text("{}")
+
+        mission = Mission(
+            mission_id="m-scout-multi",
+            agent="scout",
+            mission_type="ingest",
+            inputs={
+                "paths": [str(source_a), str(source_b), str(source_c)],
+            },
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+
+        client = FakeLLMClient(responses=[])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.ledger.save(mission)
+
+        orch._execute_mission(mission)
+
+        assert mission.status == MissionStatus.COMPLETED
+        # All three raw articles should exist
+        raw = workspace / "raw" / "articles"
+        assert (raw / "a.md").exists()
+        assert (raw / "b.md").exists()
+        assert (raw / "c.md").exists()
+
+    def test_validate_params_missing_scout_source(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Scout with missing source_path fails validation."""
+        m = Mission(
+            mission_id="test",
+            agent="scout",
+            mission_type="ingest",
+            inputs={},  # no paths
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = BuildOrchestrator._mission_to_params(m)
+        with pytest.raises(ValueError, match="scout requires"):
+            BuildOrchestrator._validate_params(m, params)
+
+    def test_validate_params_missing_curator_path(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Curator with missing article_path fails validation."""
+        m = Mission(
+            mission_id="test",
+            agent="curator",
+            mission_type="cross_reference",
+            inputs={},  # no article_path
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = BuildOrchestrator._mission_to_params(m)
+        with pytest.raises(ValueError, match="curator requires"):
+            BuildOrchestrator._validate_params(m, params)
+
+    def test_validate_params_missing_explorer_query(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Explorer with missing query fails validation."""
+        m = Mission(
+            mission_id="test",
+            agent="explorer",
+            mission_type="query",
+            inputs={},  # no query
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = BuildOrchestrator._mission_to_params(m)
+        with pytest.raises(ValueError, match="explorer requires"):
+            BuildOrchestrator._validate_params(m, params)
+
     def test_validate_params_missing_source(
         self,
         workspace: Path,
