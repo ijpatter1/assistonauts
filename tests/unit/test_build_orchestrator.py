@@ -573,6 +573,32 @@ class TestBuildExecution:
         total = iteration.missions_completed + iteration.missions_failed
         assert total == 2
 
+    def test_describe_sources_resolves_glob(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Discovery prompt lists actual file paths, not directory+glob."""
+        # Create source files matching the config pattern
+        source_dir = Path(config.sources.local[0].path)
+        source_dir.mkdir(parents=True, exist_ok=True)
+        (source_dir / "a.pdf").write_text("pdf content")
+        (source_dir / "b.pdf").write_text("pdf content")
+
+        client = FakeLLMClient(responses=["no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        orch.plan_iteration(IterationPhase.DISCOVERY)
+        prompt = client.calls[0]["messages"][0]["content"]
+        # Should list individual files, not "Local: /tmp/papers (*.pdf)"
+        assert "a.pdf" in prompt
+        assert "b.pdf" in prompt
+        assert "2 files" in prompt
+
     def test_structuring_prompt_includes_discovery_results(
         self,
         workspace: Path,

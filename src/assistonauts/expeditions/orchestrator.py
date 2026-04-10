@@ -777,10 +777,23 @@ class BuildOrchestrator:
         return "\n".join(lines) if lines else "(no prior iterations)"
 
     def _describe_sources(self) -> str:
-        """Describe configured sources for the prompt."""
+        """Describe configured sources for the prompt.
+
+        Resolves glob patterns to actual file paths so the Captain
+        plans scout missions with individual files, not directories.
+        """
         parts = []
         for ls in self.config.sources.local:
-            parts.append(f"Local: {ls.path} ({ls.pattern})")
+            source_dir = Path(ls.path)
+            if source_dir.is_dir():
+                files = sorted(source_dir.glob(ls.pattern))
+                if files:
+                    file_list = ", ".join(str(f) for f in files)
+                    parts.append(f"Local ({len(files)} files): {file_list}")
+                else:
+                    parts.append(f"Local: {ls.path} ({ls.pattern}) — no matching files")
+            else:
+                parts.append(f"Local: {ls.path} ({ls.pattern})")
         return "; ".join(parts) if parts else "No sources configured"
 
     def _write_plan_yaml(
