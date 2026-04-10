@@ -1111,32 +1111,40 @@ class TestPass1FixCoverage:
         config: ExpeditionConfig,
     ) -> None:
         """Build report shows real per-agent token counts."""
-        client = FakeLLMClient(responses=["no yaml"] * 5)
+        mission_yaml = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-001\n"
+            "    agent: scout\n"
+            "    type: ingest\n"
+            "    inputs: {}\n"
+            "    acceptance_criteria: []\n"
+            "    priority: normal\n"
+            "```\n"
+        )
+        # Discovery plan with scout mission, then Structuring exits
+        client = FakeLLMClient(responses=[mission_yaml, "no yaml"])
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
             llm_client=client,
         )
 
-        # Record some tokens for specific agents
+        # Pre-record tokens so the report has real data
         orch.budget.tracker.record(
             agent="scout",
             expedition="test-exp",
             tokens=1000,
-        )
-        orch.budget.tracker.record(
-            agent="compiler",
-            expedition="test-exp",
-            tokens=2000,
         )
 
         orch.run_build()
 
         report_path = workspace / "expeditions" / "test-exp" / "build-report.md"
         content = report_path.read_text()
-        # Captain tokens tracked from plan_iteration calls
+        # Per-agent tokens with real values
         assert "captain:" in content
-        assert "tokens" in content
+        assert "scout:" in content
+        assert "1,0" in content  # 1,000 or 1,015 (with mission tokens)
 
     def test_captain_planning_tokens_tracked(
         self,

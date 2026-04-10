@@ -459,8 +459,21 @@ class BuildOrchestrator:
                     )
 
                 if task_result.success:
-                    # Two-level completion: agent self-declares,
-                    # Captain verifies against acceptance criteria
+                    # Record task execution tokens (mission's agent)
+                    tokens_mid = getattr(
+                        self.llm_client,
+                        "total_tokens_used",
+                        0,
+                    )
+                    task_tokens = tokens_mid - tokens_before
+                    if task_tokens > 0:
+                        self.budget.tracker.record(
+                            agent=mission.agent,
+                            expedition=self.config.name,
+                            tokens=task_tokens,
+                        )
+
+                    # Two-level completion: Captain verifies
                     output_paths: list[str] = []
                     if task_result.agent_output:
                         output_paths = [
@@ -471,18 +484,18 @@ class BuildOrchestrator:
                         task_output_paths=output_paths,
                     )
 
-                    # Record all tokens (task + verification)
+                    # Record verification tokens (captain)
                     tokens_after = getattr(
                         self.llm_client,
                         "total_tokens_used",
                         0,
                     )
-                    tokens = tokens_after - tokens_before
-                    if tokens > 0:
+                    verify_tokens = tokens_after - tokens_mid
+                    if verify_tokens > 0:
                         self.budget.tracker.record(
-                            agent=mission.agent,
+                            agent="captain",
                             expedition=self.config.name,
-                            tokens=tokens,
+                            tokens=verify_tokens,
                         )
 
                     if verified:
