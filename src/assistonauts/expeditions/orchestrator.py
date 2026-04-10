@@ -355,7 +355,39 @@ class BuildOrchestrator:
                         self.llm_client,
                     )
 
-                # Record actual token usage from LLM client
+                if task_result.success:
+                    # Two-level completion: agent self-declares,
+                    # Captain verifies against acceptance criteria
+                    verified = self._verify_mission(mission)
+
+                    # Record all tokens (task + verification)
+                    tokens_after = getattr(
+                        self.llm_client,
+                        "total_tokens_used",
+                        0,
+                    )
+                    tokens = tokens_after - tokens_before
+                    if tokens > 0:
+                        self.budget.tracker.record(
+                            agent=mission.agent,
+                            expedition=self.config.name,
+                            tokens=tokens,
+                        )
+
+                    if verified:
+                        mission.complete(verified_by="captain")
+                    else:
+                        mission.fail(
+                            error_type="deterministic",
+                            error_message=(
+                                "Captain rejected: acceptance criteria not met"
+                            ),
+                            retries=0,
+                        )
+                    self.ledger.save(mission)
+                    return
+
+                # Record tokens for failed tasks
                 tokens_after = getattr(
                     self.llm_client,
                     "total_tokens_used",
@@ -368,15 +400,6 @@ class BuildOrchestrator:
                         expedition=self.config.name,
                         tokens=tokens,
                     )
-
-                if task_result.success:
-                    # Agent self-declares completion. Captain
-                    # verification against acceptance_criteria is a
-                    # separate step (LLM judgment call, wired when
-                    # Captain operations mode is implemented).
-                    mission.complete()
-                    self.ledger.save(mission)
-                    return
 
                 error_type = task_result.error_type or "deterministic"
                 mission.fail(
@@ -502,6 +525,34 @@ class BuildOrchestrator:
                     f"'{key}' in params, got {params}"
                 )
                 raise ValueError(msg)
+
+    def _verify_mission(self, mission: Mission) -> bool:
+        """Captain verifies mission against acceptance criteria.
+
+        Two-level completion: after the agent self-declares completion,
+        the Captain evaluates whether the acceptance criteria are met.
+        Returns True if verified, False if rejected.
+        Missions with no acceptance criteria are auto-approved.
+        """
+        if not mission.acceptance_criteria:
+            return True
+
+        criteria_text = "\n".join(f"- {c}" for c in mission.acceptance_criteria)
+        prompt = (
+            "MISSION VERIFICATION\n\n"
+            f"Mission: {mission.mission_id}\n"
+            f"Agent: {mission.agent}\n"
+            f"Type: {mission.mission_type}\n\n"
+            f"Acceptance criteria:\n{criteria_text}\n\n"
+            "The agent has declared this mission complete.\n"
+            "Based on the criteria above, is this mission verified?\n\n"
+            "Respond with VERIFIED or REJECTED followed by a brief reason."
+        )
+        response = self.captain.call_llm(
+            [{"role": "user", "content": prompt}],
+        )
+        upper = response.upper()
+        return "VERIFIED" in upper or "PASS" in upper
 
     def _build_prompt(self, phase: IterationPhase) -> str:
         """Build a phase-specific prompt for the Captain."""

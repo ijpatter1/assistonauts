@@ -11,7 +11,7 @@ from assistonauts.expeditions.orchestrator import (
     BuildPhaseResult,
     IterationPhase,
 )
-from assistonauts.missions.models import MissionStatus
+from assistonauts.missions.models import Mission, MissionStatus
 from assistonauts.models.config import ExpeditionConfig
 from tests.helpers import FakeLLMClient
 
@@ -599,3 +599,186 @@ class TestBuildExecution:
         params = BuildOrchestrator._mission_to_params(m)
         with pytest.raises(ValueError, match="compiler requires"):
             BuildOrchestrator._validate_params(m, params)
+
+
+# --- Two-level completion ---
+
+
+class TestTwoLevelCompletion:
+    def test_verify_mission_approved(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Captain verification passes when response contains VERIFIED."""
+        client = FakeLLMClient(responses=["VERIFIED — all criteria met"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-001",
+            agent="compiler",
+            mission_type="compile",
+            inputs={"sources": ["a.md"]},
+            acceptance_criteria=["Article compiled", "Frontmatter present"],
+            created_by="captain",
+        )
+        assert orch._verify_mission(mission) is True
+        assert len(client.calls) == 1
+
+    def test_verify_mission_rejected(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Captain verification fails when response says REJECTED."""
+        client = FakeLLMClient(responses=["REJECTED — missing sections"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-001",
+            agent="compiler",
+            mission_type="compile",
+            inputs={"sources": ["a.md"]},
+            acceptance_criteria=["Article compiled"],
+            created_by="captain",
+        )
+        assert orch._verify_mission(mission) is False
+
+    def test_verify_mission_no_criteria_auto_approves(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """No acceptance_criteria skips verification (auto-approve)."""
+        client = FakeLLMClient(responses=[])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-001",
+            agent="scout",
+            mission_type="ingest",
+            inputs={},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        assert orch._verify_mission(mission) is True
+        assert len(client.calls) == 0
+
+    def test_verify_prompt_includes_criteria(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Verification prompt contains the mission's acceptance criteria."""
+        client = FakeLLMClient(responses=["VERIFIED"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-test",
+            agent="compiler",
+            mission_type="compile",
+            inputs={},
+            acceptance_criteria=["Criterion Alpha", "Criterion Beta"],
+            created_by="captain",
+        )
+        orch._verify_mission(mission)
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "Criterion Alpha" in prompt
+        assert "Criterion Beta" in prompt
+        assert "m-test" in prompt
+
+    def test_completed_mission_has_captain_verification(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """End-to-end: task succeeds, Captain verifies, checklist records it."""
+        # Create a real source file for scout to ingest
+        source_file = workspace / "test-source.md"
+        source_file.write_text("# Test Source\n\nSome content.")
+        # Ensure manifest exists
+        (workspace / "index" / "manifest.json").write_text("{}")
+
+        plan_response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-scout-001\n"
+            "    agent: scout\n"
+            "    type: ingest\n"
+            "    inputs:\n"
+            "      paths:\n"
+            "        - " + str(source_file) + "\n"
+            "    acceptance_criteria:\n"
+            "      - Source file ingested\n"
+            "    priority: normal\n"
+            "```\n"
+        )
+        # Response 0: plan, Response 1: verification (scout text ingest has no LLM call)
+        client = FakeLLMClient(
+            responses=[plan_response, "VERIFIED — source ingested"],
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        iteration = orch.plan_iteration(IterationPhase.DISCOVERY)
+        orch.execute_iteration(iteration)
+
+        mission = iteration.missions[0]
+        assert mission.status == MissionStatus.COMPLETED
+        assert any("verified_by:captain" in item for item in mission.checklist)
+
+    def test_rejected_mission_fails(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """End-to-end: task succeeds but Captain rejects → mission fails."""
+        source_file = workspace / "test-source.md"
+        source_file.write_text("# Test Source\n\nSome content.")
+        (workspace / "index" / "manifest.json").write_text("{}")
+
+        plan_response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-scout-001\n"
+            "    agent: scout\n"
+            "    type: ingest\n"
+            "    inputs:\n"
+            "      paths:\n"
+            "        - " + str(source_file) + "\n"
+            "    acceptance_criteria:\n"
+            "      - Source file ingested\n"
+            "    priority: normal\n"
+            "```\n"
+        )
+        client = FakeLLMClient(
+            responses=[plan_response, "REJECTED — criteria not met"],
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        iteration = orch.plan_iteration(IterationPhase.DISCOVERY)
+        orch.execute_iteration(iteration)
+
+        mission = iteration.missions[0]
+        assert mission.status == MissionStatus.FAILED
+        assert mission.failure is not None
+        assert "rejected" in mission.failure.error_message.lower()
