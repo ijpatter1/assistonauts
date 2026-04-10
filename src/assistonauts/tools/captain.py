@@ -318,6 +318,16 @@ class ScheduleRunner:
 
     Supports standard 5-field cron: minute hour day month weekday.
     Supports * (any), specific values, and */N (step).
+
+    Phase 5 scope (current):
+    - matches(cron_expr, dt) — check if a datetime matches a cron expression
+    - next_run(cron_expr, after) — find the next matching datetime
+
+    Deferred to Phase 7 (Stationed Mode):
+    - Actual scheduled execution (trigger → task routing via Captain)
+    - Persistence of scheduled tasks
+    - Integration with the watch/event system
+    - Range syntax (1-5), list syntax (1,3,5), named days/months
     """
 
     def matches(self, cron_expr: str, dt: datetime) -> bool:
