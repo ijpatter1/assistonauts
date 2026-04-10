@@ -61,7 +61,8 @@ missions:
 
 Agent-specific input keys (use these exactly):
 - scout: inputs.paths (list of file paths to ingest)
-- compiler: inputs.sources (list of raw source paths), inputs.title, inputs.article_type
+- compiler: inputs.sources (list of raw source paths), inputs.title,
+  inputs.article_type (MUST be: concept, entity, log, or exploration)
 - curator: inputs.article_path (single wiki article path)
 - explorer: inputs.query (question string)
 """

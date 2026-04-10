@@ -18,6 +18,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import ClassVar
 
 import yaml
 
@@ -623,6 +624,25 @@ class BuildOrchestrator:
 
         return params
 
+    # Common LLM hallucinations → valid ArticleType corrections
+    _ARTICLE_TYPE_CORRECTIONS: ClassVar[dict[str, str]] = {
+        "overview": "concept",
+        "reference": "entity",
+        "guide": "concept",
+        "glossary": "entity",
+        "tutorial": "concept",
+        "how-to": "concept",
+        "howto": "concept",
+        "changelog": "log",
+        "history": "log",
+        "timeline": "log",
+        "analysis": "exploration",
+        "research": "exploration",
+        "investigation": "exploration",
+        "summary": "concept",
+        "index": "concept",
+    }
+
     @staticmethod
     def _validate_params(
         mission: Mission,
@@ -632,7 +652,10 @@ class BuildOrchestrator:
 
         Raises ValueError with diagnostic message if a required key
         is missing — fail-fast before dispatching a doomed task.
+        Corrects invalid article_type values for compiler missions.
         """
+        from assistonauts.models.schema import ArticleType
+
         required: dict[str, list[str]] = {
             "scout": ["source_path"],
             "compiler": [],  # source_path OR source_paths
@@ -655,6 +678,23 @@ class BuildOrchestrator:
                     f"'{key}' in params, got {params}"
                 )
                 raise ValueError(msg)
+
+        # Correct invalid article_type for compiler missions
+        if agent == "compiler" and "article_type" in params:
+            valid = {t.value for t in ArticleType}
+            raw_type = params["article_type"]
+            if raw_type not in valid:
+                corrected = BuildOrchestrator._ARTICLE_TYPE_CORRECTIONS.get(
+                    raw_type.lower(),
+                    "concept",
+                )
+                logger.warning(
+                    "Mission %s: corrected article_type '%s' → '%s'",
+                    mission.mission_id,
+                    raw_type,
+                    corrected,
+                )
+                params["article_type"] = corrected
 
     def _verify_mission(
         self,

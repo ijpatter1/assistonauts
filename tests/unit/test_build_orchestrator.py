@@ -963,6 +963,79 @@ class TestBuildExecution:
         assert (raw / "b.md").exists()
         assert (raw / "c.md").exists()
 
+    def test_validate_params_corrects_invalid_article_type(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Invalid article_type is corrected to a valid value."""
+        m = Mission(
+            mission_id="test",
+            agent="compiler",
+            mission_type="compile",
+            inputs={"sources": ["a.md"]},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = {"source_path": "a.md", "article_type": "overview"}
+        # Should NOT raise — should correct in place
+        BuildOrchestrator._validate_params(m, params)
+        assert params["article_type"] == "concept"
+
+    def test_validate_params_corrects_glossary_to_entity(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Glossary maps to entity type."""
+        m = Mission(
+            mission_id="test",
+            agent="compiler",
+            mission_type="compile",
+            inputs={"sources": ["a.md"]},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = {"source_path": "a.md", "article_type": "glossary"}
+        BuildOrchestrator._validate_params(m, params)
+        assert params["article_type"] == "entity"
+
+    def test_validate_params_unknown_type_defaults_to_concept(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Completely unknown article_type defaults to concept."""
+        m = Mission(
+            mission_id="test",
+            agent="compiler",
+            mission_type="compile",
+            inputs={"sources": ["a.md"]},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = {"source_path": "a.md", "article_type": "foobar"}
+        BuildOrchestrator._validate_params(m, params)
+        assert params["article_type"] == "concept"
+
+    def test_validate_params_valid_type_unchanged(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Valid article_type is not modified."""
+        m = Mission(
+            mission_id="test",
+            agent="compiler",
+            mission_type="compile",
+            inputs={"sources": ["a.md"]},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        params = {"source_path": "a.md", "article_type": "entity"}
+        BuildOrchestrator._validate_params(m, params)
+        assert params["article_type"] == "entity"
+
     def test_validate_params_missing_scout_source(
         self,
         workspace: Path,
