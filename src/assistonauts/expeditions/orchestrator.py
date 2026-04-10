@@ -432,7 +432,15 @@ class BuildOrchestrator:
                 if task_result.success:
                     # Two-level completion: agent self-declares,
                     # Captain verifies against acceptance criteria
-                    verified = self._verify_mission(mission)
+                    output_paths: list[str] = []
+                    if task_result.agent_output:
+                        output_paths = [
+                            str(p) for p in task_result.agent_output.output_paths
+                        ]
+                    verified = self._verify_mission(
+                        mission,
+                        task_output_paths=output_paths,
+                    )
 
                     # Record all tokens (task + verification)
                     tokens_after = getattr(
@@ -600,7 +608,11 @@ class BuildOrchestrator:
                 )
                 raise ValueError(msg)
 
-    def _verify_mission(self, mission: Mission) -> bool:
+    def _verify_mission(
+        self,
+        mission: Mission,
+        task_output_paths: list[str] | None = None,
+    ) -> bool:
         """Captain verifies mission against acceptance criteria.
 
         Two-level completion: after the agent self-declares completion,
@@ -612,21 +624,26 @@ class BuildOrchestrator:
             return True
 
         criteria_text = "\n".join(f"- {c}" for c in mission.acceptance_criteria)
+        output_text = "(no output details available)"
+        if task_output_paths:
+            output_text = "\n".join(f"- {p}" for p in task_output_paths)
         prompt = (
             "MISSION VERIFICATION\n\n"
             f"Mission: {mission.mission_id}\n"
             f"Agent: {mission.agent}\n"
             f"Type: {mission.mission_type}\n\n"
             f"Acceptance criteria:\n{criteria_text}\n\n"
+            f"Agent output files:\n{output_text}\n\n"
             "The agent has declared this mission complete.\n"
-            "Based on the criteria above, is this mission verified?\n\n"
-            "Respond with VERIFIED or REJECTED followed by a brief reason."
+            "Based on the criteria and outputs above, is this "
+            "mission verified?\n\n"
+            "Respond with VERIFIED or REJECTED followed by a "
+            "brief reason."
         )
         response = self.captain.call_llm(
             [{"role": "user", "content": prompt}],
         )
-        upper = response.upper()
-        return "VERIFIED" in upper or "PASS" in upper
+        return "VERIFIED" in response.upper()
 
     def _build_prompt(self, phase: IterationPhase) -> str:
         """Build a phase-specific prompt for the Captain."""
@@ -675,9 +692,11 @@ class BuildOrchestrator:
             )
 
         else:  # REFINEMENT
+            prior_results = self._describe_prior_iterations()
             return (
                 f"{scope_text}\n"
                 "ITERATION PHASE: Refinement\n\n"
+                f"Prior iteration results:\n{prior_results}\n\n"
                 "All sources are compiled and indexed. Plan:\n"
                 "1. Curator cross-referencing pass over all articles "
                 "(batched — not incremental, since the full corpus "
@@ -808,11 +827,11 @@ class BuildOrchestrator:
             ]
         )
 
-        # Token usage by agent
-        agent_tokens: dict[str, int] = {}
+        # Token usage by agent (from budget tracker, not LLM client)
+        agents_used: set[str] = set()
         for it in result.iterations:
             for m in it.missions:
-                agent_tokens[m.agent] = agent_tokens.get(m.agent, 0)
+                agents_used.add(m.agent)
         total_tokens = getattr(
             self.llm_client,
             "total_tokens_used",
@@ -825,12 +844,38 @@ class BuildOrchestrator:
                 f"- **Total tokens used:** {total_tokens:,}",
             ]
         )
-        for agent in sorted(agent_tokens):
-            lines.append(f"- {agent}: active")
+        for agent in sorted(agents_used):
+            agent_total = self.budget.tracker.get_agent_total(agent)
+            lines.append(f"- {agent}: {agent_total:,} tokens")
         budget_remaining = self.budget.remaining()
         lines.extend(
             [
                 f"- **Budget remaining:** {budget_remaining:,}",
+                "",
+            ]
+        )
+
+        # Coverage metrics
+        local_sources = sum(1 for _ in self.config.sources.local)
+        raw_dir = self.workspace_root / "raw" / "articles"
+        raw_count = sum(1 for _ in raw_dir.glob("*.md")) if raw_dir.exists() else 0
+        xref_count = 0
+        if wiki_dir.exists():
+            for md in wiki_dir.rglob("*.md"):
+                content = md.read_text()
+                if "## See Also" in content or "[[" in content:
+                    xref_count += 1
+        xref_pct = (
+            f"{xref_count / article_count * 100:.0f}%" if article_count > 0 else "N/A"
+        )
+        lines.extend(
+            [
+                "## Coverage",
+                "",
+                f"- **Source configs:** {local_sources}",
+                f"- **Raw articles ingested:** {raw_count}",
+                f"- **Wiki articles compiled:** {article_count}",
+                f"- **Cross-referenced:** {xref_count}/{article_count} ({xref_pct})",
                 "",
             ]
         )

@@ -775,8 +775,10 @@ class TestBuildExecution:
         content = report_path.read_text()
         # Enriched sections
         assert "Sources" in content
-        assert "Knowledge Base" in content or "Articles" in content
-        assert "Token Usage" in content or "Budget" in content
+        assert "Knowledge Base" in content
+        assert "Token Usage" in content
+        assert "Coverage" in content
+        assert "tokens" in content.lower()  # per-agent has "tokens"
 
     def test_mission_to_params_scout(
         self,

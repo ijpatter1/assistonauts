@@ -112,6 +112,28 @@ def build(expedition_name: str, workspace: Path, dry_run: bool) -> None:
         )
         return
 
+    if dry_run:
+        console.print(
+            f"\n[bold]Dry run complete:[/bold] "
+            f"{result.total_missions} missions planned "
+            f"(not executed)\n",
+        )
+        for iteration in result.iterations:
+            console.print(
+                f"  {iteration.phase.value}: "
+                f"{iteration.missions_planned} missions planned",
+            )
+            for m in iteration.missions:
+                inputs_brief = ", ".join(f"{k}={v}" for k, v in m.inputs.items())
+                console.print(
+                    f"    [{m.mission_id}] {m.agent}/{m.mission_type}"
+                    f" — {inputs_brief or 'no inputs'}",
+                )
+        console.print(
+            f"\nPlan written to expeditions/{expedition_name}/plan.yaml",
+        )
+        return
+
     if result.total_missions == 0:
         console.print(
             "\n[yellow]Warning:[/yellow] Build produced no missions. "
@@ -122,8 +144,8 @@ def build(expedition_name: str, workspace: Path, dry_run: bool) -> None:
 
     console.print(
         f"\n[bold]Build complete:[/bold] "
-        f"{result.total_completed}/{result.total_missions} missions completed, "
-        f"{result.total_failed} failed\n",
+        f"{result.total_completed}/{result.total_missions} missions "
+        f"completed, {result.total_failed} failed\n",
     )
 
     for iteration in result.iterations:
