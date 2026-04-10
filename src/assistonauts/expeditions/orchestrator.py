@@ -154,6 +154,12 @@ class BuildOrchestrator:
 
         missions, dependencies = parse_plan_response(response)
         if not missions:
+            # Log the raw response for debugging parse failures
+            logger.debug(
+                "Raw LLM response for %s:\n%s",
+                phase.value,
+                response[:500],
+            )
             logger.warning(
                 "No missions planned for %s iteration — "
                 "the LLM response could not be parsed into a valid plan",

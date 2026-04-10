@@ -27,7 +27,19 @@ console = Console()
     default=False,
     help="Show Discovery plan without executing missions.",
 )
-def build(expedition_name: str, workspace: Path, dry_run: bool) -> None:
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    default=False,
+    help="Show debug output including raw LLM responses.",
+)
+def build(
+    expedition_name: str,
+    workspace: Path,
+    dry_run: bool,
+    verbose: bool,
+) -> None:
     """Run the build phase for an expedition."""
     workspace = workspace.resolve()
     exp_dir = workspace / "expeditions" / expedition_name
@@ -94,7 +106,7 @@ def build(expedition_name: str, workspace: Path, dry_run: bool) -> None:
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter("  %(message)s"))
         orch_logger.addHandler(handler)
-        orch_logger.setLevel(logging.INFO)
+        orch_logger.setLevel(logging.DEBUG if verbose else logging.INFO)
 
     if dry_run:
         console.print("[bold]Dry run:[/bold] planning Discovery only...\n")
