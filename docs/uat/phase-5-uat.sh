@@ -29,9 +29,9 @@ PASS=0; FAIL=0
 
 verify() {
   if eval "$1" >/dev/null 2>&1; then
-    echo "  ✓ $2"; ((PASS++))
+    echo "  ✓ $2"; PASS=$((PASS + 1))
   else
-    echo "  ✗ $2"; ((FAIL++))
+    echo "  ✗ $2"; FAIL=$((FAIL + 1))
   fi
 }
 
@@ -41,9 +41,9 @@ confirm() {
   read -p "  Pass? [Y/n] " -n 1 -r
   echo ""
   if [[ $REPLY =~ ^[Nn]$ ]]; then
-    echo "  ✗ $2"; ((FAIL++))
+    echo "  ✗ $2"; FAIL=$((FAIL + 1))
   else
-    echo "  ✓ $2"; ((PASS++))
+    echo "  ✓ $2"; PASS=$((PASS + 1))
   fi
 }
 
