@@ -129,10 +129,28 @@ class BuildOrchestrator:
         The Captain's observe step is an LLM call that reads the
         expedition state and produces missions appropriate for the phase.
         """
+        tokens_before = getattr(
+            self.llm_client,
+            "total_tokens_used",
+            0,
+        )
         prompt = self._build_prompt(phase)
         response = self.captain.call_llm(
             [{"role": "user", "content": prompt}],
         )
+        # Record Captain planning tokens to budget tracker
+        tokens_after = getattr(
+            self.llm_client,
+            "total_tokens_used",
+            0,
+        )
+        plan_tokens = tokens_after - tokens_before
+        if plan_tokens > 0:
+            self.budget.tracker.record(
+                agent="captain",
+                expedition=self.config.name,
+                tokens=plan_tokens,
+            )
 
         missions, dependencies = parse_plan_response(response)
         if not missions:
@@ -405,10 +423,17 @@ class BuildOrchestrator:
                                 self.llm_client,
                             ),
                         )
-                    task_result = sub_results[-1]
-                    task_result = type(task_result)(
+                    # Merge sub-results, preserving output paths
+                    all_output_paths: list[Path] = []
+                    for sr in sub_results:
+                        if sr.agent_output:
+                            all_output_paths.extend(
+                                sr.agent_output.output_paths,
+                            )
+                    last = sub_results[-1]
+                    task_result = type(last)(
                         success=all(r.success for r in sub_results),
-                        status=task_result.status,
+                        status=last.status,
                         error_type=next(
                             (r.error_type for r in sub_results if not r.success),
                             "",
@@ -417,7 +442,11 @@ class BuildOrchestrator:
                             (r.error_message for r in sub_results if not r.success),
                             "",
                         ),
+                        agent_output=last.agent_output,
                     )
+                    # Attach all output paths to the merged result
+                    if task_result.agent_output and all_output_paths:
+                        task_result.agent_output.output_paths = all_output_paths
                 else:
                     task = Task(
                         task_id=f"task-{mission.mission_id}-{attempt}",
@@ -827,8 +856,9 @@ class BuildOrchestrator:
             ]
         )
 
-        # Token usage by agent (from budget tracker, not LLM client)
-        agents_used: set[str] = set()
+        # Token usage by agent (from budget tracker)
+        # Include agents from missions AND captain (planning calls)
+        agents_used: set[str] = {"captain"}
         for it in result.iterations:
             for m in it.missions:
                 agents_used.add(m.agent)

@@ -1011,6 +1011,153 @@ class TestBuildExecution:
             BuildOrchestrator._validate_params(m, params)
 
 
+# --- Pass 1 fix coverage ---
+
+
+class TestPass1FixCoverage:
+    """Tests verifying pass 1 evaluation fixes work correctly."""
+
+    def test_verify_rejects_pass_without_verified(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """'PASS' alone is not accepted — only 'VERIFIED'."""
+        client = FakeLLMClient(
+            responses=["The mission did NOT PASS criteria"],
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-001",
+            agent="compiler",
+            mission_type="compile",
+            inputs={},
+            acceptance_criteria=["Article compiled"],
+            created_by="captain",
+        )
+        assert orch._verify_mission(mission) is False
+
+    def test_verify_prompt_includes_output_paths(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Verification prompt includes task output file paths."""
+        client = FakeLLMClient(responses=["VERIFIED"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-001",
+            agent="compiler",
+            mission_type="compile",
+            inputs={},
+            acceptance_criteria=["Article compiled"],
+            created_by="captain",
+        )
+        orch._verify_mission(
+            mission,
+            task_output_paths=["/wiki/concept/test.md"],
+        )
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "/wiki/concept/test.md" in prompt
+        assert "Agent output files" in prompt
+
+    def test_refinement_prompt_includes_prior_results(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Refinement prompt includes prior iteration results."""
+        plan_response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-scout-001\n"
+            "    agent: scout\n"
+            "    type: ingest\n"
+            "    inputs:\n"
+            "      paths:\n"
+            "        - /tmp/a.pdf\n"
+            "    acceptance_criteria: []\n"
+            "    priority: high\n"
+            "```\n"
+        )
+        client = FakeLLMClient(
+            responses=[plan_response, "no yaml"],
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        discovery = orch.plan_iteration(IterationPhase.DISCOVERY)
+        orch.execute_iteration(discovery)
+        orch.plan_iteration(IterationPhase.REFINEMENT)
+
+        refinement_prompt = client.calls[1]["messages"][0]["content"]
+        assert "prior iteration" in refinement_prompt.lower()
+        assert "m-scout-001" in refinement_prompt
+
+    def test_build_report_per_agent_tokens(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Build report shows real per-agent token counts."""
+        client = FakeLLMClient(responses=["no yaml"] * 5)
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        # Record some tokens for specific agents
+        orch.budget.tracker.record(
+            agent="scout",
+            expedition="test-exp",
+            tokens=1000,
+        )
+        orch.budget.tracker.record(
+            agent="compiler",
+            expedition="test-exp",
+            tokens=2000,
+        )
+
+        orch.run_build()
+
+        report_path = workspace / "expeditions" / "test-exp" / "build-report.md"
+        content = report_path.read_text()
+        # Captain tokens tracked from plan_iteration calls
+        assert "captain:" in content
+        assert "tokens" in content
+
+    def test_captain_planning_tokens_tracked(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Captain planning LLM calls are recorded in budget tracker."""
+        client = FakeLLMClient(responses=["no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        orch.plan_iteration(IterationPhase.DISCOVERY)
+
+        captain_tokens = orch.budget.tracker.get_agent_total("captain")
+        # FakeLLMClient adds 15 tokens per call
+        assert captain_tokens == 15
+
+
 # --- Two-level completion ---
 
 

@@ -162,3 +162,7 @@ def build(expedition_name: str, workspace: Path, dry_run: bool) -> None:
             console.print(
                 f"  [yellow]{iteration.budget_halt_message}[/yellow]",
             )
+
+    console.print(
+        f"\nBuild report: expeditions/{expedition_name}/build-report.md",
+    )
