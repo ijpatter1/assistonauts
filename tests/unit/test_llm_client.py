@@ -242,3 +242,92 @@ class TestProviderConfig:
         """Record mode without fixture_dir raises ValueError."""
         with pytest.raises(ValueError, match="fixture_dir"):
             LLMClient(provider_config={}, mode="record")
+
+
+class TestTokenTracking:
+    """Test cumulative token usage tracking."""
+
+    def test_total_tokens_used_initialized_to_zero(self) -> None:
+        client = LLMClient(provider_config={})
+        assert client.total_tokens_used == 0
+
+    def test_total_tokens_accumulates_on_replay(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Replay mode tracks tokens from fixture usage data."""
+        fixture_dir = tmp_path / "fixtures"
+        fixture_dir.mkdir()
+
+        client = LLMClient(
+            provider_config={},
+            mode="replay",
+            fixture_dir=fixture_dir,
+        )
+
+        # Create fixture with known usage for a specific message
+        messages = [{"role": "user", "content": "hello replay"}]
+        key = client._fixture_key(messages, system="sys")
+        (fixture_dir / f"{key}.json").write_text(
+            json.dumps(
+                {
+                    "content": "replayed",
+                    "model": "test",
+                    "usage": {
+                        "prompt_tokens": 20,
+                        "completion_tokens": 10,
+                    },
+                }
+            ),
+        )
+
+        resp = client.complete(messages, system="sys")
+        assert resp.content == "replayed"
+        assert client.total_tokens_used == 30
+
+    @patch("assistonauts.llm.client._call_litellm")
+    def test_total_tokens_accumulates_on_cache_hit(
+        self,
+        mock_litellm: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Cache hits track tokens from cached usage data."""
+        cache_path = tmp_path / "cache.db"
+        mock_litellm.return_value = LLMResponse(
+            content="cached",
+            model="test",
+            usage={"prompt_tokens": 40, "completion_tokens": 20},
+        )
+
+        client = LLMClient(
+            provider_config={},
+            mode="live",
+            cache_path=cache_path,
+        )
+
+        messages = [{"role": "user", "content": "cache test"}]
+        # First call: live (tokens tracked)
+        client.complete(messages, system="sys")
+        assert client.total_tokens_used == 60
+
+        # Second call: cache hit (tokens should also be tracked)
+        client.complete(messages, system="sys")
+        assert client.total_tokens_used == 120
+
+    @patch("assistonauts.llm.client._call_litellm")
+    def test_total_tokens_accumulates_on_live(
+        self,
+        mock_litellm: MagicMock,
+    ) -> None:
+        mock_litellm.return_value = LLMResponse(
+            content="test",
+            model="test-model",
+            usage={"prompt_tokens": 100, "completion_tokens": 50},
+        )
+
+        client = LLMClient(provider_config={}, mode="live")
+        client.complete([{"role": "user", "content": "hello"}])
+        assert client.total_tokens_used == 150
+
+        client.complete([{"role": "user", "content": "world"}])
+        assert client.total_tokens_used == 300

@@ -5,7 +5,9 @@ from pathlib import Path
 import click
 from rich.console import Console
 
+from assistonauts.cli.build import build
 from assistonauts.cli.curate import curate
+from assistonauts.cli.expedition import expedition
 from assistonauts.cli.explore import explore
 from assistonauts.cli.index import index
 from assistonauts.cli.plan import plan
@@ -30,6 +32,8 @@ cli.add_command(status)
 cli.add_command(index)
 cli.add_command(curate)
 cli.add_command(explore)
+cli.add_command(expedition)
+cli.add_command(build)
 
 
 @cli.command()

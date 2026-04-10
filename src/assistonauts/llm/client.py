@@ -89,6 +89,7 @@ class LLMClient:
         self._cache: LLMResponseCache | None = (
             LLMResponseCache(cache_path) if cache_path else None
         )
+        self.total_tokens_used: int = 0
 
     @property
     def mode(self) -> str:
@@ -120,16 +121,20 @@ class LLMClient:
             kwargs["base_url"] = self._base_url
 
         if self._mode == "replay":
-            return self._replay(messages, system=system)
+            response = self._replay(messages, system=system)
+            self._track_tokens(response.usage)
+            return response
 
         # Check cache before making API call (live and record modes)
         if self._cache is not None:
             cached = self._cache.get(resolved_model, system, messages)
             if cached is not None:
+                usage = cached["usage"] if isinstance(cached["usage"], dict) else {}
+                self._track_tokens(usage)
                 return LLMResponse(
                     content=str(cached["content"]),
                     model=resolved_model,
-                    usage=cached["usage"] if isinstance(cached["usage"], dict) else {},
+                    usage=usage,
                 )
 
         if self._mode == "record":
@@ -152,7 +157,15 @@ class LLMClient:
                 usage=response.usage,
             )
 
+        self._track_tokens(response.usage)
         return response
+
+    def _track_tokens(self, usage: dict[str, int]) -> None:
+        """Accumulate token usage from any response path."""
+        if isinstance(usage, dict):
+            self.total_tokens_used += usage.get("prompt_tokens", 0) + usage.get(
+                "completion_tokens", 0
+            )
 
     def _replay(
         self,

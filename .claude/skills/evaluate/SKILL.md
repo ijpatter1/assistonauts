@@ -71,7 +71,7 @@ Present the product reviewer's full report without modification or softening.
 After both reports are presented, provide a brief combined summary:
 
 ```
-═══ Evaluation Summary ═══
+═══ Evaluation Summary (Pass N) ═══
 
 Technical:  [score]/5 — [PASS | PASS WITH ISSUES | FAIL]
 Product:    [score]/5 — [PASS | NEEDS WORK]
@@ -80,17 +80,40 @@ Critical issues: [count, or "none"]
 Major issues:    [count, or "none"]
 Minor issues:    [count, or "none"]
 
-Recommendation:  [proceed | fix before continuing | fix before handoff]
+Action:  [fix and re-evaluate | proceed ✓]
 ```
 
 **Recommendation logic:**
-- Any critical issue from either reviewer → "fix before continuing"
-- Major issues only → "fix before handoff" (ok to continue building, but address before session end)
-- Minor issues only or clean → "proceed"
+- Any critical issue from either reviewer → "fix and re-evaluate"
+- Major issues → "fix and re-evaluate"
+- Minor issues only → "fix and re-evaluate"
+- Clean (no issues) → "proceed"
+
+## Step 5 — Fix and Re-Evaluate Loop
+
+**Evaluation is iterative, not a single pass.** If the combined summary has any issues (Critical, Major, or Minor), fix them — do not log them and move on.
+
+1. Work through the issues in severity order: Critical → Major → Minor
+2. Fix each issue, run the relevant tests to confirm the fix
+3. Commit the fixes: `fix(scope): address evaluation finding — [description]`
+4. After all issues from the current pass are fixed, re-invoke Steps 2-4 (both reviewers, fresh evaluation of the updated code)
+5. Repeat until the evaluation is clean
+
+**The loop terminates when:**
+- Both reviewers return no issues → proceed to the next feature or to `/handoff`
+- The user explicitly defers specific issues (e.g., "skip the minor formatting issues for now") → proceed, but note deferred issues in the session handoff under Issues & Technical Debt with the reason for deferral
+
+**Do not:**
+- Present issues and ask "should I fix these?" — fix them. The default is to fix.
+- Treat Major or Minor issues as acceptable debt. They are work items, not documentation items.
+- Move to the next feature with unresolved issues from evaluation unless the user explicitly approves deferral.
+- Argue that issues are "non-blocking" or "cosmetic" as a reason to skip them. If the reviewer flagged it, it matters.
+
+**Context budget awareness:** If the context window is getting long after multiple passes, note the remaining issues in the session handoff with the tag `[deferred: context limit]` so the next session picks them up immediately. This is the only acceptable automatic deferral.
 
 ## Notes
 
 - Both reviewers are read-only. They inspect the code and report findings. They do not modify files.
 - If this is invoked as part of `/handoff` and either reviewer returns critical issues, the handoff stops. Fix the issues and re-run `/handoff`.
-- If invoked mid-session as a self-check, critical issues should be fixed before moving to the next feature. Major issues can be deferred to before handoff.
 - Do not editorialize or soften either report. Present them as-is. The user needs honest assessment, not reassurance.
+- The iterative loop is the default behavior. The agent should expect multiple passes — a first evaluation rarely comes back clean, and that's normal. The goal is zero debt at the feature boundary, not forward progress at the cost of quality.

@@ -159,7 +159,73 @@ Update `docs/PHASE_STATUS.md` to reflect the current state of the phase:
 - Update any progress notes
 - Adjust estimates if the work revealed unexpected complexity
 
-## Step 8 — CLAUDE.md Freshness Check
+## Step 8 — Phase Completion: Generate UAT Plan
+
+**This step is conditional.** Check if all deliverables for the current phase are now ✅ in `docs/PHASE_STATUS.md`. If any deliverables are still ⬜, 🔄, or ❌, skip to Step 9.
+
+If the phase is complete, generate a user acceptance testing plan. The UAT plan verifies that the phase's deliverables work end-to-end as a user would experience them — not unit test coverage (the evaluator handles that) or spec alignment (the product reviewer handles that), but real-world workflows from start to finish.
+
+### Generating the UAT Plan
+
+Invoke the `product-reviewer` subagent with a prompt like: "Phase [N] is dev complete. All deliverables have passed technical evaluation and product review. Generate end-to-end user acceptance scenarios that test the phase's deliverables as a user would experience them. Reference docs/REQUIREMENTS.md for the deliverables, docs/ARCHITECTURE.md for the technical design, and any content guides or specs referenced in CLAUDE.md. Focus on realistic workflows, not individual feature checks — each scenario should exercise multiple deliverables working together."
+
+Use the product reviewer's scenarios to produce the UAT artifact. **Follow the same automation-first hierarchy as `/manual`:**
+
+1. **If the project is a CLI tool or backend service:** Produce a UAT script at `docs/uat/phase-N-uat.sh`. The script should set up prerequisites, run each scenario, pause for human observation where visual verification is needed, collect pass/fail results, and print a summary. Use the same `verify()` pattern from the `/manual` script template for automated checks. For steps requiring human judgment, use a `confirm()` helper:
+
+```bash
+confirm() {
+  echo ""
+  echo "  → $1"
+  read -p "  Pass? [Y/n] " -n 1 -r
+  echo ""
+  if [[ $REPLY =~ ^[Nn]$ ]]; then
+    echo "  ✗ $2"; ((FAIL++))
+  else
+    echo "  ✓ $2"; ((PASS++))
+  fi
+}
+
+# Example usage:
+confirm "Does the dashboard show campaign data for all 3 channels?" \
+  "Dashboard displays multi-channel data"
+```
+
+2. **If the project is a web UI:** Produce a UAT script that automates setup and verification where possible, and uses `confirm()` prompts for visual/interactive checks. Include `open` commands to launch the relevant pages. Structure the script as a guided walkthrough — the human follows along while the script manages state and collects results.
+
+3. **If the project is purely manual to test:** Produce a UAT task card at `docs/uat/phase-N-uat.md` with numbered scenarios, each containing steps, expected outcomes, and pass/fail checkboxes. This is the last resort.
+
+### UAT Artifact Structure
+
+Whether script or card, each UAT plan should cover:
+
+- **Prerequisites** — what must be running, configured, or seeded before testing
+- **Scenarios** — numbered end-to-end workflows, each testing multiple deliverables together. Each scenario has:
+  - A name and description of what it validates
+  - Steps (automated where possible, guided where not)
+  - Expected outcomes with concrete checks
+  - Which deliverables it exercises
+- **Edge cases** — at least 2-3 scenarios that test boundaries, error states, or non-obvious flows
+- **Results summary** — pass/fail counts with a clear overall verdict
+
+### After Generating UAT
+
+Make the script executable if applicable:
+
+```bash
+chmod +x docs/uat/phase-N-uat.sh
+```
+
+Note in the handoff artifact under **Next Steps** that UAT is ready to run:
+
+```
+1. Run Phase N UAT: `bash docs/uat/phase-N-uat.sh`
+2. [Next phase planning — if UAT passes]
+```
+
+The phase is not considered accepted until UAT passes. The next session's `/start-phase` should check for UAT results before starting new phase work.
+
+## Step 9 — CLAUDE.md Freshness Check
 
 Review the current CLAUDE.md against what actually happened during this session. Check for:
 
@@ -185,9 +251,10 @@ CLAUDE.md updates needed:
 
 If no updates are needed, skip this step silently — do not announce "CLAUDE.md is up to date."
 
-## Step 9 — Summary
+## Step 10 — Summary
 
 After writing the handoff artifact and updating the phase status, present a brief summary:
 - What was accomplished this session (1-3 sentences)
 - Current overall phase progress (e.g., "Phase 1: 6 of 9 deliverables complete")
+- If UAT was generated: "Phase N UAT plan ready at `docs/uat/phase-N-uat.sh` — run before starting Phase N+1"
 - The recommended starting point for the next session

@@ -73,6 +73,18 @@ def _resolve_agent(
         from assistonauts.agents.scout import ScoutAgent
 
         return ScoutAgent(llm_client=llm_client, workspace_root=workspace_root)
+    elif agent_name == "captain":
+        from assistonauts.agents.captain import CaptainAgent
+
+        return CaptainAgent(llm_client=llm_client, workspace_root=workspace_root)
+    elif agent_name == "curator":
+        from assistonauts.agents.curator import CuratorAgent
+
+        return CuratorAgent(llm_client=llm_client, workspace_root=workspace_root)
+    elif agent_name == "explorer":
+        from assistonauts.agents.explorer import ExplorerAgent
+
+        return ExplorerAgent(llm_client=llm_client, workspace_root=workspace_root)
     else:
         raise DeterministicError(f"Unknown agent: {agent_name}")
 
@@ -123,51 +135,54 @@ class TaskRunner:
             self._write_audit(task, started_at, result)
             return result
 
-        # Execute with retry logic
-        while True:
-            try:
-                agent_output = agent.run_task(task.params)
-                task.status = TaskStatus.COMPLETED
-                result = TaskResult(
-                    success=True,
-                    status=TaskStatus.COMPLETED,
-                    retry_count=retry_count,
-                    agent_output=agent_output,
-                )
-                self._write_audit(task, started_at, result)
-                if self._auto_commit:
-                    self._git_commit(task, agent_output)
-                return result
+        # Execute with retry logic. The finally block releases agent
+        # resources — critical for singleton agents like Curator.
+        try:
+            while True:
+                try:
+                    agent_output = agent.run_task(task.params)
+                    task.status = TaskStatus.COMPLETED
+                    result = TaskResult(
+                        success=True,
+                        status=TaskStatus.COMPLETED,
+                        retry_count=retry_count,
+                        agent_output=agent_output,
+                    )
+                    self._write_audit(task, started_at, result)
+                    if self._auto_commit:
+                        self._git_commit(task, agent_output)
+                    return result
 
-            except self._TRANSIENT_EXCEPTIONS as e:
-                retry_count += 1
-                last_error = str(e)
-                if retry_count > self._max_retries:
+                except self._TRANSIENT_EXCEPTIONS as e:
+                    retry_count += 1
+                    last_error = str(e)
+                    if retry_count > self._max_retries:
+                        task.status = TaskStatus.FAILED
+                        result = TaskResult(
+                            success=False,
+                            status=TaskStatus.FAILED,
+                            error_type="transient",
+                            error_message=last_error,
+                            retry_count=self._max_retries,
+                        )
+                        self._write_audit(task, started_at, result)
+                        return result
+                    continue
+
+                except Exception as e:
                     task.status = TaskStatus.FAILED
                     result = TaskResult(
                         success=False,
                         status=TaskStatus.FAILED,
-                        error_type="transient",
-                        error_message=last_error,
-                        retry_count=self._max_retries,
+                        error_type="deterministic",
+                        error_message=str(e),
+                        retry_count=retry_count,
                     )
                     self._write_audit(task, started_at, result)
                     return result
-                # Retry — no backoff in v1 (simplicity over sophistication)
-                continue
-
-            except Exception as e:
-                # All other errors are deterministic
-                task.status = TaskStatus.FAILED
-                result = TaskResult(
-                    success=False,
-                    status=TaskStatus.FAILED,
-                    error_type="deterministic",
-                    error_message=str(e),
-                    retry_count=retry_count,
-                )
-                self._write_audit(task, started_at, result)
-                return result
+        finally:
+            if hasattr(agent, "close"):
+                agent.close()
 
     def _relativize_params(self, params: dict[str, str]) -> dict[str, str]:
         """Convert absolute paths in task params to workspace-relative paths."""

@@ -265,3 +265,45 @@ class TestTaskRunner:
         )
         result = runner.run(task, llm_client=llm)
         assert result.agent_output is not None
+
+    def test_sequential_curator_tasks_dont_deadlock(
+        self,
+        workspace: Path,
+        tasks_dir: Path,
+    ) -> None:
+        """TaskRunner releases curator singleton between tasks."""
+        from assistonauts.agents.curator import CuratorAgent
+
+        # Reset singleton state
+        CuratorAgent._active_instance = None
+
+        llm = FakeLLMClient(responses=["No cross-references."] * 4)
+        runner = TaskRunner(workspace_root=workspace, tasks_dir=tasks_dir)
+
+        # Create a wiki article for curator to process
+        article_dir = workspace / "wiki" / "concept"
+        article_dir.mkdir(parents=True, exist_ok=True)
+        (article_dir / "test.md").write_text(
+            "---\ntitle: Test\ntype: concept\n---\n\n# Test\n\nContent."
+        )
+
+        task1 = Task(
+            task_id="t-cur-1",
+            agent="curator",
+            params={"article_path": "wiki/concept/test.md"},
+        )
+        result1 = runner.run(task1, llm_client=llm)
+
+        # Second curator task must NOT crash with singleton error
+        task2 = Task(
+            task_id="t-cur-2",
+            agent="curator",
+            params={"article_path": "wiki/concept/test.md"},
+        )
+        result2 = runner.run(task2, llm_client=llm)
+
+        assert result1.status in (TaskStatus.COMPLETED, TaskStatus.FAILED)
+        assert result2.status in (TaskStatus.COMPLETED, TaskStatus.FAILED)
+        # Verify it's not a singleton error
+        if result2.error_message:
+            assert "already active" not in result2.error_message

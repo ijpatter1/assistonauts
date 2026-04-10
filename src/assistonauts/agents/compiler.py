@@ -693,7 +693,11 @@ class CompilerAgent(Agent):
         Expects task dict with 'source_path' (single) or
         'source_paths' (comma-separated list), 'article_type', and 'title'.
         """
-        article_type = ArticleType(task.get("article_type", "concept"))
+        raw_type = task.get("article_type", "concept")
+        try:
+            article_type = ArticleType(raw_type)
+        except ValueError:
+            article_type = ArticleType.CONCEPT
 
         # Support multi-source via comma-separated paths
         if "source_paths" in task:
