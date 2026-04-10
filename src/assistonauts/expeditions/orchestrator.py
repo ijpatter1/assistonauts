@@ -625,14 +625,16 @@ class BuildOrchestrator:
                 if summaries
                 else "(no summaries available yet)"
             )
+            prior_results = self._describe_prior_iterations()
             return (
                 f"{scope_text}\n"
                 "ITERATION PHASE: Structuring\n\n"
-                "Discovery is complete. Review the compiled articles "
-                "and their summaries below. Identify foundational "
-                "concepts that other articles will reference. "
-                "Sequence remaining Compiler missions with correct "
-                "dependency ordering — foundational concepts first.\n\n"
+                f"Prior iteration results:\n{prior_results}\n\n"
+                "Review the compiled articles and their summaries "
+                "below. Identify foundational concepts that other "
+                "articles will reference. Sequence remaining Compiler "
+                "missions with correct dependency ordering — "
+                "foundational concepts first.\n\n"
                 f"Compiled article summaries:\n{summaries_text}\n\n"
                 "Identify structural needs: are there concepts "
                 "that need dedicated entity pages or category "
@@ -651,6 +653,29 @@ class BuildOrchestrator:
                 "2. Inspector sweep (placeholder — Phase 6)\n\n"
                 "Create missions for the refinement pass."
             )
+
+    def _describe_prior_iterations(self) -> str:
+        """Summarize completed iterations for the Captain's context."""
+        if not self._iterations:
+            return "(no prior iterations)"
+        lines: list[str] = []
+        for it in self._iterations:
+            completed = [m for m in it.missions if m.status == MissionStatus.COMPLETED]
+            failed = [m for m in it.missions if m.status == MissionStatus.FAILED]
+            lines.append(
+                f"- {it.phase.value.title()}: "
+                f"{len(completed)} completed, {len(failed)} failed"
+            )
+            for m in completed:
+                lines.append(
+                    f"  - [completed] {m.mission_id} ({m.agent}/{m.mission_type})"
+                )
+            for m in failed:
+                err = m.failure.error_message[:80] if m.failure else "unknown"
+                lines.append(
+                    f"  - [failed] {m.mission_id} ({m.agent}/{m.mission_type}): {err}"
+                )
+        return "\n".join(lines) if lines else "(no prior iterations)"
 
     def _describe_sources(self) -> str:
         """Describe configured sources for the prompt."""

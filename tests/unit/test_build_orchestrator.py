@@ -435,6 +435,48 @@ class TestBuildExecution:
         # Neither mission should have completed (budget halt)
         assert iteration.missions_completed == 0
 
+    def test_structuring_prompt_includes_discovery_results(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Structuring prompt includes prior iteration results."""
+        # Run a Discovery iteration first
+        plan_response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-scout-001\n"
+            "    agent: scout\n"
+            "    type: ingest\n"
+            "    inputs:\n"
+            "      paths:\n"
+            "        - /tmp/a.pdf\n"
+            "    acceptance_criteria: []\n"
+            "    priority: high\n"
+            "```\n"
+        )
+        client = FakeLLMClient(responses=[plan_response, "no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        # Plan and execute Discovery (mission will fail, that's OK)
+        discovery = orch.plan_iteration(IterationPhase.DISCOVERY)
+        orch.execute_iteration(discovery)
+
+        # Now plan Structuring — prompt should reference prior results
+        orch.plan_iteration(IterationPhase.STRUCTURING)
+
+        structuring_prompt = client.calls[1]["messages"][0]["content"]
+        # Should mention prior iteration results
+        assert (
+            "prior iteration" in structuring_prompt.lower()
+            or "discovery" in structuring_prompt.lower()
+        )
+        assert "m-scout-001" in structuring_prompt
+
     def test_structuring_prompt_includes_summaries(
         self,
         workspace: Path,
