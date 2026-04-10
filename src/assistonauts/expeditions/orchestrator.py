@@ -237,46 +237,88 @@ class BuildOrchestrator:
 
         return iteration
 
-    def run_build(self) -> BuildPhaseResult:
+    def run_build(self, max_iterations: int = 5) -> BuildPhaseResult:
         """Run the full build phase with variable iteration count.
 
-        Runs Discovery → Structuring → Refinement, but skips later
-        iterations if exit conditions are met early (all sources
-        processed, no new missions to plan). The spec says iteration
-        count is variable — small expeditions may complete in 2.
+        Sequence: Discovery first, then Structuring → Refinement cycles
+        until no new missions are planned or max_iterations is reached.
+        Small expeditions exit after 2 (D, S). Large ones may need 4-5
+        (D, S, R, S, R) when Refinement reveals additional structuring
+        needs.
         """
         result = BuildPhaseResult()
         all_completed: set[str] = set()
+        iteration_count = 0
 
-        for phase in self.iteration_sequence():
-            iteration = self.plan_iteration(phase)
+        # Discovery always runs first
+        iteration_count += 1
+        self._run_and_record(
+            IterationPhase.DISCOVERY,
+            result,
+            all_completed,
+        )
 
-            # Exit condition: no new work to do in this iteration
-            if iteration.missions_planned == 0 and phase != IterationPhase.DISCOVERY:
-                logger.info(
-                    "Skipping %s — no missions planned (exit condition met)",
-                    phase.value,
-                )
-                result.iterations.append(iteration)
-                continue
-
-            iteration = self.execute_iteration(
-                iteration,
-                prior_completed=all_completed,
+        # Structuring → Refinement cycles until exit condition
+        while iteration_count < max_iterations:
+            iteration_count += 1
+            has_work = self._run_and_record(
+                IterationPhase.STRUCTURING,
+                result,
+                all_completed,
             )
-            # Carry forward completed missions
-            for m in iteration.missions:
-                if m.status == MissionStatus.COMPLETED:
-                    all_completed.add(m.mission_id)
-            result.iterations.append(iteration)
-            result.total_missions += iteration.missions_planned
-            result.total_completed += iteration.missions_completed
-            result.total_failed += iteration.missions_failed
+            if not has_work:
+                break
+
+            if iteration_count >= max_iterations:
+                break
+
+            iteration_count += 1
+            has_work = self._run_and_record(
+                IterationPhase.REFINEMENT,
+                result,
+                all_completed,
+            )
+            if not has_work:
+                break
 
         self._write_build_report(result)
         self.ledger.close()
         self.budget.tracker.close()
         return result
+
+    def _run_and_record(
+        self,
+        phase: IterationPhase,
+        result: BuildPhaseResult,
+        all_completed: set[str],
+    ) -> bool:
+        """Plan and execute one iteration, recording into result.
+
+        Returns True if the iteration had missions to execute,
+        False if no work was planned (exit condition).
+        """
+        iteration = self.plan_iteration(phase)
+
+        if iteration.missions_planned == 0 and phase != IterationPhase.DISCOVERY:
+            logger.info(
+                "Skipping %s — no missions planned (exit condition met)",
+                phase.value,
+            )
+            result.iterations.append(iteration)
+            return False
+
+        iteration = self.execute_iteration(
+            iteration,
+            prior_completed=all_completed,
+        )
+        for m in iteration.missions:
+            if m.status == MissionStatus.COMPLETED:
+                all_completed.add(m.mission_id)
+        result.iterations.append(iteration)
+        result.total_missions += iteration.missions_planned
+        result.total_completed += iteration.missions_completed
+        result.total_failed += iteration.missions_failed
+        return True
 
     def _execute_mission(
         self,

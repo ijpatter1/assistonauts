@@ -305,13 +305,13 @@ class TestBuildExecution:
         assert result.missions_planned == 0
         assert result.missions_completed == 0
 
-    def test_run_build_returns_result(
+    def test_run_build_exits_early_when_no_work(
         self,
         workspace: Path,
         config: ExpeditionConfig,
     ) -> None:
-        # 3 iterations, each returns empty plan
-        client = FakeLLMClient(responses=["no yaml"] * 3)
+        """Empty plans after Discovery exit with 2 iterations (D, S)."""
+        client = FakeLLMClient(responses=["no yaml"] * 5)
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
@@ -320,10 +320,78 @@ class TestBuildExecution:
 
         result = orch.run_build()
         assert isinstance(result, BuildPhaseResult)
-        assert len(result.iterations) == 3
+        # Discovery always runs, Structuring exits with no work
+        assert len(result.iterations) == 2
         assert result.iterations[0].phase == IterationPhase.DISCOVERY
         assert result.iterations[1].phase == IterationPhase.STRUCTURING
-        assert result.iterations[2].phase == IterationPhase.REFINEMENT
+
+    def test_run_build_additional_cycles(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """When Refinement plans work, an additional S/R cycle runs."""
+        mission_yaml = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-001\n"
+            "    agent: curator\n"
+            "    type: cross_reference\n"
+            "    inputs: {}\n"
+            "    acceptance_criteria: []\n"
+            "    priority: normal\n"
+            "```\n"
+        )
+        # Each plan call returns work (missions fail validation but
+        # the loop still continues since missions_planned > 0).
+        # No verification calls — missions fail before completion.
+        # D plan, S plan, R plan, S2 plan (no work → exit)
+        client = FakeLLMClient(
+            responses=[mission_yaml, mission_yaml, mission_yaml, "no yaml"],
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        result = orch.run_build()
+        phases = [it.phase for it in result.iterations]
+        # D, S, R, then S2 exits with no work
+        assert phases == [
+            IterationPhase.DISCOVERY,
+            IterationPhase.STRUCTURING,
+            IterationPhase.REFINEMENT,
+            IterationPhase.STRUCTURING,
+        ]
+
+    def test_run_build_respects_max_iterations(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Build stops at max_iterations even if work remains."""
+        mission_yaml = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-001\n"
+            "    agent: curator\n"
+            "    type: cross_reference\n"
+            "    inputs: {}\n"
+            "    acceptance_criteria: []\n"
+            "    priority: normal\n"
+            "```\n"
+        )
+        # Always return work — should cap at max_iterations=3
+        client = FakeLLMClient(responses=[mission_yaml] * 10)
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        result = orch.run_build(max_iterations=3)
+        assert len(result.iterations) == 3
 
     def test_budget_halt_stops_execution(
         self,
@@ -449,7 +517,7 @@ class TestBuildExecution:
         workspace: Path,
         config: ExpeditionConfig,
     ) -> None:
-        client = FakeLLMClient(responses=["no yaml"] * 3)
+        client = FakeLLMClient(responses=["no yaml"] * 5)
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
@@ -463,8 +531,8 @@ class TestBuildExecution:
         content = report_path.read_text()
         assert "test-exp" in content
         assert "Discovery" in content
+        # Structuring exits with no work (variable iteration count)
         assert "Structuring" in content
-        assert "Refinement" in content
 
     def test_mission_to_params_scout(
         self,
