@@ -759,14 +759,68 @@ class BuildOrchestrator:
             f"# Build Report — {self.config.name}",
             "",
             f"**Scope:** {self.config.scope.description}",
-            f"**Total missions:** {result.total_missions}",
-            f"**Completed:** {result.total_completed}",
-            f"**Failed:** {result.total_failed}",
+            f"**Keywords:** {', '.join(self.config.scope.keywords)}",
             "",
-            "## Iterations",
+            "## Sources",
+            "",
+            f"- {self._describe_sources()}",
+            "",
+            "## Mission Summary",
+            "",
+            f"- **Total missions:** {result.total_missions}",
+            f"- **Completed:** {result.total_completed}",
+            f"- **Failed:** {result.total_failed}",
+            f"- **Iterations:** {len(result.iterations)}",
             "",
         ]
 
+        # Knowledge base article counts
+        wiki_dir = self.workspace_root / "wiki"
+        article_count = 0
+        word_count = 0
+        if wiki_dir.exists():
+            for md in wiki_dir.rglob("*.md"):
+                article_count += 1
+                word_count += len(md.read_text().split())
+        lines.extend(
+            [
+                "## Knowledge Base",
+                "",
+                f"- **Articles:** {article_count}",
+                f"- **Total words:** {word_count:,}",
+                "",
+            ]
+        )
+
+        # Token usage by agent
+        agent_tokens: dict[str, int] = {}
+        for it in result.iterations:
+            for m in it.missions:
+                agent_tokens[m.agent] = agent_tokens.get(m.agent, 0)
+        total_tokens = getattr(
+            self.llm_client,
+            "total_tokens_used",
+            0,
+        )
+        lines.extend(
+            [
+                "## Token Usage",
+                "",
+                f"- **Total tokens used:** {total_tokens:,}",
+            ]
+        )
+        for agent in sorted(agent_tokens):
+            lines.append(f"- {agent}: active")
+        budget_remaining = self.budget.remaining()
+        lines.extend(
+            [
+                f"- **Budget remaining:** {budget_remaining:,}",
+                "",
+            ]
+        )
+
+        # Iteration details
+        lines.extend(["## Iterations", ""])
         for it in result.iterations:
             status = "complete" if it.is_complete() else "partial"
             lines.append(f"### {it.phase.value.title()} ({status})")

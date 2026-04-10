@@ -711,8 +711,33 @@ class TestBuildExecution:
         content = report_path.read_text()
         assert "test-exp" in content
         assert "Discovery" in content
-        # Structuring exits with no work (variable iteration count)
         assert "Structuring" in content
+
+    def test_build_report_includes_enriched_sections(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Build report includes scope, sources, token usage, articles."""
+        # Create wiki articles so the report can count them
+        (workspace / "wiki" / "concept" / "test.md").write_text(
+            "---\ntitle: Test\n---\n\n# Test\n\n100 words here."
+        )
+        client = FakeLLMClient(responses=["no yaml"] * 5)
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        orch.run_build()
+
+        report_path = workspace / "expeditions" / "test-exp" / "build-report.md"
+        content = report_path.read_text()
+        # Enriched sections
+        assert "Sources" in content
+        assert "Knowledge Base" in content or "Articles" in content
+        assert "Token Usage" in content or "Budget" in content
 
     def test_mission_to_params_scout(
         self,
