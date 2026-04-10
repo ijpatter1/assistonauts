@@ -5,6 +5,10 @@
 # Updated: 2026-04-09, session-2026-04-09-005 — added checks for
 #   plan.yaml, build-report.md, progress feedback, parse failure
 #   warning, budget halt CLI visibility
+# Updated: 2026-04-10, session-2026-04-10-001 — added dry-run
+#   scenario, enriched build report checks (per-agent tokens,
+#   coverage metrics, knowledge base stats, sources), build
+#   report path in CLI output
 #
 # Tests end-to-end expedition workflows: creation, build execution,
 # budget enforcement, error handling, and config validation.
@@ -137,6 +141,70 @@ verify 'echo "$OUTPUT" | grep -qi "no expedition.yaml\|not found"' \
 
 echo ""
 
+# ── Scenario 4: Dry Run (requires LLM) ─────────────
+
+echo "━━━ Scenario 4: Dry Run ━━━"
+echo ""
+
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "  ⊘ Skipped (ANTHROPIC_API_KEY not set)"
+  echo ""
+else
+  # Create a simple expedition for dry-run testing
+  TEST_SOURCES="$WORKSPACE/test-sources"
+  mkdir -p "$TEST_SOURCES"
+  echo "# Dry Run Test" > "$TEST_SOURCES/dryrun.md"
+
+  cat > /tmp/uat-dryrun.yaml << DRYEOF
+expedition:
+  name: dryrun-test
+  description: "Dry run test"
+  scope:
+    description: "Test dry run"
+    keywords: [test]
+  sources:
+    local:
+      - path: $TEST_SOURCES
+        pattern: "*.md"
+  scaling:
+    budget:
+      daily_token_limit: 200000
+DRYEOF
+
+  assistonauts expedition create --config /tmp/uat-dryrun.yaml -w "$WORKSPACE" >/dev/null 2>&1
+
+  set +e
+  DRY_OUTPUT=$(assistonauts build dryrun-test --dry-run -w "$WORKSPACE" 2>&1)
+  DRY_EXIT=$?
+  set -e
+
+  echo "$DRY_OUTPUT" | head -15
+  echo ""
+
+  verify 'echo "$DRY_OUTPUT" | grep -qi "dry run"' \
+    "4a: Dry-run output identifies itself as dry run"
+  verify 'echo "$DRY_OUTPUT" | grep -qi "planned\|not executed"' \
+    "4b: Dry-run says missions are planned, not executed"
+  verify 'echo "$DRY_OUTPUT" | grep -qi "plan.yaml"' \
+    "4c: Dry-run mentions plan.yaml artifact"
+  verify 'test -f "$WORKSPACE/expeditions/dryrun-test/plan.yaml"' \
+    "4d: plan.yaml written during dry run"
+
+  # Verify no missions were actually executed
+  if [ -f "$WORKSPACE/expeditions/dryrun-test/ledger.db" ]; then
+    RUNNING=$(sqlite3 "$WORKSPACE/expeditions/dryrun-test/ledger.db" \
+      "SELECT COUNT(*) FROM missions WHERE status IN ('running','completed','failed')" \
+      2>/dev/null || echo "0")
+    verify 'test "$RUNNING" -eq 0' \
+      "4e: No missions executed during dry run ($RUNNING found)"
+  else
+    verify 'true' \
+      "4e: No ledger DB = no missions executed (expected for dry run)"
+  fi
+
+  echo ""
+fi
+
 # ── Scenario 1: Happy Path (requires LLM) ───────────
 
 if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
@@ -144,7 +212,7 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
   echo ""
 else
   # Create test source files
-  TEST_SOURCES="$WORKSPACE/test-sources"
+  TEST_SOURCES="${TEST_SOURCES:-$WORKSPACE/test-sources}"
   mkdir -p "$TEST_SOURCES"
   cat > "$TEST_SOURCES/ml-basics.md" << 'SRCEOF'
 # Machine Learning Basics
@@ -249,18 +317,33 @@ HAPEOF
   verify 'test -f "$WORKSPACE/expeditions/ml-uat/build-report.md"' \
     "1o: build-report.md written"
   if [ -f "$WORKSPACE/expeditions/ml-uat/build-report.md" ]; then
-    verify 'grep -q "Discovery" "$WORKSPACE/expeditions/ml-uat/build-report.md"' \
+    REPORT="$WORKSPACE/expeditions/ml-uat/build-report.md"
+    verify 'grep -q "Discovery" "$REPORT"' \
       "1p: build report includes iteration names"
+    verify 'grep -q "Token Usage" "$REPORT"' \
+      "1q: build report includes Token Usage section"
+    verify 'grep -q "captain:" "$REPORT"' \
+      "1r: build report includes captain token usage"
+    verify 'grep -q "Coverage" "$REPORT"' \
+      "1s: build report includes Coverage section"
+    verify 'grep -q "Knowledge Base" "$REPORT"' \
+      "1t: build report includes Knowledge Base section"
+    verify 'grep -q "Sources" "$REPORT"' \
+      "1u: build report includes Sources section"
   fi
+
+  # Check build report path shown in CLI output
+  verify 'echo "$BUILD_OUTPUT" | grep -qi "build-report.md"' \
+    "1v: CLI output shows build report file path"
 
   # Check progress feedback was in build output
   verify 'echo "$BUILD_OUTPUT" | grep -qi "executing\|mission"' \
-    "1q: Build output shows per-mission progress"
+    "1w: Build output shows per-mission progress"
 
   # Check empty build warning (if no missions planned)
   if echo "$BUILD_OUTPUT" | grep -q "0/0"; then
     verify 'echo "$BUILD_OUTPUT" | grep -qi "warning\|no missions\|could not be parsed"' \
-      "1r: Empty build shows parse failure warning"
+      "1x: Empty build shows parse failure warning"
   fi
 
   echo ""
