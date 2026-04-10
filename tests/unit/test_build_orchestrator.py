@@ -573,6 +573,52 @@ class TestBuildExecution:
         total = iteration.missions_completed + iteration.missions_failed
         assert total == 2
 
+    def test_structuring_prompt_includes_raw_article_paths(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Structuring prompt lists actual raw article files."""
+        # Create raw articles
+        raw_dir = workspace / "raw" / "articles"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        (raw_dir / "cover.md").write_text("# Cover")
+        (raw_dir / "intro.md").write_text("# Intro")
+
+        client = FakeLLMClient(responses=["no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.plan_iteration(IterationPhase.STRUCTURING)
+
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "raw/articles/cover.md" in prompt
+        assert "raw/articles/intro.md" in prompt
+        assert "EXACT" in prompt
+
+    def test_refinement_prompt_includes_wiki_article_paths(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Refinement prompt lists wiki articles for curator paths."""
+        # Create wiki article
+        (workspace / "wiki" / "concept" / "test.md").write_text("# Test")
+
+        client = FakeLLMClient(responses=["no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.plan_iteration(IterationPhase.REFINEMENT)
+
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "wiki/concept/test.md" in prompt
+        assert "EXACT" in prompt
+
     def test_describe_sources_resolves_glob(
         self,
         workspace: Path,

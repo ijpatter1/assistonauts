@@ -68,6 +68,7 @@ class Mission:
     completed_at: datetime | None = None
     failure: FailureRecord | None = None
     stale_reason: str = ""
+    output_paths: list[str] = field(default_factory=list)
 
     # --- State transitions ---
 
@@ -162,6 +163,8 @@ class Mission:
             d["completed_at"] = self.completed_at.isoformat()
         if self.stale_reason:
             d["stale_reason"] = self.stale_reason
+        if self.output_paths:
+            d["output_paths"] = self.output_paths
         if self.failure:
             d["failure"] = {
                 "type": self.failure.error_type,
@@ -241,6 +244,11 @@ class Mission:
                 else None
             ),
             stale_reason=str(md.get("stale_reason", "")),
+            output_paths=(
+                list(md["output_paths"])
+                if isinstance(md.get("output_paths"), list)
+                else []
+            ),
             tasks=tasks,
             failure=failure,
         )

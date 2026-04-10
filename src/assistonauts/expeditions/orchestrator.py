@@ -507,6 +507,12 @@ class BuildOrchestrator:
 
                     if verified:
                         mission.complete(verified_by="captain")
+                        if task_result.agent_output:
+                            mission.output_paths = [
+                                str(p.relative_to(self.workspace_root))
+                                for p in task_result.agent_output.output_paths
+                                if p.is_absolute()
+                            ]
                     else:
                         mission.fail(
                             error_type="deterministic",
@@ -763,6 +769,7 @@ class BuildOrchestrator:
                 else "(no summaries available yet)"
             )
             prior_results = self._describe_prior_iterations()
+            raw_listing = self._list_raw_articles()
             return (
                 f"{scope_text}\n"
                 "ITERATION PHASE: Structuring\n\n"
@@ -773,6 +780,9 @@ class BuildOrchestrator:
                 "missions with correct dependency ordering — "
                 "foundational concepts first.\n\n"
                 f"Compiled article summaries:\n{summaries_text}\n\n"
+                f"Available raw source files (use these EXACT "
+                f"paths in compiler inputs.sources):\n"
+                f"{raw_listing}\n\n"
                 "Identify structural needs: are there concepts "
                 "that need dedicated entity pages or category "
                 "articles?\n\n"
@@ -781,15 +791,19 @@ class BuildOrchestrator:
 
         else:  # REFINEMENT
             prior_results = self._describe_prior_iterations()
+            wiki_listing = self._list_wiki_articles()
             return (
                 f"{scope_text}\n"
                 "ITERATION PHASE: Refinement\n\n"
                 f"Prior iteration results:\n{prior_results}\n\n"
                 "All sources are compiled and indexed. Plan:\n"
-                "1. Curator cross-referencing pass over all articles "
-                "(batched — not incremental, since the full corpus "
-                "is now available)\n"
+                "1. Curator cross-referencing pass over all "
+                "articles (batched — not incremental, since the "
+                "full corpus is now available)\n"
                 "2. Inspector sweep (placeholder — Phase 6)\n\n"
+                f"Wiki articles (use these EXACT paths for "
+                f"curator inputs.article_path):\n"
+                f"{wiki_listing}\n\n"
                 "Create missions for the refinement pass."
             )
 
@@ -806,8 +820,11 @@ class BuildOrchestrator:
                 f"{len(completed)} completed, {len(failed)} failed"
             )
             for m in completed:
+                out = ""
+                if m.output_paths:
+                    out = f" → {', '.join(m.output_paths)}"
                 lines.append(
-                    f"  - [completed] {m.mission_id} ({m.agent}/{m.mission_type})"
+                    f"  - [completed] {m.mission_id} ({m.agent}/{m.mission_type}){out}"
                 )
             for m in failed:
                 err = m.failure.error_message[:80] if m.failure else "unknown"
@@ -835,6 +852,28 @@ class BuildOrchestrator:
             else:
                 parts.append(f"Local: {ls.path} ({ls.pattern})")
         return "; ".join(parts) if parts else "No sources configured"
+
+    def _list_raw_articles(self) -> str:
+        """List raw article files with workspace-relative paths."""
+        raw_dir = self.workspace_root / "raw" / "articles"
+        if not raw_dir.exists():
+            return "(no raw articles)"
+        files = sorted(raw_dir.glob("*.md"))
+        if not files:
+            return "(no raw articles found)"
+        return "\n".join(f"- {f.relative_to(self.workspace_root)}" for f in files)
+
+    def _list_wiki_articles(self) -> str:
+        """List compiled wiki articles with workspace-relative paths."""
+        wiki_dir = self.workspace_root / "wiki"
+        if not wiki_dir.exists():
+            return "(no wiki articles)"
+        files = sorted(
+            f for f in wiki_dir.rglob("*.md") if "explorations" not in f.parts
+        )
+        if not files:
+            return "(no wiki articles found)"
+        return "\n".join(f"- {f.relative_to(self.workspace_root)}" for f in files)
 
     def _write_plan_yaml(
         self,
