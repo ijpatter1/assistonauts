@@ -188,22 +188,56 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
   echo "  ⊘ Skipped (ANTHROPIC_API_KEY not set)"
   echo ""
 else
-  # Create a simple expedition for dry-run testing
+  # Set up test sources (shared by dry-run and happy path)
+  INPUT_DIR="${INPUT_DIR:-$PROJECT_ROOT/input_artifacts}"
   TEST_SOURCES="$WORKSPACE/test-sources"
   mkdir -p "$TEST_SOURCES"
-  echo "# Dry Run Test" > "$TEST_SOURCES/dryrun.md"
+
+  UAT_PAGES=(
+    "cover.png"
+    "front-01-02.png"
+    "front-03-04.png"
+    "page-008-009.png"
+    "page-010-011.png"
+    "page-012-013.png"
+    "page-014-015.png"
+    "page-016-017.png"
+  )
+
+  COPIED=0
+  for page in "${UAT_PAGES[@]}"; do
+    if [ -f "$INPUT_DIR/$page" ]; then
+      cp "$INPUT_DIR/$page" "$TEST_SOURCES/"
+      COPIED=$((COPIED + 1))
+    fi
+  done
+
+  if [ "$COPIED" -eq 0 ]; then
+    echo "  ⚠️  No input images found in $INPUT_DIR"
+    echo "  Set INPUT_DIR to point to the book page screenshots."
+    echo "  Falling back to simple markdown test sources..."
+    echo "# Dry Run Test" > "$TEST_SOURCES/dryrun.md"
+    SOURCE_PATTERN="*.md"
+    SCOPE_DESC="Test dry run"
+    SCOPE_KEYWORDS="[test]"
+  else
+    echo "  Copied $COPIED page images from $INPUT_DIR"
+    SOURCE_PATTERN="*.png"
+    SCOPE_DESC="A treasure hunt book with hidden clues, gemstones, and adventure guidance"
+    SCOPE_KEYWORDS="[treasure, gems, clues, adventure, preparation]"
+  fi
 
   cat > /tmp/uat-dryrun.yaml << DRYEOF
 expedition:
   name: dryrun-test
   description: "Dry run test"
   scope:
-    description: "Test dry run"
-    keywords: [test]
+    description: "$SCOPE_DESC"
+    keywords: $SCOPE_KEYWORDS
   sources:
     local:
       - path: $TEST_SOURCES
-        pattern: "*.md"
+        pattern: "$SOURCE_PATTERN"
   scaling:
     budget:
       daily_token_limit: 200000
@@ -241,48 +275,24 @@ DRYEOF
   fi
 
   echo ""
-fi
 
-# ── Scenario 1: Happy Path (requires LLM) ───────────
-
-if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-  echo "━━━ Skipping LLM-dependent scenarios (ANTHROPIC_API_KEY not set) ━━━"
-  echo ""
-else
-  # Create test source files
-  TEST_SOURCES="${TEST_SOURCES:-$WORKSPACE/test-sources}"
-  mkdir -p "$TEST_SOURCES"
-  cat > "$TEST_SOURCES/ml-basics.md" << 'SRCEOF'
-# Machine Learning Basics
-
-Machine learning is a subset of artificial intelligence that enables
-systems to learn from data. Key concepts include supervised learning
-(labeled data), unsupervised learning (pattern discovery), and
-reinforcement learning (reward-based optimization).
-SRCEOF
-  cat > "$TEST_SOURCES/feature-eng.md" << 'SRCEOF'
-# Feature Engineering
-
-Feature engineering transforms raw data into features suitable for
-machine learning models. Techniques include one-hot encoding,
-normalization, polynomial features, and domain-specific transformations.
-SRCEOF
+  # ── Scenario 1: Happy Path ──────────────────────────
 
   echo "━━━ Scenario 1: Happy Path — Expedition Build ━━━"
   echo ""
 
   cat > /tmp/uat-happy.yaml << HAPEOF
 expedition:
-  name: ml-uat
-  description: "UAT test expedition for ML basics"
+  name: treasure-uat
+  description: "UAT expedition — There's Treasure Inside"
   phase: build
   scope:
-    description: "Fundamental machine learning concepts"
-    keywords: [machine learning, features, supervised]
+    description: "$SCOPE_DESC"
+    keywords: $SCOPE_KEYWORDS
   sources:
     local:
       - path: $TEST_SOURCES
-        pattern: "*.md"
+        pattern: "$SOURCE_PATTERN"
   scaling:
     agents:
       scout: auto
@@ -296,66 +306,69 @@ HAPEOF
   assistonauts expedition create --config /tmp/uat-happy.yaml -w "$WORKSPACE" 2>&1
   echo ""
 
-  verify 'test -d "$WORKSPACE/expeditions/ml-uat"' \
+  verify 'test -d "$WORKSPACE/expeditions/treasure-uat"' \
     "1a: Expedition directory created"
-  verify 'test -f "$WORKSPACE/expeditions/ml-uat/expedition.yaml"' \
+  verify 'test -f "$WORKSPACE/expeditions/treasure-uat/expedition.yaml"' \
     "1b: expedition.yaml exists"
-  verify 'test -d "$WORKSPACE/expeditions/ml-uat/missions"' \
+  verify 'test -d "$WORKSPACE/expeditions/treasure-uat/missions"' \
     "1c: missions/ directory exists"
-  verify 'test -d "$WORKSPACE/expeditions/ml-uat/review"' \
+  verify 'test -d "$WORKSPACE/expeditions/treasure-uat/review"' \
     "1d: review/ directory exists"
 
   # Verify full config persisted
-  verify 'grep -q "scaling" "$WORKSPACE/expeditions/ml-uat/expedition.yaml"' \
+  verify 'grep -q "scaling" "$WORKSPACE/expeditions/treasure-uat/expedition.yaml"' \
     "1e: Scaling config persisted in expedition.yaml"
-  verify 'grep -q "stationed" "$WORKSPACE/expeditions/ml-uat/expedition.yaml"' \
+  verify 'grep -q "stationed" "$WORKSPACE/expeditions/treasure-uat/expedition.yaml"' \
     "1f: Stationed config persisted in expedition.yaml"
-  verify 'grep -q "daily_token" "$WORKSPACE/expeditions/ml-uat/expedition.yaml"' \
+  verify 'grep -q "daily_token" "$WORKSPACE/expeditions/treasure-uat/expedition.yaml"' \
     "1g: Budget config persisted in expedition.yaml"
 
   echo ""
   echo "  Running build phase (this makes LLM calls)..."
+  if [ "$SOURCE_PATTERN" = "*.png" ]; then
+    echo "  Using vision model for image ingestion — this may take several minutes..."
+  fi
   echo ""
 
   set +e
-  BUILD_OUTPUT=$(assistonauts build ml-uat -w "$WORKSPACE" 2>&1)
+  BUILD_OUTPUT=$(assistonauts build treasure-uat -w "$WORKSPACE" 2>&1)
   BUILD_EXIT=$?
   set -e
 
-  echo "$BUILD_OUTPUT" | head -20
+  echo "$BUILD_OUTPUT" | head -30
   echo ""
 
   verify 'echo "$BUILD_OUTPUT" | grep -qi "build"' \
     "1h: Build output mentions build phase"
   verify 'echo "$BUILD_OUTPUT" | grep -qi "discovery\|structuring\|refinement"' \
     "1i: Build output shows iteration phases"
-  verify 'test -f "$WORKSPACE/expeditions/ml-uat/ledger.db"' \
+  verify 'test -f "$WORKSPACE/expeditions/treasure-uat/ledger.db"' \
     "1j: Mission ledger database created"
 
   # Check ledger has mission records
-  MISSION_COUNT=$(sqlite3 "$WORKSPACE/expeditions/ml-uat/ledger.db" \
+  MISSION_COUNT=$(sqlite3 "$WORKSPACE/expeditions/treasure-uat/ledger.db" \
     "SELECT COUNT(*) FROM missions" 2>/dev/null || echo "0")
   verify 'test "$MISSION_COUNT" -gt 0' \
     "1k: Ledger contains $MISSION_COUNT mission records"
 
   # Check YAML audit files
-  YAML_COUNT=$(ls "$WORKSPACE/expeditions/ml-uat/missions/"*.yaml 2>/dev/null | wc -l | tr -d ' ')
+  YAML_COUNT=$(ls "$WORKSPACE/expeditions/treasure-uat/missions/"*.yaml 2>/dev/null | wc -l | tr -d ' ')
   verify 'test "$YAML_COUNT" -gt 0' \
     "1l: $YAML_COUNT YAML audit files in missions/"
 
   # Check plan.yaml artifact (added during eval fix rounds)
-  verify 'test -f "$WORKSPACE/expeditions/ml-uat/plan.yaml"' \
+  verify 'test -f "$WORKSPACE/expeditions/treasure-uat/plan.yaml"' \
     "1m: plan.yaml artifact written"
-  if [ -f "$WORKSPACE/expeditions/ml-uat/plan.yaml" ]; then
-    verify 'grep -q "agent" "$WORKSPACE/expeditions/ml-uat/plan.yaml"' \
+  if [ -f "$WORKSPACE/expeditions/treasure-uat/plan.yaml" ]; then
+    verify 'grep -q "agent" "$WORKSPACE/expeditions/treasure-uat/plan.yaml"' \
       "1n: plan.yaml includes agent details (not just IDs)"
   fi
 
   # Check build-report.md artifact
-  verify 'test -f "$WORKSPACE/expeditions/ml-uat/build-report.md"' \
+  verify 'test -f "$WORKSPACE/expeditions/treasure-uat/build-report.md"' \
     "1o: build-report.md written"
-  if [ -f "$WORKSPACE/expeditions/ml-uat/build-report.md" ]; then
-    REPORT="$WORKSPACE/expeditions/ml-uat/build-report.md"
+  if [ -f "$WORKSPACE/expeditions/treasure-uat/build-report.md" ]; then
+    REPORT="$WORKSPACE/expeditions/treasure-uat/build-report.md"
     verify 'grep -q "Discovery" "$REPORT"' \
       "1p: build report includes iteration names"
     verify 'grep -q "Token Usage" "$REPORT"' \
@@ -397,12 +410,12 @@ expedition:
   description: "Budget enforcement test"
   phase: build
   scope:
-    description: "Test topic"
-    keywords: [test]
+    description: "$SCOPE_DESC"
+    keywords: $SCOPE_KEYWORDS
   sources:
     local:
       - path: $TEST_SOURCES
-        pattern: "*.md"
+        pattern: "$SOURCE_PATTERN"
   scaling:
     agents:
       scout: auto
