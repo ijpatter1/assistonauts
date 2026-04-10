@@ -362,6 +362,20 @@ class BuildOrchestrator:
                 if mission.agent == "scout" and "," in all_paths:
                     sub_results = []
                     for i, p in enumerate(all_paths.split(",")):
+                        # Check budget between sub-tasks
+                        if i > 0:
+                            budget_status = self.budget.check()
+                            if not budget_status.can_proceed:
+                                mission.fail(
+                                    error_type="deterministic",
+                                    error_message=(
+                                        f"Budget exceeded between "
+                                        f"sub-tasks: {budget_status.message}"
+                                    ),
+                                    retries=0,
+                                )
+                                self.ledger.save(mission)
+                                return
                         sub_task = Task(
                             task_id=(f"task-{mission.mission_id}-{attempt}-{i}"),
                             agent="scout",

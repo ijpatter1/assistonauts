@@ -435,6 +435,52 @@ class TestBuildExecution:
         # Neither mission should have completed (budget halt)
         assert iteration.missions_completed == 0
 
+    def test_budget_exceeded_halts_scout_sub_tasks(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Multi-path scout stops when budget is exceeded mid-task."""
+        source_a = workspace / "a.md"
+        source_b = workspace / "b.md"
+        source_a.write_text("# A")
+        source_b.write_text("# B")
+        (workspace / "index" / "manifest.json").write_text("{}")
+
+        mission = Mission(
+            mission_id="m-scout-multi",
+            agent="scout",
+            mission_type="ingest",
+            inputs={
+                "paths": [str(source_a), str(source_b)],
+            },
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+
+        client = FakeLLMClient(responses=[])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.ledger.save(mission)
+
+        # Push budget to exactly at the hard cap — is_exceeded returns
+        # True at >= limit. First sub-task runs (check is before 2nd),
+        # then second sub-task is blocked.
+        orch.budget.tracker.record(
+            agent="test",
+            expedition="test",
+            tokens=100_000,
+        )
+
+        orch._execute_mission(mission)
+
+        assert mission.status == MissionStatus.FAILED
+        assert mission.failure is not None
+        assert "budget" in mission.failure.error_message.lower()
+
     def test_structuring_prompt_includes_discovery_results(
         self,
         workspace: Path,
