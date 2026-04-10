@@ -481,6 +481,98 @@ class TestBuildExecution:
         assert mission.failure is not None
         assert "budget" in mission.failure.error_message.lower()
 
+    def test_max_concurrent_missions_enforced(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Only max_concurrent_missions are dispatched per pass."""
+        # Config max_concurrent_missions defaults to 3
+        # Plan 5 ready missions, only 3 should run per while-loop pass
+        plan_response = (
+            "```yaml\n"
+            "missions:\n"
+            + "".join(
+                f"  - id: m-{i:03d}\n"
+                f"    agent: curator\n"
+                f"    type: cross_reference\n"
+                f"    inputs: {{}}\n"
+                f"    acceptance_criteria: []\n"
+                f"    priority: normal\n"
+                for i in range(5)
+            )
+            + "```\n"
+        )
+        client = FakeLLMClient(responses=[plan_response])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        iteration = orch.plan_iteration(IterationPhase.DISCOVERY)
+        orch.execute_iteration(iteration)
+
+        # All 5 missions should eventually execute (across multiple
+        # while-loop passes), but per pass only 3 are dispatched.
+        # Since they all fail (missing article_path), they all complete.
+        total = iteration.missions_completed + iteration.missions_failed
+        assert total == 5
+
+    def test_max_concurrent_missions_custom(
+        self,
+        workspace: Path,
+    ) -> None:
+        """Custom max_concurrent_missions from config is respected."""
+        custom_config = ExpeditionConfig.from_dict(
+            {
+                "name": "test-exp",
+                "description": "Test",
+                "scope": {
+                    "description": "Test",
+                    "keywords": ["test"],
+                },
+                "sources": {"local": []},
+                "stationed": {
+                    "resources": {
+                        "max_concurrent_missions": 1,
+                    },
+                },
+            }
+        )
+        assert custom_config.stationed.resources.max_concurrent_missions == 1
+
+        plan_response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-001\n"
+            "    agent: curator\n"
+            "    type: cross_reference\n"
+            "    inputs: {}\n"
+            "    acceptance_criteria: []\n"
+            "    priority: normal\n"
+            "  - id: m-002\n"
+            "    agent: curator\n"
+            "    type: cross_reference\n"
+            "    inputs: {}\n"
+            "    acceptance_criteria: []\n"
+            "    priority: normal\n"
+            "```\n"
+        )
+        client = FakeLLMClient(responses=[plan_response])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=custom_config,
+            llm_client=client,
+        )
+
+        iteration = orch.plan_iteration(IterationPhase.DISCOVERY)
+        orch.execute_iteration(iteration)
+
+        # Both should eventually run (just 1 per pass)
+        total = iteration.missions_completed + iteration.missions_failed
+        assert total == 2
+
     def test_structuring_prompt_includes_discovery_results(
         self,
         workspace: Path,

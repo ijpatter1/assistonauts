@@ -207,7 +207,7 @@ class BuildOrchestrator:
                         queue_depth,
                     )
 
-            # Find ready missions
+            # Find ready missions, limited by max_concurrent_missions
             ready = graph.ready_missions(pending, completed)
             if not ready:
                 # All remaining missions are blocked
@@ -217,7 +217,9 @@ class BuildOrchestrator:
                 )
                 break
 
-            for mid in sorted(ready):
+            max_concurrent = self.config.stationed.resources.max_concurrent_missions
+            batch = sorted(ready)[:max_concurrent]
+            for mid in batch:
                 mission = next(m for m in iteration.missions if m.mission_id == mid)
                 logger.info(
                     "Executing %s (%s/%s)",
