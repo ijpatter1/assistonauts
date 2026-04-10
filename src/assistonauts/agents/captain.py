@@ -163,11 +163,23 @@ def parse_plan_response(
 ) -> tuple[list[Mission], list[tuple[str, str]]]:
     """Parse Captain's YAML plan response into Mission objects.
 
+    Extracts YAML from markdown code fences first. If no fenced block
+    is found, falls back to parsing the full response. This handles
+    LLM responses that include explanatory text before/after the YAML.
+
     Skips malformed mission entries (missing id or agent).
     """
-    # Strip markdown code fences
-    cleaned = re.sub(r"```ya?ml?\n?", "", response)
-    cleaned = re.sub(r"```\n?", "", cleaned)
+    # Try to extract YAML from code fences first
+    fenced = re.search(
+        r"```ya?ml?\s*\n(.*?)```",
+        response,
+        re.DOTALL,
+    )
+    if fenced:
+        cleaned = fenced.group(1)
+    else:
+        # No fences — try the full response
+        cleaned = response
 
     try:
         data = yaml.safe_load(cleaned)

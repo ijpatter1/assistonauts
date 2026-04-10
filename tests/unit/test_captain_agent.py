@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from assistonauts.agents.base import OwnershipError
-from assistonauts.agents.captain import CaptainAgent, CaptainResult
+from assistonauts.agents.captain import CaptainAgent, CaptainResult, parse_plan_response
 from tests.helpers import FakeLLMClient
 
 
@@ -241,3 +241,95 @@ class TestCaptainResult:
         assert r.success
         assert r.missions == []
         assert r.dependencies == []
+
+
+# --- parse_plan_response ---
+
+
+class TestParsePlanResponse:
+    def test_parses_clean_yaml(self) -> None:
+        response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-001\n"
+            "    agent: scout\n"
+            "    type: ingest\n"
+            "    inputs: {}\n"
+            "    acceptance_criteria: []\n"
+            "    priority: normal\n"
+            "```\n"
+        )
+        missions, _deps = parse_plan_response(response)
+        assert len(missions) == 1
+        assert missions[0].mission_id == "m-001"
+
+    def test_parses_yaml_with_surrounding_text(self) -> None:
+        """LLM response with explanation before/after YAML block."""
+        response = (
+            "Here's my mission plan for the ML expedition:\n\n"
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-scout-001\n"
+            "    agent: scout\n"
+            "    type: ingest_sources\n"
+            "    inputs:\n"
+            "      paths:\n"
+            "        - /tmp/papers/a.pdf\n"
+            "    acceptance_criteria:\n"
+            "      - Sources ingested\n"
+            "    priority: high\n"
+            "```\n\n"
+            "This plan ingests all sources first, then compiles.\n"
+        )
+        missions, _deps = parse_plan_response(response)
+        assert len(missions) == 1
+        assert missions[0].agent == "scout"
+
+    def test_returns_empty_on_unparseable(self) -> None:
+        missions, _deps = parse_plan_response("Just some text, no YAML.")
+        assert missions == []
+        assert _deps == []
+
+    def test_returns_empty_on_no_missions_key(self) -> None:
+        response = "```yaml\nplan:\n  phases: [discovery]\n```\n"
+        missions, _deps = parse_plan_response(response)
+        assert missions == []
+
+    def test_skips_malformed_entries(self) -> None:
+        """Entries missing id or agent are skipped."""
+        response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-001\n"
+            "    agent: scout\n"
+            "    type: ingest\n"
+            "    inputs: {}\n"
+            "    acceptance_criteria: []\n"
+            "  - type: compile\n"
+            "    inputs: {}\n"
+            "```\n"
+        )
+        missions, _ = parse_plan_response(response)
+        assert len(missions) == 1  # second entry skipped
+
+    def test_captures_dependencies(self) -> None:
+        response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-001\n"
+            "    agent: scout\n"
+            "    type: ingest\n"
+            "    inputs: {}\n"
+            "    acceptance_criteria: []\n"
+            "  - id: m-002\n"
+            "    agent: compiler\n"
+            "    type: compile\n"
+            "    inputs: {}\n"
+            "    acceptance_criteria: []\n"
+            "    depends_on:\n"
+            "      - m-001\n"
+            "```\n"
+        )
+        missions, deps = parse_plan_response(response)
+        assert len(missions) == 2
+        assert ("m-001", "m-002") in deps
