@@ -14,7 +14,8 @@
 # budget enforcement, error handling, and config validation.
 #
 # Prerequisites:
-#   - ANTHROPIC_API_KEY set (for scenarios that make LLM calls)
+#   - ANTHROPIC_API_KEY set (for LLM calls — Sonnet for Captain, Haiku for other agents)
+#   - GEMINI_API_KEY set (for Gemini Embedding 2 if indexing scenarios run)
 #   - assistonauts installed (`pip install -e .` from project root)
 #
 # Usage: bash docs/uat/phase-5-uat.sh
@@ -52,6 +53,42 @@ cleanup() {
   rm -f /tmp/uat-*.yaml
 }
 
+# Override workspace config: Sonnet for Captain (reliable YAML),
+# Haiku for other agents (cost), Gemini Embedding 2 for vectors
+configure_workspace() {
+  cat > "$WORKSPACE/.assistonauts/config.yaml" << 'CFGEOF'
+llm:
+  providers:
+    anthropic:
+      model: claude-haiku-4-5-20251001
+      api_key_env: ANTHROPIC_API_KEY
+    anthropic_sonnet:
+      model: claude-sonnet-4-6-20250514
+      api_key_env: ANTHROPIC_API_KEY
+  roles:
+    scout: anthropic
+    compiler: anthropic
+    curator: anthropic
+    captain: anthropic_sonnet
+    inspector: anthropic
+    explorer: anthropic
+
+embedding:
+  active: gemini
+  providers:
+    gemini:
+      model: gemini-embedding-2-preview
+      dimensions: 3072
+
+cache:
+  llm_responses:
+    enabled: true
+    backend: sqlite
+    ttl_hours: 168
+    max_size_mb: 500
+CFGEOF
+}
+
 echo "═══ Phase 5 UAT — Captain + Expedition Orchestration ═══"
 echo ""
 echo "Workspace: $WORKSPACE"
@@ -76,6 +113,7 @@ echo "━━━ Scenario 6: Invalid Config Handling ━━━"
 echo ""
 
 assistonauts init "$WORKSPACE" >/dev/null 2>&1
+configure_workspace
 
 # 6a: Totally invalid YAML syntax
 cat > /tmp/uat-bad-syntax.yaml << 'BADEOF'

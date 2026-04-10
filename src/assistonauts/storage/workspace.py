@@ -10,11 +10,14 @@ llm:
     anthropic:
       model: claude-haiku-4-5-20251001
       api_key_env: ANTHROPIC_API_KEY
+    anthropic_sonnet:
+      model: claude-sonnet-4-6-20250514
+      api_key_env: ANTHROPIC_API_KEY
   roles:
     scout: anthropic
     compiler: anthropic
     curator: anthropic
-    captain: anthropic
+    captain: anthropic_sonnet
     inspector: anthropic
     explorer: anthropic
 
