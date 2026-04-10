@@ -63,7 +63,7 @@ llm:
       model: claude-haiku-4-5-20251001
       api_key_env: ANTHROPIC_API_KEY
     anthropic_sonnet:
-      model: claude-sonnet-4-6-20250514
+      model: claude-sonnet-4-6
       api_key_env: ANTHROPIC_API_KEY
   roles:
     scout: anthropic
