@@ -27,6 +27,11 @@ from assistonauts.agents.captain import CaptainAgent, parse_plan_response
 from assistonauts.archivist.service import Archivist
 from assistonauts.expeditions.budget import BudgetEnforcer
 from assistonauts.expeditions.scaling import ScalingManager
+from assistonauts.llm.tracing import (
+    clear_trace_context,
+    get_trace_context,
+    set_trace_context,
+)
 from assistonauts.missions.dependencies import (
     DependencyGraph,
     build_graph_from_plan,
@@ -73,6 +78,65 @@ class BuildPhaseResult:
     total_failed: int = 0
 
 
+class TracingLLMClient:
+    """Wrapper that intercepts LLM calls and writes trace records.
+
+    Delegates all calls to the wrapped client while writing a JSONL
+    trace entry for every complete() call. This captures all non-
+    deterministic operations regardless of which agent or layer
+    makes the call, without modifying any existing LLM client class.
+    """
+
+    def __init__(
+        self,
+        delegate: LLMClientProtocol,
+        trace_path: Path,
+    ) -> None:
+        self._delegate = delegate
+        self._trace_path = trace_path
+        self._trace_path.parent.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def total_tokens_used(self) -> int:
+        return getattr(self._delegate, "total_tokens_used", 0)
+
+    @total_tokens_used.setter
+    def total_tokens_used(self, value: int) -> None:
+        if hasattr(self._delegate, "total_tokens_used"):
+            self._delegate.total_tokens_used = value  # type: ignore[attr-defined]
+
+    def complete(
+        self,
+        messages: list[dict[str, str]],
+        model: str | None = None,
+        system: str | None = None,
+        **kwargs: object,
+    ) -> object:
+        """Delegate to wrapped client, then write trace record."""
+        from datetime import UTC, datetime
+
+        response = self._delegate.complete(
+            messages, model=model, system=system, **kwargs
+        )
+
+        record = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "messages": messages,
+            "system": system,
+            "model": getattr(response, "model", "unknown"),
+            "response": getattr(response, "content", ""),
+            "usage": getattr(response, "usage", {}),
+            "context": get_trace_context(),
+        }
+        try:
+            with open(self._trace_path, "a") as f:
+                f.write(json.dumps(record, default=str) + "\n")
+        except OSError:
+            logger.warning("Failed to write LLM trace record")
+
+        return response
+
+
 class BuildOrchestrator:
     """Orchestrates the build phase with named iterations.
 
@@ -88,9 +152,16 @@ class BuildOrchestrator:
     ) -> None:
         self.workspace_root = workspace_root
         self.config = config
-        self.llm_client = llm_client
+
+        # Wrap the LLM client with tracing — every call across all
+        # agents gets a full prompt/response record in llm-trace.jsonl.
+        exp_dir = workspace_root / "expeditions" / config.name
+        trace_path = exp_dir / "llm-trace.jsonl"
+        tracing_client = TracingLLMClient(llm_client, trace_path)
+        self.llm_client = tracing_client  # type: ignore[assignment]
+
         self.captain = CaptainAgent(
-            llm_client=llm_client,
+            llm_client=tracing_client,  # type: ignore[arg-type]
             workspace_root=workspace_root,
         )
         exp_dir = workspace_root / "expeditions" / config.name
@@ -201,9 +272,13 @@ class BuildOrchestrator:
             0,
         )
         prompt = self._build_prompt(phase)
-        response = self.captain.call_llm(
-            [{"role": "user", "content": prompt}],
-        )
+        set_trace_context(agent="captain", phase=phase.value, step="planning")
+        try:
+            response = self.captain.call_llm(
+                [{"role": "user", "content": prompt}],
+            )
+        finally:
+            clear_trace_context()
         # Record Captain planning tokens to budget tracker
         tokens_after = getattr(
             self.llm_client,
@@ -442,6 +517,23 @@ class BuildOrchestrator:
         Retries transient failures up to max_retries times.
         Deterministic failures fail-fast with no retry.
         """
+        set_trace_context(
+            agent=mission.agent,
+            mission_id=mission.mission_id,
+            mission_type=mission.mission_type,
+            step="execution",
+        )
+        try:
+            self._execute_mission_inner(mission, max_retries)
+        finally:
+            clear_trace_context()
+
+    def _execute_mission_inner(
+        self,
+        mission: Mission,
+        max_retries: int,
+    ) -> None:
+        """Inner execution loop — separated for trace context management."""
         for attempt in range(max_retries + 1):
             if mission.status == MissionStatus.PENDING:
                 mission.start()
@@ -856,6 +948,12 @@ class BuildOrchestrator:
         ]
 
         for attempt in range(self._MAX_VERIFY_ATTEMPTS):
+            set_trace_context(
+                agent="captain",
+                mission_id=mission.mission_id,
+                step="verification",
+                attempt=str(attempt + 1),
+            )
             response = self.captain.call_llm(messages)
 
             if "VERIFIED" in response.upper():

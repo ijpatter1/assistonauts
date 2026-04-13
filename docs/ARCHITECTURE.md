@@ -192,6 +192,7 @@ class LLMClient:
 - `record` mode: calls litellm, saves request/response pairs to `fixture_dir`
 - `replay` mode: returns saved responses keyed by `SHA-256(model + system + messages)`, no API calls
 - Stale fixture detection: hash the system prompt, warn if prompt changed since fixture was recorded
+- **Call tracing**: optional `on_llm_call` callback fires on every `complete()` call with the full request (messages, system prompt, model) and response (content, usage). The orchestrator wires this to `expeditions/<name>/llm-trace.jsonl` during builds. The callback receives a context dict that callers can populate with mission/agent metadata via a `trace_context` thread-local, allowing end-to-end tracing without coupling the LLM client to orchestration concerns.
 
 ### Config System
 
