@@ -615,8 +615,8 @@ class TestVerificationRetryWithFeedback:
             created_by="captain",
         )
         orch._verify_mission(mission)
-        assert hasattr(mission, "_last_rejection_reason")
-        assert "off topic" in mission._last_rejection_reason.lower()
+        assert mission.last_rejection_reason
+        assert "off topic" in mission.last_rejection_reason.lower()
 
     def test_rejection_logged_to_structured_log(
         self,

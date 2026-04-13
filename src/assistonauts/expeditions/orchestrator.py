@@ -489,53 +489,54 @@ class BuildOrchestrator:
         all_completed: set[str] = set()
         iteration_count = 0
 
-        if dry_run:
-            iteration = self.plan_iteration(IterationPhase.DISCOVERY)
-            result.iterations.append(iteration)
-            result.total_missions += iteration.missions_planned
+        try:
+            if dry_run:
+                iteration = self.plan_iteration(IterationPhase.DISCOVERY)
+                result.iterations.append(iteration)
+                result.total_missions += iteration.missions_planned
+                self._write_build_report(result)
+                return result
+
+            # Discovery always runs first
+            iteration_count += 1
+            self._run_and_record(
+                IterationPhase.DISCOVERY,
+                result,
+                all_completed,
+            )
+
+            # Structuring → Refinement cycles until exit condition
+            while iteration_count < max_iterations:
+                iteration_count += 1
+                has_work = self._run_and_record(
+                    IterationPhase.STRUCTURING,
+                    result,
+                    all_completed,
+                )
+                if not has_work:
+                    break
+
+                if iteration_count >= max_iterations:
+                    break
+
+                # Index compiled articles before Refinement so the
+                # Curator's multi-pass retriever can find them.
+                self._index_wiki_articles()
+
+                iteration_count += 1
+                has_work = self._run_and_record(
+                    IterationPhase.REFINEMENT,
+                    result,
+                    all_completed,
+                )
+                if not has_work:
+                    break
+
             self._write_build_report(result)
+        finally:
             self.ledger.close()
             self.budget.tracker.close()
-            return result
 
-        # Discovery always runs first
-        iteration_count += 1
-        self._run_and_record(
-            IterationPhase.DISCOVERY,
-            result,
-            all_completed,
-        )
-
-        # Structuring → Refinement cycles until exit condition
-        while iteration_count < max_iterations:
-            iteration_count += 1
-            has_work = self._run_and_record(
-                IterationPhase.STRUCTURING,
-                result,
-                all_completed,
-            )
-            if not has_work:
-                break
-
-            if iteration_count >= max_iterations:
-                break
-
-            # Index compiled articles before Refinement so the
-            # Curator's multi-pass retriever can find them.
-            self._index_wiki_articles()
-
-            iteration_count += 1
-            has_work = self._run_and_record(
-                IterationPhase.REFINEMENT,
-                result,
-                all_completed,
-            )
-            if not has_work:
-                break
-
-        self._write_build_report(result)
-        self.ledger.close()
-        self.budget.tracker.close()
         return result
 
     def _run_and_record(
@@ -728,10 +729,15 @@ class BuildOrchestrator:
                         output_paths = [
                             str(p) for p in task_result.agent_output.output_paths
                         ]
+                    # Save execution context before verification
+                    # overwrites it with captain/verification context
+                    exec_context = get_trace_context()
                     verified = self._verify_mission(
                         mission,
                         task_output_paths=output_paths,
                     )
+                    # Restore execution context for lifecycle events
+                    set_trace_context(**exec_context)
 
                     # Record verification tokens (captain)
                     tokens_after = getattr(
@@ -750,16 +756,20 @@ class BuildOrchestrator:
                     if verified:
                         mission.complete(verified_by="captain")
                         if task_result.agent_output:
-                            mission.output_paths = [
-                                str(p.relative_to(self.workspace_root))
-                                for p in task_result.agent_output.output_paths
-                                if p.is_absolute()
-                            ]
+                            mission.output_paths = []
+                            for p in task_result.agent_output.output_paths:
+                                if not p.is_absolute():
+                                    mission.output_paths.append(str(p))
+                                elif p.resolve().is_relative_to(self.workspace_root):
+                                    mission.output_paths.append(
+                                        str(p.relative_to(self.workspace_root))
+                                    )
+                                else:
+                                    mission.output_paths.append(str(p))
                     else:
-                        reason = getattr(
-                            mission,
-                            "_last_rejection_reason",
-                            "acceptance criteria not met",
+                        reason = (
+                            mission.last_rejection_reason
+                            or "acceptance criteria not met"
                         )
                         # Clean up output files so rejected content
                         # doesn't persist in the knowledge base.
@@ -1040,7 +1050,7 @@ class BuildOrchestrator:
             )
             response = self.captain.call_llm(messages)
 
-            if "VERIFIED" in response.upper():
+            if response.upper().lstrip().startswith("VERIFIED"):
                 if attempt > 0:
                     logger.info(
                         "Verification succeeded on retry %d for %s",
@@ -1111,7 +1121,7 @@ class BuildOrchestrator:
             )
 
         # Store the final rejection reason on the mission for debugging
-        mission._last_rejection_reason = reason  # type: ignore[attr-defined]
+        mission.last_rejection_reason = reason
         return False
 
     def _cleanup_rejected_outputs(self, output_paths: list[str]) -> None:
@@ -1125,6 +1135,10 @@ class BuildOrchestrator:
             p = Path(path_str)
             if not p.is_absolute():
                 p = self.workspace_root / p
+            # Enforce workspace boundary — don't delete files outside workspace
+            if not p.resolve().is_relative_to(self.workspace_root):
+                logger.warning("Skipping cleanup outside workspace: %s", path_str)
+                continue
             if p.exists() and p.is_file():
                 try:
                     p.unlink()
@@ -1261,7 +1275,14 @@ class BuildOrchestrator:
             if source_dir.is_dir():
                 files = sorted(source_dir.glob(ls.pattern))
                 if files:
-                    file_list = ", ".join(str(f) for f in files)
+                    file_list = ", ".join(
+                        str(
+                            f.relative_to(self.workspace_root)
+                            if f.is_relative_to(self.workspace_root)
+                            else f.name
+                        )
+                        for f in files
+                    )
                     parts.append(f"Local ({len(files)} files): {file_list}")
                 else:
                     parts.append(f"Local: {ls.path} ({ls.pattern}) — no matching files")
@@ -1367,12 +1388,19 @@ class BuildOrchestrator:
             "",
             "## Mission Summary",
             "",
-            f"- **Total missions:** {self._count_unique_missions(result)}",
-            f"- **Completed:** {result.total_completed}",
-            f"- **Failed:** {result.total_failed}",
-            f"- **Iterations:** {len(result.iterations)}",
-            "",
         ]
+        unique_count = self._count_unique_missions(result)
+        pending_count = unique_count - result.total_completed - result.total_failed
+        lines.extend(
+            [
+                f"- **Total missions:** {unique_count}",
+                f"- **Completed:** {result.total_completed}",
+                f"- **Failed:** {result.total_failed}",
+                f"- **Pending:** {pending_count}",
+                f"- **Iterations:** {len(result.iterations)}",
+                "",
+            ]
+        )
 
         # Knowledge base article counts
         wiki_dir = self.workspace_root / "wiki"
@@ -1457,10 +1485,15 @@ class BuildOrchestrator:
                 f"Failed: {it.missions_failed}"
             )
             for m in it.missions:
-                lines.append(
+                detail = (
                     f"  - [{m.mission_id}] {m.agent}/{m.mission_type}"
                     f" — {m.status.value}"
                 )
+                if m.status == MissionStatus.PENDING and it.graph:
+                    deps = it.graph.dependencies(m.mission_id)
+                    if deps:
+                        detail += f" (blocked by: {', '.join(sorted(deps))})"
+                lines.append(detail)
             lines.append("")
 
         try:

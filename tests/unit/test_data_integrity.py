@@ -173,7 +173,11 @@ class TestFrontmatterTitleQuoting:
     """Titles with colons must be quoted in YAML frontmatter."""
 
     def test_title_with_colon_parseable(self, workspace: Path) -> None:
-        """Compiled article with colon in title has valid frontmatter."""
+        """Compiled article with colon in title has valid frontmatter.
+
+        The LLM returns an UNQUOTED title — _fix_frontmatter_quoting must
+        fix it before writing to disk.
+        """
         from assistonauts.agents.compiler import CompilerAgent
 
         # Create a source file
@@ -185,9 +189,10 @@ class TestFrontmatterTitleQuoting:
         )
         (workspace / "index" / "manifest.json").write_text("{}")
 
+        # LLM returns UNQUOTED colon — exercises the fix path
         fake_article = (
             "---\n"
-            "title: \"Topic: Subtopic\"\n"
+            "title: Topic: Subtopic\n"
             "type: concept\n"
             "sources:\n  - test-source.md\n"
             "---\n\n# Topic: Subtopic\n\n## Overview\n\nContent.\n"
@@ -205,13 +210,47 @@ class TestFrontmatterTitleQuoting:
             title="Topic: Subtopic",
         )
 
-        if result.output_path:
-            content = result.output_path.read_text()
-            # Extract frontmatter and verify it parses
-            parts = content.split("---", 2)
-            if len(parts) >= 3:
-                fm = yaml.safe_load(parts[1])
-                assert fm["title"] == "Topic: Subtopic"
+        assert result.output_path is not None, "Compilation should produce output"
+        content = result.output_path.read_text()
+        parts = content.split("---", 2)
+        assert len(parts) >= 3, "Article should have frontmatter delimiters"
+        fm = yaml.safe_load(parts[1])
+        assert fm is not None, "Frontmatter should parse as valid YAML"
+        assert fm["title"] == "Topic: Subtopic"
+
+    def test_fix_frontmatter_quoting_function(self) -> None:
+        """_fix_frontmatter_quoting handles various colon cases."""
+        from assistonauts.agents.compiler import _fix_frontmatter_quoting
+
+        # Unquoted colon gets quoted
+        content = "---\ntitle: A: B\ntype: concept\n---\n\n# A: B\n"
+        fixed = _fix_frontmatter_quoting(content)
+        assert 'title: "A: B"' in fixed
+
+        # Already quoted — unchanged
+        content2 = '---\ntitle: "A: B"\ntype: concept\n---\n'
+        assert _fix_frontmatter_quoting(content2) == content2
+
+        # No colon — unchanged
+        content3 = "---\ntitle: Simple Title\ntype: concept\n---\n"
+        assert _fix_frontmatter_quoting(content3) == content3
+
+    def test_template_engine_quotes_colons(self) -> None:
+        """render_template quotes titles that contain colons."""
+        from assistonauts.models.schema import ArticleType, get_default_schema
+        from assistonauts.templates.engine import render_template
+
+        schema = get_default_schema()
+        output = render_template(
+            schema=schema,
+            article_type=ArticleType.CONCEPT,
+            title="Topic: Subtopic",
+            sources=["a.md"],
+        )
+        # Extract frontmatter and verify it parses
+        parts = output.split("---", 2)
+        fm = yaml.safe_load(parts[1])
+        assert fm["title"] == "Topic: Subtopic"
 
 
 # ── QI #3: Mission lifecycle events in trace ──────────

@@ -187,7 +187,10 @@ class LLMClient:
             "usage": response.usage,
             "context": get_trace_context(),
         }
-        self._on_llm_call(record)
+        try:
+            self._on_llm_call(record)
+        except Exception:
+            pass  # Tracing must not crash LLM calls
 
     def _track_tokens(self, usage: dict[str, int]) -> None:
         """Accumulate token usage from any response path."""

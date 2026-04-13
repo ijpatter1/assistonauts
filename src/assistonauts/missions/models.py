@@ -69,6 +69,7 @@ class Mission:
     failure: FailureRecord | None = None
     stale_reason: str = ""
     output_paths: list[str] = field(default_factory=list)
+    last_rejection_reason: str = ""
 
     # --- State transitions ---
 
