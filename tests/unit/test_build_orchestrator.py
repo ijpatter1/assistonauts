@@ -1445,9 +1445,9 @@ class TestTwoLevelCompletion:
     ) -> None:
         """Verification prompt includes content from output files."""
         # Create an output file with known content
-        output_file = workspace / "raw" / "articles" / "test-output.md"
+        output_file = workspace / "wiki" / "concept" / "test-output.md"
         output_file.parent.mkdir(parents=True, exist_ok=True)
-        output_file.write_text("# Test Output\n\nIngested content here.")
+        output_file.write_text("# Test Output\n\nCompiled content here.")
 
         client = FakeLLMClient(responses=["VERIFIED"])
         orch = BuildOrchestrator(
@@ -1457,10 +1457,10 @@ class TestTwoLevelCompletion:
         )
         mission = Mission(
             mission_id="m-snip",
-            agent="scout",
-            mission_type="ingest_sources",
+            agent="compiler",
+            mission_type="compile_article",
             inputs={},
-            acceptance_criteria=["Content extracted"],
+            acceptance_criteria=["Content compiled"],
             created_by="captain",
         )
         orch._verify_mission(
@@ -1468,7 +1468,7 @@ class TestTwoLevelCompletion:
             task_output_paths=[str(output_file)],
         )
         prompt = client.calls[0]["messages"][0]["content"]
-        assert "Ingested content here" in prompt
+        assert "Compiled content here" in prompt
 
     def test_completed_mission_has_captain_verification(
         self,

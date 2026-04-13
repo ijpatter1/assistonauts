@@ -384,3 +384,85 @@ class TestIndexingBeforeRefinement:
         )
         assert orch.archivist is not None
         assert hasattr(orch.archivist, "index")
+
+
+# ── Fix 6: Auto-approve structural mission types ─────
+
+
+class TestAutoApproveStructuralMissions:
+    """Curator cross_reference and Scout ingest_sources missions should
+    be auto-approved — Captain verification adds no value for structural
+    operations and actively harms success rate by applying content criteria
+    to non-content operations."""
+
+    def test_cross_reference_auto_approved(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """cross_reference missions are auto-approved without LLM call."""
+        client = FakeLLMClient(responses=[])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-curator-001",
+            agent="curator",
+            mission_type="cross_reference",
+            inputs={"article_path": "wiki/concept/test.md"},
+            acceptance_criteria=["Links added", "No broken links"],
+            created_by="captain",
+        )
+        assert orch._verify_mission(mission) is True
+        # No LLM call made
+        assert len(client.calls) == 0
+
+    def test_ingest_sources_auto_approved(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """ingest_sources missions are auto-approved."""
+        client = FakeLLMClient(responses=[])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-scout-001",
+            agent="scout",
+            mission_type="ingest_sources",
+            inputs={},
+            acceptance_criteria=["Sources ingested"],
+            created_by="captain",
+        )
+        assert orch._verify_mission(mission) is True
+        assert len(client.calls) == 0
+
+    def test_compile_article_still_verified(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """compile_article missions are NOT auto-approved — content quality
+        benefits from Captain verification."""
+        client = FakeLLMClient(responses=["VERIFIED"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-compile-001",
+            agent="compiler",
+            mission_type="compile_article",
+            inputs={},
+            acceptance_criteria=["Article compiled"],
+            created_by="captain",
+        )
+        orch._verify_mission(mission)
+        # LLM call WAS made for compile_article
+        assert len(client.calls) == 1

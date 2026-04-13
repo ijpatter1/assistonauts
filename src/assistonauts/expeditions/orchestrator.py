@@ -771,6 +771,15 @@ class BuildOrchestrator:
                 )
                 params["article_type"] = corrected
 
+    # Mission types where agent success=True is sufficient verification.
+    # Cross-referencing and ingestion are structural operations — the agent
+    # already validates its own output (e.g. no broken links, valid
+    # frontmatter). Captain verification adds cost without value here.
+    _AUTO_APPROVE_TYPES: ClassVar[set[str]] = {
+        "cross_reference",
+        "ingest_sources",
+    }
+
     def _verify_mission(
         self,
         mission: Mission,
@@ -782,8 +791,18 @@ class BuildOrchestrator:
         the Captain evaluates whether the acceptance criteria are met.
         Returns True if verified, False if rejected.
         Missions with no acceptance criteria are auto-approved.
+        Structural mission types (cross_reference, ingest_sources) are
+        auto-approved because the agent's own validation is sufficient.
         """
         if not mission.acceptance_criteria:
+            return True
+
+        if mission.mission_type in self._AUTO_APPROVE_TYPES:
+            logger.info(
+                "Auto-approving %s (%s) — structural operation",
+                mission.mission_id,
+                mission.mission_type,
+            )
             return True
 
         criteria_text = "\n".join(f"- {c}" for c in mission.acceptance_criteria)
