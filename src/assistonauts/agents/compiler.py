@@ -209,6 +209,35 @@ def _strip_code_fences(text: str) -> str:
     return stripped.strip()
 
 
+def _fix_frontmatter_quoting(content: str) -> str:
+    """Ensure the title field in YAML frontmatter is quoted if needed.
+
+    LLMs often produce unquoted titles with colons, e.g.:
+        title: The Treasure Hunt: Overview
+    This is invalid YAML. Fix by quoting the title value.
+    """
+    lines = content.split("\n")
+    in_frontmatter = False
+    for i, line in enumerate(lines):
+        if line.strip() == "---":
+            if not in_frontmatter:
+                in_frontmatter = True
+                continue
+            break  # end of frontmatter
+        if in_frontmatter and line.startswith("title:"):
+            value = line.split(":", 1)[1].strip()
+            # Already quoted
+            if (value.startswith('"') and value.endswith('"')) or (
+                value.startswith("'") and value.endswith("'")
+            ):
+                continue
+            # Needs quoting if it contains YAML-breaking characters
+            if ":" in value:
+                escaped = value.replace('"', '\\"')
+                lines[i] = f'title: "{escaped}"'
+    return "\n".join(lines)
+
+
 def _slugify(title: str, separator: str = "-", max_length: int = 80) -> str:
     """Convert a title to a URL-friendly slug."""
     slug = title.lower().strip()
@@ -386,6 +415,7 @@ class CompilerAgent(Agent):
                 messages=[{"role": "user", "content": compile_msg}],
             )
         )
+        article_content = _fix_frontmatter_quoting(article_content)
 
         # Write article
         self.write_file(output_path, article_content)
@@ -548,6 +578,7 @@ class CompilerAgent(Agent):
                 messages=[{"role": "user", "content": compile_msg}],
             )
         )
+        article_content = _fix_frontmatter_quoting(article_content)
 
         # Write article
         self.write_file(output_path, article_content)

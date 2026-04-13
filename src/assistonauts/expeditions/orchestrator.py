@@ -725,6 +725,9 @@ class BuildOrchestrator:
                             "_last_rejection_reason",
                             "acceptance criteria not met",
                         )
+                        # Clean up output files so rejected content
+                        # doesn't persist in the knowledge base.
+                        self._cleanup_rejected_outputs(output_paths)
                         mission.fail(
                             error_type="deterministic",
                             error_message=(
@@ -1075,6 +1078,24 @@ class BuildOrchestrator:
         mission._last_rejection_reason = reason  # type: ignore[attr-defined]
         return False
 
+    def _cleanup_rejected_outputs(self, output_paths: list[str]) -> None:
+        """Delete output files from a rejected mission.
+
+        When the Captain rejects a compiled article, the files must not
+        persist in the knowledge base — otherwise they get cross-referenced
+        and indexed as if they passed verification.
+        """
+        for path_str in output_paths:
+            p = Path(path_str)
+            if not p.is_absolute():
+                p = self.workspace_root / p
+            if p.exists() and p.is_file():
+                try:
+                    p.unlink()
+                    logger.info("Cleaned up rejected output: %s", path_str)
+                except OSError as exc:
+                    logger.warning("Failed to clean up %s: %s", path_str, exc)
+
     def _read_output_snippets(
         self,
         output_paths: list[str],
@@ -1284,6 +1305,15 @@ class BuildOrchestrator:
         except OSError:
             logger.warning("Failed to write plan.yaml — continuing")
 
+    @staticmethod
+    def _count_unique_missions(result: BuildPhaseResult) -> int:
+        """Count unique mission IDs across all iterations."""
+        seen: set[str] = set()
+        for iteration in result.iterations:
+            for m in iteration.missions:
+                seen.add(m.mission_id)
+        return len(seen)
+
     def _write_build_report(self, result: BuildPhaseResult) -> None:
         """Write a build report to expeditions/<name>/build-report.md."""
         exp_dir = self.workspace_root / "expeditions" / self.config.name
@@ -1301,7 +1331,7 @@ class BuildOrchestrator:
             "",
             "## Mission Summary",
             "",
-            f"- **Total missions:** {result.total_missions}",
+            f"- **Total missions:** {self._count_unique_missions(result)}",
             f"- **Completed:** {result.total_completed}",
             f"- **Failed:** {result.total_failed}",
             f"- **Iterations:** {len(result.iterations)}",
