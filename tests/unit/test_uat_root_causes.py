@@ -121,9 +121,7 @@ class TestVerificationSnippetSize:
             llm_client=client,
         )
         # Read only 20 lines explicitly to prove the old behavior was broken
-        snippet = orch._read_output_snippets(
-            [str(article)], max_lines=20
-        )
+        snippet = orch._read_output_snippets([str(article)], max_lines=20)
         assert "Line 50" not in snippet
 
 
@@ -236,7 +234,11 @@ class TestTaskRunnerChecksAgentSuccess:
 
         assert result.success is False
         assert result.status == TaskStatus.FAILED
-        assert "failure" in result.error_message.lower() or "failed" in result.error_message.lower() or "Agent reported" in result.error_message
+        assert (
+            "failure" in result.error_message.lower()
+            or "failed" in result.error_message.lower()
+            or "Agent reported" in result.error_message
+        )
 
     def test_agent_output_success_true_passes_task(
         self,
@@ -285,9 +287,7 @@ class TestCuratorAgentContext:
 
         archivist = Archivist(workspace, embedding_dimensions=4)
         ctx = {"archivist": archivist, "embedding_client": None}
-        agent = _resolve_agent(
-            "curator", workspace, FakeLLMClient(), agent_context=ctx
-        )
+        agent = _resolve_agent("curator", workspace, FakeLLMClient(), agent_context=ctx)
         try:
             assert isinstance(agent, CuratorAgent)
             assert agent._archivist is archivist
@@ -310,6 +310,23 @@ class TestCuratorAgentContext:
             assert agent._archivist is None
         finally:
             agent.close()
+
+    def test_explorer_receives_archivist(
+        self,
+        workspace: Path,
+    ) -> None:
+        """ExplorerAgent created via _resolve_agent gets the archivist."""
+        from assistonauts.agents.explorer import ExplorerAgent
+        from assistonauts.archivist.service import Archivist
+        from assistonauts.tasks.runner import _resolve_agent
+
+        archivist = Archivist(workspace, embedding_dimensions=4)
+        ctx = {"archivist": archivist, "embedding_client": None}
+        agent = _resolve_agent(
+            "explorer", workspace, FakeLLMClient(), agent_context=ctx
+        )
+        assert isinstance(agent, ExplorerAgent)
+        assert agent._archivist is archivist
 
 
 # ── Fix 5: Indexing before Refinement ─────────────────
@@ -572,9 +589,7 @@ class TestVerificationRetryWithFeedback:
         config: ExpeditionConfig,
     ) -> None:
         """After max retries, all rejected → returns False."""
-        client = FakeLLMClient(
-            responses=["REJECTED — fundamentally inadequate"] * 5
-        )
+        client = FakeLLMClient(responses=["REJECTED — fundamentally inadequate"] * 5)
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
@@ -598,9 +613,7 @@ class TestVerificationRetryWithFeedback:
         config: ExpeditionConfig,
     ) -> None:
         """Final rejection reason is stored for debugging."""
-        client = FakeLLMClient(
-            responses=["REJECTED — totally off topic"] * 5
-        )
+        client = FakeLLMClient(responses=["REJECTED — totally off topic"] * 5)
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
@@ -626,9 +639,7 @@ class TestVerificationRetryWithFeedback:
         """Full verification conversation is logged on final rejection."""
         import json
 
-        client = FakeLLMClient(
-            responses=["REJECTED — missing key elements"] * 5
-        )
+        client = FakeLLMClient(responses=["REJECTED — missing key elements"] * 5)
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
@@ -700,9 +711,7 @@ class TestVerificationRetryWithFeedback:
             for line in log_file.read_text().splitlines()
             if line.strip()
         ]
-        retry_entries = [
-            e for e in entries if e.get("event") == "verification_retried"
-        ]
+        retry_entries = [e for e in entries if e.get("event") == "verification_retried"]
         assert len(retry_entries) == 1
         assert retry_entries[0]["mission_id"] == "m-v7"
         assert retry_entries[0]["attempts"] == 2

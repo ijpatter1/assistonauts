@@ -96,7 +96,12 @@ def _resolve_agent(
     elif agent_name == "explorer":
         from assistonauts.agents.explorer import ExplorerAgent
 
-        return ExplorerAgent(llm_client=llm_client, workspace_root=workspace_root)
+        return ExplorerAgent(
+            llm_client=llm_client,
+            workspace_root=workspace_root,
+            archivist=ctx.get("archivist"),  # type: ignore[arg-type]
+            embedding_client=ctx.get("embedding_client"),  # type: ignore[arg-type]
+        )
     else:
         raise DeterministicError(f"Unknown agent: {agent_name}")
 
