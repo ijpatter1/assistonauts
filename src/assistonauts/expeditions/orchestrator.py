@@ -1470,6 +1470,7 @@ class BuildOrchestrator:
         lines = [
             f"# Build Report — {self.config.name}",
             "",
+            f"**Purpose:** {self.config.purpose}",
             f"**Scope:** {self.config.scope.description}",
             f"**Keywords:** {', '.join(self.config.scope.keywords)}",
             "",
