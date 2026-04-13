@@ -75,19 +75,19 @@ class TestRejectedOutputCleanup:
         summary = workspace / "wiki" / "concept" / "test.summary.json"
         summary.write_text('{"summary": "test"}')
 
-        client = FakeLLMClient(
-            responses=["REJECTED — bad"] * 5
-        )
+        client = FakeLLMClient(responses=["REJECTED — bad"] * 5)
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
             llm_client=client,
         )
 
-        orch._cleanup_rejected_outputs([
-            str(article),
-            str(summary),
-        ])
+        orch._cleanup_rejected_outputs(
+            [
+                str(article),
+                str(summary),
+            ]
+        )
 
         assert not article.exists()
         assert not summary.exists()
@@ -105,9 +105,36 @@ class TestRejectedOutputCleanup:
             llm_client=client,
         )
         # Should not raise
-        orch._cleanup_rejected_outputs([
-            str(workspace / "nonexistent.md"),
-        ])
+        orch._cleanup_rejected_outputs(
+            [
+                str(workspace / "nonexistent.md"),
+            ]
+        )
+
+    def test_cleanup_skips_outside_workspace(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Cleanup refuses to delete files outside workspace boundary."""
+        # Create a file in /tmp — clearly outside workspace
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".md", delete=False, mode="w") as f:
+            f.write("do not delete")
+            outside_path = Path(f.name)
+
+        try:
+            client = FakeLLMClient()
+            orch = BuildOrchestrator(
+                workspace_root=workspace,
+                config=config,
+                llm_client=client,
+            )
+            orch._cleanup_rejected_outputs([str(outside_path)])
+            assert outside_path.exists(), "File outside workspace must not be deleted"
+        finally:
+            outside_path.unlink(missing_ok=True)
 
     def test_cleanup_resolves_relative_paths(
         self,
@@ -142,15 +169,18 @@ class TestBuildReportMissionCount:
         """Total missions reflects unique IDs, not per-iteration sums."""
         # Plan two iterations with overlapping mission IDs
         # (dedup will remap, but let's test the report counts)
-        client = FakeLLMClient(responses=[
-            "```yaml\nmissions:\n"
-            "  - id: m-001\n"
-            "    agent: scout\n"
-            "    type: ingest_sources\n"
-            "    inputs: {paths: [a.md]}\n"
-            "    acceptance_criteria: [Done]\n"
-            "    priority: normal\n```\n",
-        ] * 5)
+        client = FakeLLMClient(
+            responses=[
+                "```yaml\nmissions:\n"
+                "  - id: m-001\n"
+                "    agent: scout\n"
+                "    type: ingest_sources\n"
+                "    inputs: {paths: [a.md]}\n"
+                "    acceptance_criteria: [Done]\n"
+                "    priority: normal\n```\n",
+            ]
+            * 5
+        )
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
@@ -159,11 +189,9 @@ class TestBuildReportMissionCount:
         result = orch.run_build()
         # With dedup, each iteration gets unique IDs, but total_missions
         # should count unique missions not double-count
-        assert result.total_missions == len({
-            m.mission_id
-            for it in result.iterations
-            for m in it.missions
-        })
+        assert result.total_missions == len(
+            {m.mission_id for it in result.iterations for m in it.missions}
+        )
 
 
 # ── Bug #5: Frontmatter title quoting ─────────────────
@@ -267,12 +295,14 @@ class TestMissionLifecycleTrace:
         from assistonauts.expeditions.orchestrator import BuildOrchestrator
         from assistonauts.models.config import ExpeditionConfig
 
-        cfg = ExpeditionConfig.from_dict({
-            "name": "test-exp",
-            "description": "Test",
-            "scope": {"description": "Test", "keywords": ["test"]},
-            "sources": {"local": [{"path": "/tmp/t", "pattern": "*.md"}]},
-        })
+        cfg = ExpeditionConfig.from_dict(
+            {
+                "name": "test-exp",
+                "description": "Test",
+                "scope": {"description": "Test", "keywords": ["test"]},
+                "sources": {"local": [{"path": "/tmp/t", "pattern": "*.md"}]},
+            }
+        )
 
         # Create a source so scout has something to ingest
         source = workspace / "test-sources" / "a.md"
@@ -311,7 +341,6 @@ class TestMissionLifecycleTrace:
         assert "mission_start" in events
         # Should have a completion event (mission_completed or mission_failed)
         completion_events = [
-            e for e in events
-            if e and e.startswith("mission_") and e != "mission_start"
+            e for e in events if e and e.startswith("mission_") and e != "mission_start"
         ]
         assert len(completion_events) > 0

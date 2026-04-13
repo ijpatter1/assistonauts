@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -190,7 +191,7 @@ class LLMClient:
         try:
             self._on_llm_call(record)
         except Exception:
-            pass  # Tracing must not crash LLM calls
+            logging.getLogger(__name__).debug("Tracing callback failed", exc_info=True)
 
     def _track_tokens(self, usage: dict[str, int]) -> None:
         """Accumulate token usage from any response path."""

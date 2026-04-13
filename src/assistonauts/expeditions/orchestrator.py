@@ -534,8 +534,10 @@ class BuildOrchestrator:
 
             self._write_build_report(result)
         finally:
-            self.ledger.close()
-            self.budget.tracker.close()
+            try:
+                self.ledger.close()
+            finally:
+                self.budget.tracker.close()
 
         return result
 
@@ -737,6 +739,7 @@ class BuildOrchestrator:
                         task_output_paths=output_paths,
                     )
                     # Restore execution context for lifecycle events
+                    clear_trace_context()
                     set_trace_context(**exec_context)
 
                     # Record verification tokens (captain)
@@ -762,7 +765,9 @@ class BuildOrchestrator:
                                     mission.output_paths.append(str(p))
                                 elif p.resolve().is_relative_to(self.workspace_root):
                                     mission.output_paths.append(
-                                        str(p.relative_to(self.workspace_root))
+                                        str(
+                                            p.resolve().relative_to(self.workspace_root)
+                                        )
                                     )
                                 else:
                                     mission.output_paths.append(str(p))
@@ -1479,10 +1484,14 @@ class BuildOrchestrator:
         for it in result.iterations:
             status = "complete" if it.is_complete() else "partial"
             lines.append(f"### {it.phase.value.title()} ({status})")
+            it_pending = (
+                it.missions_planned - it.missions_completed - it.missions_failed
+            )
             lines.append(
                 f"- Planned: {it.missions_planned}, "
                 f"Completed: {it.missions_completed}, "
-                f"Failed: {it.missions_failed}"
+                f"Failed: {it.missions_failed}, "
+                f"Pending: {it_pending}"
             )
             for m in it.missions:
                 detail = (
