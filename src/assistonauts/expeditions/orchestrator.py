@@ -593,7 +593,7 @@ class BuildOrchestrator:
                             error_message=(
                                 f"Captain rejected after "
                                 f"{self._MAX_VERIFY_ATTEMPTS} attempts: "
-                                f"{reason[:200]}"
+                                f"{reason}"
                             ),
                             retries=0,
                         )
@@ -865,6 +865,19 @@ class BuildOrchestrator:
                         attempt,
                         mission.mission_id,
                     )
+                    if self.captain.logger:
+                        messages.append({"role": "assistant", "content": response})
+                        self.captain.logger.log(
+                            "verification_retried",
+                            mission_id=mission.mission_id,
+                            mission_type=mission.mission_type,
+                            agent=mission.agent,
+                            attempts=attempt + 1,
+                            conversation=[
+                                {"role": m["role"], "content": m["content"]}
+                                for m in messages
+                            ],
+                        )
                 return True
 
             # Extract rejection reason for feedback
@@ -900,6 +913,20 @@ class BuildOrchestrator:
                         ),
                     },
                 )
+
+        # Log the full verification conversation for debugging
+        if self.captain.logger:
+            self.captain.logger.log(
+                "verification_rejected",
+                mission_id=mission.mission_id,
+                mission_type=mission.mission_type,
+                agent=mission.agent,
+                attempts=self._MAX_VERIFY_ATTEMPTS,
+                final_reason=reason,
+                conversation=[
+                    {"role": m["role"], "content": m["content"]} for m in messages
+                ],
+            )
 
         # Store the final rejection reason on the mission for debugging
         mission._last_rejection_reason = reason  # type: ignore[attr-defined]
