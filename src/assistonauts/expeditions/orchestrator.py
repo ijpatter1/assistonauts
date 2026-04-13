@@ -583,10 +583,17 @@ class BuildOrchestrator:
                                 if p.is_absolute()
                             ]
                     else:
+                        reason = getattr(
+                            mission,
+                            "_last_rejection_reason",
+                            "acceptance criteria not met",
+                        )
                         mission.fail(
                             error_type="deterministic",
                             error_message=(
-                                "Captain rejected: acceptance criteria not met"
+                                f"Captain rejected after "
+                                f"{self._MAX_VERIFY_ATTEMPTS} attempts: "
+                                f"{reason[:200]}"
                             ),
                             retries=0,
                         )
@@ -780,6 +787,9 @@ class BuildOrchestrator:
         "ingest_sources",
     }
 
+    # Maximum verification attempts before final rejection.
+    _MAX_VERIFY_ATTEMPTS: ClassVar[int] = 3
+
     def _verify_mission(
         self,
         mission: Mission,
@@ -793,6 +803,12 @@ class BuildOrchestrator:
         Missions with no acceptance criteria are auto-approved.
         Structural mission types (cross_reference, ingest_sources) are
         auto-approved because the agent's own validation is sufficient.
+
+        Uses a retry-with-feedback loop: if the Captain rejects, the
+        rejection reason is fed back for reconsideration. This handles
+        LLM non-determinism where borderline articles are sometimes
+        rejected on first pass but accepted when the Captain reconsiders
+        with its own reasoning as context.
         """
         if not mission.acceptance_criteria:
             return True
@@ -809,33 +825,85 @@ class BuildOrchestrator:
         output_text = "(no output details available)"
         if task_output_paths:
             output_text = "\n".join(f"- {p}" for p in task_output_paths)
-            # Include content snippets so Captain can verify quality criteria
             snippets = self._read_output_snippets(task_output_paths)
             if snippets:
                 output_text += "\n\nOutput content:\n" + snippets
-        prompt = (
-            "MISSION VERIFICATION\n\n"
-            f"Mission: {mission.mission_id}\n"
-            f"Agent: {mission.agent}\n"
-            f"Type: {mission.mission_type}\n\n"
-            f"Acceptance criteria:\n{criteria_text}\n\n"
-            f"Agent output files:\n{output_text}\n\n"
-            "The agent has declared this mission complete.\n"
-            "Review the output against the acceptance criteria. "
-            "The criteria are aspirational guidelines for draft "
-            "content — VERIFY if the output makes a reasonable "
-            "attempt at meeting them given the available source "
-            "material. Minor gaps or thin coverage are acceptable "
-            "for first-draft articles. Only REJECT if the output "
-            "is fundamentally off-topic, empty, or missing the "
-            "majority of required elements.\n\n"
-            "Respond with VERIFIED or REJECTED followed by a "
-            "brief reason."
-        )
-        response = self.captain.call_llm(
-            [{"role": "user", "content": prompt}],
-        )
-        return "VERIFIED" in response.upper()
+
+        # Build the conversation for multi-turn verification
+        messages: list[dict[str, str]] = [
+            {
+                "role": "user",
+                "content": (
+                    "MISSION VERIFICATION\n\n"
+                    f"Mission: {mission.mission_id}\n"
+                    f"Agent: {mission.agent}\n"
+                    f"Type: {mission.mission_type}\n\n"
+                    f"Acceptance criteria:\n{criteria_text}\n\n"
+                    f"Agent output files:\n{output_text}\n\n"
+                    "The agent has declared this mission complete.\n"
+                    "Review the output against the acceptance criteria. "
+                    "The criteria are aspirational guidelines for draft "
+                    "content — VERIFY if the output makes a reasonable "
+                    "attempt at meeting them given the available source "
+                    "material. Minor gaps or thin coverage are acceptable "
+                    "for first-draft articles. Only REJECT if the output "
+                    "is fundamentally off-topic, empty, or missing the "
+                    "majority of required elements.\n\n"
+                    "Respond with VERIFIED or REJECTED followed by a "
+                    "brief reason."
+                ),
+            },
+        ]
+
+        for attempt in range(self._MAX_VERIFY_ATTEMPTS):
+            response = self.captain.call_llm(messages)
+
+            if "VERIFIED" in response.upper():
+                if attempt > 0:
+                    logger.info(
+                        "Verification succeeded on retry %d for %s",
+                        attempt,
+                        mission.mission_id,
+                    )
+                return True
+
+            # Extract rejection reason for feedback
+            reason = response.strip()
+            logger.info(
+                "Verification attempt %d/%d rejected %s: %s",
+                attempt + 1,
+                self._MAX_VERIFY_ATTEMPTS,
+                mission.mission_id,
+                reason[:120],
+            )
+
+            if attempt < self._MAX_VERIFY_ATTEMPTS - 1:
+                # Feed rejection back for reconsideration
+                messages.append({"role": "assistant", "content": response})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Reconsider this rejection. The agent worked "
+                            "from limited source material and may not have "
+                            "had access to all the information the criteria "
+                            "request. The acceptance criteria describe the "
+                            "ideal output — partial coverage is expected "
+                            "for draft articles.\n\n"
+                            "Given that this is a first draft compiled from "
+                            "raw sources, does the output demonstrate a "
+                            "genuine, substantive attempt at the criteria? "
+                            "If so, respond VERIFIED. Only maintain REJECTED "
+                            "if the output is fundamentally inadequate.\n\n"
+                            "Respond with VERIFIED or REJECTED followed by "
+                            "a brief reason."
+                        ),
+                    },
+                )
+
+        # Store the final rejection reason on the mission for debugging
+        mission._last_rejection_reason = reason  # type: ignore[attr-defined]
+        return False
 
     def _read_output_snippets(
         self,

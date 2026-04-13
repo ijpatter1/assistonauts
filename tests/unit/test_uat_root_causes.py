@@ -466,3 +466,154 @@ class TestAutoApproveStructuralMissions:
         orch._verify_mission(mission)
         # LLM call WAS made for compile_article
         assert len(client.calls) == 1
+
+
+# ── Fix 7: Verification retry with feedback ──────────
+
+
+class TestVerificationRetryWithFeedback:
+    """Captain verification uses a retry-with-feedback loop to handle
+    LLM non-determinism. If the Captain rejects, the rejection reason
+    is fed back for reconsideration before failing the mission."""
+
+    def test_verified_on_first_attempt_no_retry(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """When Captain says VERIFIED on first try, no retry needed."""
+        client = FakeLLMClient(responses=["VERIFIED — all good"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-v1",
+            agent="compiler",
+            mission_type="compile_article",
+            inputs={},
+            acceptance_criteria=["Article compiled"],
+            created_by="captain",
+        )
+        assert orch._verify_mission(mission) is True
+        assert len(client.calls) == 1
+
+    def test_rejected_then_verified_on_retry(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """First attempt rejects, retry with feedback succeeds."""
+        client = FakeLLMClient(
+            responses=[
+                "REJECTED — missing publisher info",
+                "VERIFIED — reconsidering, the source material was limited",
+            ]
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-v2",
+            agent="compiler",
+            mission_type="compile_article",
+            inputs={},
+            acceptance_criteria=["Include publisher info"],
+            created_by="captain",
+        )
+        assert orch._verify_mission(mission) is True
+        # 2 LLM calls: initial rejection + retry
+        assert len(client.calls) == 2
+
+    def test_retry_feedback_includes_rejection_reason(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Retry prompt contains the prior rejection reason as context."""
+        client = FakeLLMClient(
+            responses=[
+                "REJECTED — missing gemstone lore",
+                "VERIFIED — acceptable for draft",
+            ]
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-v3",
+            agent="compiler",
+            mission_type="compile_article",
+            inputs={},
+            acceptance_criteria=["Gemstone lore documented"],
+            created_by="captain",
+        )
+        orch._verify_mission(mission)
+
+        # The second call should include the rejection as assistant message
+        # and a reconsideration prompt as user message
+        second_call = client.calls[1]
+        messages = second_call["messages"]
+        # Multi-turn: user, assistant (rejection), user (reconsider)
+        assert len(messages) == 3
+        assert messages[1]["role"] == "assistant"
+        assert "REJECTED" in messages[1]["content"]
+        assert messages[2]["role"] == "user"
+        assert "Reconsider" in messages[2]["content"]
+
+    def test_all_retries_exhausted_returns_false(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """After max retries, all rejected → returns False."""
+        client = FakeLLMClient(
+            responses=["REJECTED — fundamentally inadequate"] * 5
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-v4",
+            agent="compiler",
+            mission_type="compile_article",
+            inputs={},
+            acceptance_criteria=["Article compiled"],
+            created_by="captain",
+        )
+        assert orch._verify_mission(mission) is False
+        # 3 calls: initial + 2 retries (MAX_VERIFY_ATTEMPTS=3)
+        assert len(client.calls) == 3
+
+    def test_rejection_reason_stored_on_mission(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Final rejection reason is stored for debugging."""
+        client = FakeLLMClient(
+            responses=["REJECTED — totally off topic"] * 5
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-v5",
+            agent="compiler",
+            mission_type="compile_article",
+            inputs={},
+            acceptance_criteria=["On topic"],
+            created_by="captain",
+        )
+        orch._verify_mission(mission)
+        assert hasattr(mission, "_last_rejection_reason")
+        assert "off topic" in mission._last_rejection_reason.lower()
