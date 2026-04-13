@@ -4,6 +4,7 @@ Bug #1: Rejected article outputs persist on disk
 Bug #2: Curator edits invalidate manifest hashes
 Bug #4: Build report inflated mission count
 Bug #5: Unquoted colons in YAML frontmatter
+QI #3: Mission-level events in LLM trace
 """
 
 from __future__ import annotations
@@ -211,3 +212,67 @@ class TestFrontmatterTitleQuoting:
             if len(parts) >= 3:
                 fm = yaml.safe_load(parts[1])
                 assert fm["title"] == "Topic: Subtopic"
+
+
+# ── QI #3: Mission lifecycle events in trace ──────────
+
+
+class TestMissionLifecycleTrace:
+    """Missions that complete without LLM calls should still appear
+    in the trace file via mission_start/mission_complete events."""
+
+    def test_mission_events_in_trace(self, workspace: Path) -> None:
+        """run_build writes mission_start and mission_completed events."""
+        import json
+
+        from assistonauts.expeditions.orchestrator import BuildOrchestrator
+        from assistonauts.models.config import ExpeditionConfig
+
+        cfg = ExpeditionConfig.from_dict({
+            "name": "test-exp",
+            "description": "Test",
+            "scope": {"description": "Test", "keywords": ["test"]},
+            "sources": {"local": [{"path": "/tmp/t", "pattern": "*.md"}]},
+        })
+
+        # Create a source so scout has something to ingest
+        source = workspace / "test-sources" / "a.md"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("# Test\n\nContent.")
+
+        # Scout ingests, auto-approved — no verification LLM call
+        plan = (
+            "```yaml\nmissions:\n"
+            "  - id: m-scout-1\n"
+            "    agent: scout\n"
+            "    type: ingest_sources\n"
+            "    inputs:\n"
+            "      paths:\n"
+            f"        - {source}\n"
+            "    acceptance_criteria: [Ingested]\n"
+            "    priority: normal\n```\n"
+        )
+        client = FakeLLMClient(responses=[plan] * 5)
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=cfg,
+            llm_client=client,
+        )
+        orch.run_build()
+
+        trace_file = workspace / "expeditions" / "test-exp" / "llm-trace.jsonl"
+        assert trace_file.exists()
+        entries = [
+            json.loads(line)
+            for line in trace_file.read_text().splitlines()
+            if line.strip()
+        ]
+
+        events = [e.get("event") for e in entries if "event" in e]
+        assert "mission_start" in events
+        # Should have a completion event (mission_completed or mission_failed)
+        completion_events = [
+            e for e in events
+            if e and e.startswith("mission_") and e != "mission_start"
+        ]
+        assert len(completion_events) > 0

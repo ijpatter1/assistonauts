@@ -128,13 +128,33 @@ class TracingLLMClient:
             "usage": getattr(response, "usage", {}),
             "context": get_trace_context(),
         }
+        self._write_record(record)
+
+        return response
+
+    def write_event(self, event: str, **data: object) -> None:
+        """Write a non-LLM lifecycle event to the trace file.
+
+        Used for mission_start, mission_complete, mission_failed, etc.
+        so that missions completing without LLM calls are still visible.
+        """
+        from datetime import UTC, datetime
+
+        record: dict[str, object] = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "event": event,
+            "context": get_trace_context(),
+            **data,
+        }
+        self._write_record(record)
+
+    def _write_record(self, record: dict[str, object]) -> None:
+        """Append a JSON record to the trace file."""
         try:
             with open(self._trace_path, "a") as f:
                 f.write(json.dumps(record, default=str) + "\n")
         except OSError:
-            logger.warning("Failed to write LLM trace record")
-
-        return response
+            logger.warning("Failed to write trace record")
 
 
 class BuildOrchestrator:
@@ -568,9 +588,25 @@ class BuildOrchestrator:
             mission_type=mission.mission_type,
             step="execution",
         )
+        tracing = self.llm_client
+        if hasattr(tracing, "write_event"):
+            tracing.write_event(  # type: ignore[union-attr]
+                "mission_start",
+                mission_id=mission.mission_id,
+                agent=mission.agent,
+                mission_type=mission.mission_type,
+            )
         try:
             self._execute_mission_inner(mission, max_retries)
         finally:
+            if hasattr(tracing, "write_event"):
+                tracing.write_event(  # type: ignore[union-attr]
+                    f"mission_{mission.status.value}",
+                    mission_id=mission.mission_id,
+                    agent=mission.agent,
+                    mission_type=mission.mission_type,
+                    status=mission.status.value,
+                )
             clear_trace_context()
 
     def _execute_mission_inner(
