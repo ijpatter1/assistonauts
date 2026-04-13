@@ -187,6 +187,7 @@ class TestExpeditionCreate:
             {
                 "name": "test-exp",
                 "description": "A test expedition",
+                "purpose": "Build a guide for treasure hunters",
             }
         )
         exp_dir = create_expedition(config, tmp_path)
@@ -196,11 +197,12 @@ class TestExpeditionCreate:
         assert (exp_dir / "missions").is_dir()
         assert (exp_dir / "review").is_dir()
 
-        # Verify expedition.yaml has full config
+        # Verify expedition.yaml has full config including purpose
         loaded = yaml.safe_load(
             (exp_dir / "expedition.yaml").read_text(),
         )
         assert loaded["expedition"]["name"] == "test-exp"
+        assert loaded["expedition"]["purpose"] == "Build a guide for treasure hunters"
         assert "sources" in loaded["expedition"]
         assert "stationed" in loaded["expedition"]
         assert "scaling" in loaded["expedition"]

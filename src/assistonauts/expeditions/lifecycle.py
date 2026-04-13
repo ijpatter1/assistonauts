@@ -32,6 +32,7 @@ def create_expedition(
         "expedition": {
             "name": config.name,
             "description": config.description,
+            "purpose": config.purpose,
             "phase": config.phase,
             "scope": {
                 "description": config.scope.description,
