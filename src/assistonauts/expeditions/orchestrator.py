@@ -196,6 +196,7 @@ class BuildOrchestrator:
             },
         )
         self._iterations: list[BuildIteration] = []
+        self._seen_mission_ids: set[str] = set()
 
     def _get_embedding_dimensions(self) -> int:
         """Get embedding dimensions from workspace config, or default."""
@@ -247,6 +248,44 @@ class BuildOrchestrator:
             except Exception as exc:
                 logger.warning("Failed to index %s: %s", rel_path, exc)
         logger.info("Indexed %d wiki articles before Refinement", indexed)
+
+    def _deduplicate_mission_ids(
+        self,
+        missions: list[Mission],
+        dependencies: list[tuple[str, str]],
+    ) -> tuple[list[Mission], list[tuple[str, str]]]:
+        """Remap any mission IDs that collide with previously seen IDs.
+
+        The Captain may reuse IDs across iterations (e.g. mission-301 in
+        both Structuring and Refinement). Without dedup, the ledger's
+        INSERT OR REPLACE overwrites the earlier mission, corrupting data.
+        """
+        remap: dict[str, str] = {}
+        for mission in missions:
+            original_id = mission.mission_id
+            new_id = original_id
+            suffix = 1
+            while new_id in self._seen_mission_ids:
+                new_id = f"{original_id}-r{suffix}"
+                suffix += 1
+            if new_id != original_id:
+                remap[original_id] = new_id
+                mission.mission_id = new_id
+                logger.info(
+                    "Remapped duplicate mission ID: %s → %s",
+                    original_id,
+                    new_id,
+                )
+            self._seen_mission_ids.add(new_id)
+
+        if remap:
+            # Update dependency references to use new IDs
+            dependencies = [
+                (remap.get(dep, dep), remap.get(target, target))
+                for dep, target in dependencies
+            ]
+
+        return missions, dependencies
 
     @staticmethod
     def iteration_sequence() -> list[IterationPhase]:
@@ -306,6 +345,12 @@ class BuildOrchestrator:
                 "the LLM response could not be parsed into a valid plan",
                 phase.value,
             )
+
+        # Deduplicate mission IDs — the Captain may reuse IDs across
+        # iterations, which corrupts the ledger (INSERT OR REPLACE).
+        # Remap collisions with a suffix before they enter the system.
+        missions, dependencies = self._deduplicate_mission_ids(missions, dependencies)
+
         graph = build_graph_from_plan(dependencies)
 
         iteration = BuildIteration(

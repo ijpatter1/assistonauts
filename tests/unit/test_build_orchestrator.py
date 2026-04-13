@@ -94,6 +94,134 @@ class TestBuildIteration:
         assert not it.is_complete()
 
 
+# --- Mission ID Deduplication ---
+
+
+class TestMissionIdDeduplication:
+    """Captain may reuse mission IDs across iterations. The orchestrator
+    must remap collisions to prevent ledger corruption."""
+
+    def test_duplicate_ids_remapped(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Second iteration with same IDs gets remapped."""
+        client = FakeLLMClient(responses=[
+            # Iteration 1: plans mission-101
+            "```yaml\nmissions:\n"
+            "  - id: mission-101\n"
+            "    agent: compiler\n"
+            "    type: compile_article\n"
+            "    inputs:\n"
+            "      sources: [a.md]\n"
+            "    acceptance_criteria: [Compiled]\n"
+            "    priority: normal\n```\n",
+            # Iteration 2: reuses mission-101
+            "```yaml\nmissions:\n"
+            "  - id: mission-101\n"
+            "    agent: curator\n"
+            "    type: cross_reference\n"
+            "    inputs:\n"
+            "      article_path: wiki/concept/a.md\n"
+            "    acceptance_criteria: [Linked]\n"
+            "    priority: normal\n```\n",
+        ])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        it1 = orch.plan_iteration(IterationPhase.STRUCTURING)
+        it2 = orch.plan_iteration(IterationPhase.REFINEMENT)
+
+        assert it1.missions[0].mission_id == "mission-101"
+        assert it2.missions[0].mission_id == "mission-101-r1"
+
+    def test_dependencies_updated_on_remap(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Dependency references update when IDs are remapped."""
+        client = FakeLLMClient(responses=[
+            # Iteration 1
+            "```yaml\nmissions:\n"
+            "  - id: m-001\n"
+            "    agent: scout\n"
+            "    type: ingest_sources\n"
+            "    inputs: {paths: [a.md]}\n"
+            "    acceptance_criteria: [Done]\n"
+            "    priority: normal\n```\n",
+            # Iteration 2: reuses m-001, m-002 depends on m-001
+            "```yaml\nmissions:\n"
+            "  - id: m-001\n"
+            "    agent: compiler\n"
+            "    type: compile_article\n"
+            "    inputs: {sources: [a.md]}\n"
+            "    acceptance_criteria: [Done]\n"
+            "    priority: normal\n"
+            "  - id: m-002\n"
+            "    agent: curator\n"
+            "    type: cross_reference\n"
+            "    inputs: {article_path: a.md}\n"
+            "    acceptance_criteria: [Done]\n"
+            "    priority: normal\n"
+            "    depends_on: [m-001]\n```\n",
+        ])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        orch.plan_iteration(IterationPhase.DISCOVERY)
+        it2 = orch.plan_iteration(IterationPhase.STRUCTURING)
+
+        # m-001 was remapped to m-001-r1
+        remapped = it2.missions[0]
+        assert remapped.mission_id == "m-001-r1"
+        # m-002's dependency on m-001 should now point to m-001-r1
+        assert it2.graph is not None
+        deps = it2.graph.dependencies("m-002")
+        assert "m-001-r1" in deps
+
+    def test_no_remap_when_ids_unique(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Unique IDs pass through unchanged."""
+        client = FakeLLMClient(responses=[
+            "```yaml\nmissions:\n"
+            "  - id: m-100\n"
+            "    agent: scout\n"
+            "    type: ingest_sources\n"
+            "    inputs: {paths: [a.md]}\n"
+            "    acceptance_criteria: [Done]\n"
+            "    priority: normal\n```\n",
+            "```yaml\nmissions:\n"
+            "  - id: m-200\n"
+            "    agent: compiler\n"
+            "    type: compile_article\n"
+            "    inputs: {sources: [a.md]}\n"
+            "    acceptance_criteria: [Done]\n"
+            "    priority: normal\n```\n",
+        ])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        it1 = orch.plan_iteration(IterationPhase.DISCOVERY)
+        it2 = orch.plan_iteration(IterationPhase.STRUCTURING)
+
+        assert it1.missions[0].mission_id == "m-100"
+        assert it2.missions[0].mission_id == "m-200"
+
+
 # --- BuildOrchestrator ---
 
 
