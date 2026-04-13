@@ -702,9 +702,14 @@ class CompilerAgent(Agent):
         # Support multi-source via comma-separated paths
         if "source_paths" in task:
             paths = [Path(p.strip()) for p in task["source_paths"].split(",")]
+            paths = [
+                self._workspace_root / p if not p.is_absolute() else p for p in paths
+            ]
             title = task.get("title", paths[0].stem)
             return self.compile_multi(paths, article_type=article_type, title=title)
 
         source_path = Path(task["source_path"])
+        if not source_path.is_absolute():
+            source_path = self._workspace_root / source_path
         title = task.get("title", source_path.stem)
         return self.compile(source_path, article_type=article_type, title=title)

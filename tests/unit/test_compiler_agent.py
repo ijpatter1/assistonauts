@@ -330,6 +330,47 @@ class TestCompilerAgent:
         assert isinstance(result, CompilationResult)
         assert result.success is True
 
+    def test_run_task_resolves_relative_path_against_workspace(
+        self, workspace: Path
+    ) -> None:
+        """Workspace-relative source paths resolve against workspace_root."""
+        llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
+        compiler = CompilerAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+        )
+        # Pass workspace-relative path (what Captain generates)
+        task = {
+            "source_path": "raw/articles/test-source.md",
+            "article_type": "concept",
+            "title": "Test Concept",
+        }
+        result = compiler.run_task(task)
+        assert isinstance(result, CompilationResult)
+        assert result.success is True
+
+    def test_run_task_resolves_relative_multi_paths(
+        self, workspace: Path
+    ) -> None:
+        """Workspace-relative paths in source_paths resolve correctly."""
+        # Create a second source file
+        second_source = workspace / "raw" / "articles" / "second-source.md"
+        second_source.write_text("---\ntitle: Second\nsource: b\n---\nMore content.")
+
+        llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
+        compiler = CompilerAgent(
+            llm_client=llm,
+            workspace_root=workspace,
+        )
+        task = {
+            "source_paths": "raw/articles/test-source.md,raw/articles/second-source.md",
+            "article_type": "concept",
+            "title": "Multi Source",
+        }
+        result = compiler.run_task(task)
+        assert isinstance(result, CompilationResult)
+        assert result.success is True
+
     def test_compile_result_has_article_path_under_wiki(self, workspace: Path) -> None:
         llm = FakeLLMClient([_FAKE_COMPILED_ARTICLE, _FAKE_CONTENT_SUMMARY])
         compiler = CompilerAgent(

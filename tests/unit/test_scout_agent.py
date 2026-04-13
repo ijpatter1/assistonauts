@@ -205,3 +205,30 @@ class TestScoutRunTask:
         result = agent.run_task({"source_path": str(source), "category": "papers"})
         assert result.success is True
         assert "papers" in str(result.output_path)
+
+    def test_run_task_resolves_relative_path_against_workspace(
+        self, tmp_path: Path
+    ) -> None:
+        """Workspace-relative paths resolve against workspace_root, not cwd."""
+        workspace = tmp_path / "my-workspace"
+        workspace.mkdir()
+        (workspace / "raw" / "articles").mkdir(parents=True)
+        (workspace / "index").mkdir(parents=True)
+        (workspace / "index" / "manifest.json").write_text("{}\n")
+
+        # Source lives inside the workspace
+        source_dir = workspace / "test-sources"
+        source_dir.mkdir()
+        source = source_dir / "doc.txt"
+        source.write_text("Document content.")
+
+        agent = ScoutAgent(
+            llm_client=FakeLLMClient(),
+            workspace_root=workspace,
+        )
+
+        # Pass workspace-relative path (what Captain generates)
+        result = agent.run_task({"source_path": "test-sources/doc.txt"})
+        assert result.success is True
+        assert result.output_path is not None
+        assert result.output_path.exists()
