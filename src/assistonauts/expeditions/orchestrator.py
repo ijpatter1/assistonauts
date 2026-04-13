@@ -721,6 +721,10 @@ class BuildOrchestrator:
         output_text = "(no output details available)"
         if task_output_paths:
             output_text = "\n".join(f"- {p}" for p in task_output_paths)
+            # Include content snippets so Captain can verify quality criteria
+            snippets = self._read_output_snippets(task_output_paths)
+            if snippets:
+                output_text += "\n\nOutput content:\n" + snippets
         prompt = (
             "MISSION VERIFICATION\n\n"
             f"Mission: {mission.mission_id}\n"
@@ -739,6 +743,29 @@ class BuildOrchestrator:
         )
         return "VERIFIED" in response.upper()
 
+    def _read_output_snippets(
+        self,
+        output_paths: list[str],
+        max_lines: int = 20,
+    ) -> str:
+        """Read content snippets from output files for verification."""
+        parts: list[str] = []
+        for path_str in output_paths:
+            p = Path(path_str)
+            if not p.is_absolute():
+                p = self.workspace_root / p
+            if not p.exists() or not p.is_file():
+                continue
+            try:
+                lines = p.read_text(encoding="utf-8").splitlines()
+                snippet = "\n".join(lines[:max_lines])
+                if len(lines) > max_lines:
+                    snippet += f"\n... ({len(lines) - max_lines} more lines)"
+                parts.append(f"--- {p.name} ---\n{snippet}")
+            except (OSError, UnicodeDecodeError):
+                continue
+        return "\n\n".join(parts)
+
     def _build_prompt(self, phase: IterationPhase) -> str:
         """Build a phase-specific prompt for the Captain."""
         scope = self.config.scope
@@ -753,12 +780,12 @@ class BuildOrchestrator:
                 f"{scope_text}\n"
                 "ITERATION PHASE: Discovery\n\n"
                 "This is the first iteration. Plan Scout missions "
-                "to ingest all configured sources, and initial "
-                "Compiler missions for the first batch. "
-                "The Archivist will index articles automatically.\n\n"
+                "to ingest all configured sources into raw/. "
+                "Do NOT plan any other agent missions — "
+                "the Structuring iteration will handle "
+                "article compilation after ingestion is complete.\n\n"
                 f"Sources: {self._describe_sources()}\n\n"
-                "Create a mission plan with correct dependencies. "
-                "Scout missions should run first, then Compiler."
+                "Create a mission plan for Scout ingestion only."
             )
 
         elif phase == IterationPhase.STRUCTURING:

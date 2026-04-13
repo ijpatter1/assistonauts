@@ -645,6 +645,35 @@ class TestBuildExecution:
         assert "b.pdf" in prompt
         assert "2 files" in prompt
 
+    def test_discovery_prompt_is_scout_only(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Discovery prompt instructs Scout-only missions, not Compiler."""
+        plan_response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-scout-001\n"
+            "    agent: scout\n"
+            "    type: ingest_sources\n"
+            "    inputs:\n"
+            "      paths: [/tmp/a.pdf]\n"
+            "    acceptance_criteria: []\n"
+            "    priority: high\n"
+            "```\n"
+        )
+        client = FakeLLMClient(responses=[plan_response])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.plan_iteration(IterationPhase.DISCOVERY)
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "scout" in prompt.lower()
+        assert "compiler" not in prompt.lower()
+
     def test_structuring_prompt_includes_discovery_results(
         self,
         workspace: Path,
@@ -1408,6 +1437,38 @@ class TestTwoLevelCompletion:
         assert "Criterion Alpha" in prompt
         assert "Criterion Beta" in prompt
         assert "m-test" in prompt
+
+    def test_verify_prompt_includes_output_content_snippets(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Verification prompt includes content from output files."""
+        # Create an output file with known content
+        output_file = workspace / "raw" / "articles" / "test-output.md"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text("# Test Output\n\nIngested content here.")
+
+        client = FakeLLMClient(responses=["VERIFIED"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-snip",
+            agent="scout",
+            mission_type="ingest_sources",
+            inputs={},
+            acceptance_criteria=["Content extracted"],
+            created_by="captain",
+        )
+        orch._verify_mission(
+            mission,
+            task_output_paths=[str(output_file)],
+        )
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "Ingested content here" in prompt
 
     def test_completed_mission_has_captain_verification(
         self,
