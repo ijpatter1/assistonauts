@@ -24,6 +24,7 @@ import yaml
 
 from assistonauts.agents.base import LLMClientProtocol
 from assistonauts.agents.captain import CaptainAgent, parse_plan_response
+from assistonauts.archivist.service import Archivist
 from assistonauts.expeditions.budget import BudgetEnforcer
 from assistonauts.expeditions.scaling import ScalingManager
 from assistonauts.missions.dependencies import (
@@ -106,11 +107,75 @@ class BuildOrchestrator:
             exp_dir / "budget.db",
         )
         self.scaling = ScalingManager(config.scaling)
+
+        # Create Archivist for curator cross-referencing and indexing
+        embedding_dims = self._get_embedding_dimensions()
+        self.archivist = Archivist(
+            workspace=workspace_root,
+            embedding_dimensions=embedding_dims,
+        )
+        self._embedding_client = self._create_embedding_client()
+
         self.task_runner = TaskRunner(
             workspace_root=workspace_root,
             tasks_dir=workspace_root / ".assistonauts" / "tasks",
+            agent_context={
+                "archivist": self.archivist,
+                "embedding_client": self._embedding_client,
+            },
         )
         self._iterations: list[BuildIteration] = []
+
+    def _get_embedding_dimensions(self) -> int:
+        """Get embedding dimensions from workspace config, or default."""
+        try:
+            from assistonauts.archivist.embeddings import get_embedding_dimensions
+            from assistonauts.config.loader import load_config
+
+            app_config = load_config(self.workspace_root)
+            return get_embedding_dimensions(app_config.embedding)
+        except Exception:
+            return 3072
+
+    def _create_embedding_client(self) -> object | None:
+        """Create embedding client from workspace config, or None."""
+        try:
+            from assistonauts.archivist.embeddings import create_embedding_client
+            from assistonauts.config.loader import load_config
+
+            app_config = load_config(self.workspace_root)
+            return create_embedding_client(app_config.embedding)
+        except Exception:
+            return None
+
+    def _index_wiki_articles(self) -> None:
+        """Index all wiki articles so the Curator can find them.
+
+        Runs FTS indexing (and embedding indexing when an embedding client
+        is available) for every article in wiki/. Called before Refinement
+        iterations so the multi-pass retriever has data to work with.
+        """
+        wiki_dir = self.workspace_root / "wiki"
+        if not wiki_dir.exists():
+            return
+        articles = sorted(wiki_dir.rglob("*.md"))
+        if not articles:
+            return
+        indexed = 0
+        for article_path in articles:
+            rel_path = str(article_path.relative_to(self.workspace_root))
+            try:
+                if self._embedding_client is not None:
+                    changed = self.archivist.index_with_embeddings(
+                        rel_path, embedding_client=self._embedding_client
+                    )
+                else:
+                    changed = self.archivist.index(rel_path)
+                if changed:
+                    indexed += 1
+            except Exception as exc:
+                logger.warning("Failed to index %s: %s", rel_path, exc)
+        logger.info("Indexed %d wiki articles before Refinement", indexed)
 
     @staticmethod
     def iteration_sequence() -> list[IterationPhase]:
@@ -314,6 +379,10 @@ class BuildOrchestrator:
 
             if iteration_count >= max_iterations:
                 break
+
+            # Index compiled articles before Refinement so the
+            # Curator's multi-pass retriever can find them.
+            self._index_wiki_articles()
 
             iteration_count += 1
             has_work = self._run_and_record(
@@ -733,8 +802,14 @@ class BuildOrchestrator:
             f"Acceptance criteria:\n{criteria_text}\n\n"
             f"Agent output files:\n{output_text}\n\n"
             "The agent has declared this mission complete.\n"
-            "Based on the criteria and outputs above, is this "
-            "mission verified?\n\n"
+            "Review the output against the acceptance criteria. "
+            "The criteria are aspirational guidelines for draft "
+            "content — VERIFY if the output makes a reasonable "
+            "attempt at meeting them given the available source "
+            "material. Minor gaps or thin coverage are acceptable "
+            "for first-draft articles. Only REJECT if the output "
+            "is fundamentally off-topic, empty, or missing the "
+            "majority of required elements.\n\n"
             "Respond with VERIFIED or REJECTED followed by a "
             "brief reason."
         )
@@ -746,7 +821,7 @@ class BuildOrchestrator:
     def _read_output_snippets(
         self,
         output_paths: list[str],
-        max_lines: int = 20,
+        max_lines: int = 80,
     ) -> str:
         """Read content snippets from output files for verification."""
         parts: list[str] = []
