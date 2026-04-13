@@ -75,7 +75,12 @@ def _resolve_agent(
     if agent_name == "compiler":
         from assistonauts.agents.compiler import CompilerAgent
 
-        return CompilerAgent(llm_client=llm_client, workspace_root=workspace_root)
+        return CompilerAgent(
+            llm_client=llm_client,
+            workspace_root=workspace_root,
+            expedition_scope=str(ctx.get("expedition_scope", "")),
+            expedition_purpose=str(ctx.get("expedition_purpose", "")),
+        )
     elif agent_name == "scout":
         from assistonauts.agents.scout import ScoutAgent
 

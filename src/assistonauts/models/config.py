@@ -157,6 +157,7 @@ class ExpeditionConfig:
 
     name: str = ""
     description: str = ""
+    purpose: str = ""
     phase: str = "build"
     scope: ExpeditionScope = field(default_factory=ExpeditionScope)
     sources: ExpeditionSources = field(default_factory=ExpeditionSources)
@@ -256,6 +257,7 @@ class ExpeditionConfig:
         return cls(
             name=str(data.get("name", "")),
             description=str(data.get("description", "")),
+            purpose=str(data.get("purpose", "")),
             phase=str(data.get("phase", "build")),
             scope=scope,
             sources=sources,

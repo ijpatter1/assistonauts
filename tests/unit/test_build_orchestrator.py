@@ -107,26 +107,28 @@ class TestMissionIdDeduplication:
         config: ExpeditionConfig,
     ) -> None:
         """Second iteration with same IDs gets remapped."""
-        client = FakeLLMClient(responses=[
-            # Iteration 1: plans mission-101
-            "```yaml\nmissions:\n"
-            "  - id: mission-101\n"
-            "    agent: compiler\n"
-            "    type: compile_article\n"
-            "    inputs:\n"
-            "      sources: [a.md]\n"
-            "    acceptance_criteria: [Compiled]\n"
-            "    priority: normal\n```\n",
-            # Iteration 2: reuses mission-101
-            "```yaml\nmissions:\n"
-            "  - id: mission-101\n"
-            "    agent: curator\n"
-            "    type: cross_reference\n"
-            "    inputs:\n"
-            "      article_path: wiki/concept/a.md\n"
-            "    acceptance_criteria: [Linked]\n"
-            "    priority: normal\n```\n",
-        ])
+        client = FakeLLMClient(
+            responses=[
+                # Iteration 1: plans mission-101
+                "```yaml\nmissions:\n"
+                "  - id: mission-101\n"
+                "    agent: compiler\n"
+                "    type: compile_article\n"
+                "    inputs:\n"
+                "      sources: [a.md]\n"
+                "    acceptance_criteria: [Compiled]\n"
+                "    priority: normal\n```\n",
+                # Iteration 2: reuses mission-101
+                "```yaml\nmissions:\n"
+                "  - id: mission-101\n"
+                "    agent: curator\n"
+                "    type: cross_reference\n"
+                "    inputs:\n"
+                "      article_path: wiki/concept/a.md\n"
+                "    acceptance_criteria: [Linked]\n"
+                "    priority: normal\n```\n",
+            ]
+        )
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
@@ -145,31 +147,33 @@ class TestMissionIdDeduplication:
         config: ExpeditionConfig,
     ) -> None:
         """Dependency references update when IDs are remapped."""
-        client = FakeLLMClient(responses=[
-            # Iteration 1
-            "```yaml\nmissions:\n"
-            "  - id: m-001\n"
-            "    agent: scout\n"
-            "    type: ingest_sources\n"
-            "    inputs: {paths: [a.md]}\n"
-            "    acceptance_criteria: [Done]\n"
-            "    priority: normal\n```\n",
-            # Iteration 2: reuses m-001, m-002 depends on m-001
-            "```yaml\nmissions:\n"
-            "  - id: m-001\n"
-            "    agent: compiler\n"
-            "    type: compile_article\n"
-            "    inputs: {sources: [a.md]}\n"
-            "    acceptance_criteria: [Done]\n"
-            "    priority: normal\n"
-            "  - id: m-002\n"
-            "    agent: curator\n"
-            "    type: cross_reference\n"
-            "    inputs: {article_path: a.md}\n"
-            "    acceptance_criteria: [Done]\n"
-            "    priority: normal\n"
-            "    depends_on: [m-001]\n```\n",
-        ])
+        client = FakeLLMClient(
+            responses=[
+                # Iteration 1
+                "```yaml\nmissions:\n"
+                "  - id: m-001\n"
+                "    agent: scout\n"
+                "    type: ingest_sources\n"
+                "    inputs: {paths: [a.md]}\n"
+                "    acceptance_criteria: [Done]\n"
+                "    priority: normal\n```\n",
+                # Iteration 2: reuses m-001, m-002 depends on m-001
+                "```yaml\nmissions:\n"
+                "  - id: m-001\n"
+                "    agent: compiler\n"
+                "    type: compile_article\n"
+                "    inputs: {sources: [a.md]}\n"
+                "    acceptance_criteria: [Done]\n"
+                "    priority: normal\n"
+                "  - id: m-002\n"
+                "    agent: curator\n"
+                "    type: cross_reference\n"
+                "    inputs: {article_path: a.md}\n"
+                "    acceptance_criteria: [Done]\n"
+                "    priority: normal\n"
+                "    depends_on: [m-001]\n```\n",
+            ]
+        )
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
@@ -193,22 +197,24 @@ class TestMissionIdDeduplication:
         config: ExpeditionConfig,
     ) -> None:
         """Unique IDs pass through unchanged."""
-        client = FakeLLMClient(responses=[
-            "```yaml\nmissions:\n"
-            "  - id: m-100\n"
-            "    agent: scout\n"
-            "    type: ingest_sources\n"
-            "    inputs: {paths: [a.md]}\n"
-            "    acceptance_criteria: [Done]\n"
-            "    priority: normal\n```\n",
-            "```yaml\nmissions:\n"
-            "  - id: m-200\n"
-            "    agent: compiler\n"
-            "    type: compile_article\n"
-            "    inputs: {sources: [a.md]}\n"
-            "    acceptance_criteria: [Done]\n"
-            "    priority: normal\n```\n",
-        ])
+        client = FakeLLMClient(
+            responses=[
+                "```yaml\nmissions:\n"
+                "  - id: m-100\n"
+                "    agent: scout\n"
+                "    type: ingest_sources\n"
+                "    inputs: {paths: [a.md]}\n"
+                "    acceptance_criteria: [Done]\n"
+                "    priority: normal\n```\n",
+                "```yaml\nmissions:\n"
+                "  - id: m-200\n"
+                "    agent: compiler\n"
+                "    type: compile_article\n"
+                "    inputs: {sources: [a.md]}\n"
+                "    acceptance_criteria: [Done]\n"
+                "    priority: normal\n```\n",
+            ]
+        )
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
@@ -713,7 +719,8 @@ class TestBuildExecution:
         (raw_dir / "cover.md").write_text("# Cover")
         (raw_dir / "intro.md").write_text("# Intro")
 
-        client = FakeLLMClient(responses=["no yaml"])
+        # Two LLM calls: Compiler plan mode + Captain planning
+        client = FakeLLMClient(responses=["no yaml", "no yaml"])
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
@@ -721,10 +728,11 @@ class TestBuildExecution:
         )
         orch.plan_iteration(IterationPhase.STRUCTURING)
 
-        prompt = client.calls[0]["messages"][0]["content"]
-        assert "raw/articles/cover.md" in prompt
-        assert "raw/articles/intro.md" in prompt
-        assert "EXACT" in prompt
+        # First call is Compiler plan mode, second is Captain planning
+        assert len(client.calls) >= 2
+        captain_prompt = client.calls[1]["messages"][0]["content"]
+        assert "raw/articles/cover.md" in captain_prompt
+        assert "raw/articles/intro.md" in captain_prompt
 
     def test_refinement_prompt_includes_wiki_article_paths(
         self,

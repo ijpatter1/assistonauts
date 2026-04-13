@@ -63,6 +63,7 @@ class TestExpeditionConfigExtended:
 expedition:
   name: autotrader-research
   description: "BTC/USD prediction research"
+  purpose: "Build a technical reference for ML engineers evaluating regime-detection approaches"
   phase: build
   scope:
     description: "ML approaches to crypto prediction"
@@ -98,6 +99,7 @@ expedition:
         config = ExpeditionConfig.from_dict(data.get("expedition", {}))
 
         assert config.name == "autotrader-research"
+        assert config.purpose.startswith("Build a technical reference")
         assert config.phase == "build"
         assert config.scope.keywords == ["ML", "trading", "BTC"]
         assert len(config.sources.local) == 1
@@ -118,6 +120,20 @@ expedition:
         }
         config = ExpeditionConfig.from_dict(data)
         assert config.stationed.reporting == {"station_log": "weekly"}
+
+    def test_purpose_field_parsed(self) -> None:
+        data = {
+            "name": "test",
+            "purpose": "Build a guide for active treasure hunters",
+            "scope": {"description": "Treasure hunt", "keywords": ["gems"]},
+        }
+        config = ExpeditionConfig.from_dict(data)
+        assert config.purpose == "Build a guide for active treasure hunters"
+
+    def test_purpose_defaults_empty(self) -> None:
+        data = {"name": "test"}
+        config = ExpeditionConfig.from_dict(data)
+        assert config.purpose == ""
 
     def test_minimal_config(self) -> None:
         data = {"name": "test", "description": "test expedition"}

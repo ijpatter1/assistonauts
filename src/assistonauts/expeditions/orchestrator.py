@@ -213,6 +213,8 @@ class BuildOrchestrator:
             agent_context={
                 "archivist": self.archivist,
                 "embedding_client": self._embedding_client,
+                "expedition_scope": config.scope.description,
+                "expedition_purpose": config.purpose,
             },
         )
         self._iterations: list[BuildIteration] = []
@@ -1026,6 +1028,7 @@ class BuildOrchestrator:
                 "role": "user",
                 "content": (
                     "MISSION VERIFICATION\n\n"
+                    f"Expedition purpose: {self.config.purpose}\n\n"
                     f"Mission: {mission.mission_id}\n"
                     f"Agent: {mission.agent}\n"
                     f"Type: {mission.mission_type}\n\n"
@@ -1177,8 +1180,10 @@ class BuildOrchestrator:
     def _build_prompt(self, phase: IterationPhase) -> str:
         """Build a phase-specific prompt for the Captain."""
         scope = self.config.scope
+        purpose = self.config.purpose
         scope_text = (
             f"Expedition: {self.config.name}\n"
+            f"Purpose: {purpose}\n"
             f"Scope: {scope.description}\n"
             f"Keywords: {', '.join(scope.keywords)}\n"
         )
@@ -1205,23 +1210,36 @@ class BuildOrchestrator:
             )
             prior_results = self._describe_prior_iterations()
             raw_listing = self._list_raw_articles()
+            compiler_plan = self._get_compiler_plan_text()
             return (
                 f"{scope_text}\n"
                 "ITERATION PHASE: Structuring\n\n"
                 f"Prior iteration results:\n{prior_results}\n\n"
-                "Review the compiled articles and their summaries "
-                "below. Identify foundational concepts that other "
-                "articles will reference. Sequence remaining Compiler "
-                "missions with correct dependency ordering — "
-                "foundational concepts first.\n\n"
                 f"Compiled article summaries:\n{summaries_text}\n\n"
-                f"Available raw source files (use these EXACT "
-                f"paths in compiler inputs.sources):\n"
-                f"{raw_listing}\n\n"
-                "Identify structural needs: are there concepts "
-                "that need dedicated entity pages or category "
-                "articles?\n\n"
-                "Create a mission plan for the remaining work."
+                f"Available raw source files:\n{raw_listing}\n\n"
+                + (
+                    f"The Compiler has proposed the following "
+                    f"editorial plan for the remaining sources. "
+                    f"Review this plan and create missions to "
+                    f"execute it. You may adjust sequencing and "
+                    f"dependency ordering, but defer to the "
+                    f"Compiler's editorial decisions (article "
+                    f"types, groupings, titles). Add Curator "
+                    f"cross-reference missions after compilation "
+                    f"where appropriate.\n\n"
+                    f"Compiler's editorial plan:\n{compiler_plan}"
+                    "\n\n"
+                    if compiler_plan
+                    else "No Compiler editorial plan available. "
+                    "Identify which raw sources still need "
+                    "compilation and create Compiler missions "
+                    "with correct dependency ordering.\n\n"
+                )
+                + "Create a mission plan. Remember: your role "
+                "is sequencing and orchestration. The expedition "
+                "purpose should guide what missions are worth "
+                "creating — only plan articles that serve the "
+                "stated purpose."
             )
 
         else:  # REFINEMENT
@@ -1294,6 +1312,74 @@ class BuildOrchestrator:
             else:
                 parts.append(f"Local: {ls.path} ({ls.pattern})")
         return "; ".join(parts) if parts else "No sources configured"
+
+    def _get_compiler_plan_text(self) -> str:
+        """Run Compiler plan mode on uncompiled raw sources.
+
+        Returns a text summary of the Compiler's editorial proposal
+        (article types, groupings, titles, rationale) that the Captain
+        can use to create missions. Returns empty string if no raw
+        sources exist or if plan mode fails.
+        """
+        from assistonauts.agents.compiler import CompilerAgent
+
+        raw_dir = self.workspace_root / "raw" / "articles"
+        if not raw_dir.exists():
+            return ""
+        raw_files = sorted(raw_dir.glob("*.md"))
+        if not raw_files:
+            return ""
+
+        # Filter to sources not yet compiled (no wiki article references them)
+        manifest_path = self.workspace_root / "index" / "manifest.json"
+        compiled_sources: set[str] = set()
+        if manifest_path.exists():
+            import json as _json
+
+            manifest_data = _json.loads(manifest_path.read_text())
+            for _key, entry in manifest_data.items():
+                if isinstance(entry, dict):
+                    for ds in entry.get("downstream", []):
+                        compiled_sources.add(str(ds))
+        # Include sources that haven't been compiled yet
+        uncompiled = [
+            f
+            for f in raw_files
+            if str(f.relative_to(self.workspace_root)) not in compiled_sources
+        ]
+        # On first structuring, all are uncompiled; on later iterations,
+        # pass all raw files to let the compiler see full context
+        plan_sources = uncompiled if uncompiled else raw_files
+
+        set_trace_context(agent="compiler", step="plan_mode", phase="structuring")
+        try:
+            compiler = CompilerAgent(
+                llm_client=self.llm_client,
+                workspace_root=self.workspace_root,
+                expedition_scope=self.config.scope.description,
+                expedition_purpose=self.config.purpose,
+            )
+            plan = compiler.plan(plan_sources)
+        except Exception as exc:
+            logger.warning("Compiler plan mode failed: %s", exc)
+            return ""
+        finally:
+            clear_trace_context()
+
+        if not plan.articles:
+            return ""
+
+        # Format the plan as text for the Captain's prompt
+        lines: list[str] = []
+        for article in plan.articles:
+            src_names = ", ".join(p.name for p in article.source_paths)
+            lines.append(
+                f"- title: {article.title}\n"
+                f"  type: {article.article_type.value}\n"
+                f"  sources: [{src_names}]\n"
+                f"  rationale: {article.rationale}"
+            )
+        return "\n".join(lines)
 
     def _list_raw_articles(self) -> str:
         """List raw article files with workspace-relative paths."""

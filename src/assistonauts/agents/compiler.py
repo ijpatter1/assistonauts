@@ -272,15 +272,22 @@ class CompilerAgent(Agent):
         llm_client: LLMClientProtocol,
         workspace_root: Path,
         expedition_scope: str = "",
+        expedition_purpose: str = "",
     ) -> None:
         wiki_dir = workspace_root / "wiki"
         raw_dir = workspace_root / "raw"
         index_dir = workspace_root / "index"
 
         system_prompt = _COMPILER_SYSTEM_PROMPT
+        if expedition_purpose:
+            system_prompt += (
+                f"\n\nExpedition purpose (this is your primary "
+                f"editorial lens — all content decisions should "
+                f"serve this purpose):\n{expedition_purpose}\n"
+            )
         if expedition_scope:
             system_prompt += (
-                f"\n\nExpedition scope (use as editorial lens):\n{expedition_scope}\n"
+                f"\n\nExpedition scope (domain context):\n{expedition_scope}\n"
             )
 
         super().__init__(
@@ -297,6 +304,7 @@ class CompilerAgent(Agent):
         self._manifest_path = index_dir / "manifest.json"
         self._schema = get_default_schema()
         self._expedition_scope = expedition_scope
+        self._expedition_purpose = expedition_purpose
         self._setup_persistent_logger(workspace_root)
 
     def _log_llm_response(self, response: object) -> None:
@@ -667,16 +675,19 @@ class CompilerAgent(Agent):
         sources_text = "\n\n".join(source_summaries)
 
         # Build the planning prompt
-        scope_line = self._expedition_scope
-
         prompt = (
             f"Analyze these {len(resolved)} source documents "
             f"and propose a compilation plan.\n\n"
             f"Available article types: concept, entity, log, "
             f"exploration\n\n"
         )
-        if scope_line:
-            prompt += f"Expedition scope: {scope_line}\n\n"
+        if self._expedition_purpose:
+            prompt += (
+                f"Expedition purpose (guide all editorial "
+                f"decisions by this):\n{self._expedition_purpose}\n\n"
+            )
+        if self._expedition_scope:
+            prompt += f"Expedition scope: {self._expedition_scope}\n\n"
         prompt += f"Source documents:\n\n{sources_text}"
 
         # Call LLM with plan-specific system prompt.
