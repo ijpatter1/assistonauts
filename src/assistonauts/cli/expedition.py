@@ -40,3 +40,5 @@ def create(config_path: Path, workspace: Path) -> None:
         )
     except FileExistsError as e:
         console.print(f"[yellow]Already exists:[/yellow] {e}")
+    except ValueError as e:
+        console.print(f"[red]Invalid config:[/red] {e}")

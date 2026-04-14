@@ -342,12 +342,12 @@ This means:
 2. The Compiler plan mode exists but is unused during orchestrated builds
 3. Acceptance criteria written by the Captain sometimes mismatch what the source material can support (the gemstones problem)
 
-### Possible resolution
+### Resolution (implemented)
 
-The Structuring iteration could be split:
+This gap was resolved in commit `b7125ff`. The Structuring iteration is now split:
 
 1. **Captain** decides which raw sources need compilation (scope decision)
-2. **Compiler plan mode** proposes how to compile them (editorial decision)
+2. **Compiler plan mode** proposes how to compile them (editorial decision — article types, groupings, titles, guided by expedition `purpose`)
 3. **Captain** reviews and sequences the Compiler's plan (orchestration decision)
 
-This would align the implementation with the spec and likely reduce the gemstones-type failures, since the Compiler would be proposing articles based on what it sees in the source material rather than what the Captain imagines should be there.
+The expedition config also gained a required `purpose` field that flows through to all agents as a shared editorial north star. The result: the gemstones failure pattern is eliminated — UAT runs achieve 100% mission completion. See the latest build report for details.

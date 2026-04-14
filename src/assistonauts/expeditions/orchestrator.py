@@ -1229,9 +1229,7 @@ class BuildOrchestrator:
                     f"execute it. You may adjust sequencing and "
                     f"dependency ordering, but defer to the "
                     f"Compiler's editorial decisions (article "
-                    f"types, groupings, titles). Add Curator "
-                    f"cross-reference missions after compilation "
-                    f"where appropriate.\n\n"
+                    f"types, groupings, titles).\n\n"
                     f"Compiler's editorial plan:\n{compiler_plan}"
                     "\n\n"
                     if compiler_plan
@@ -1514,7 +1512,7 @@ class BuildOrchestrator:
             [
                 "## Knowledge Base",
                 "",
-                f"- **Articles:** {article_count}",
+                f"- **Articles:** {article_count} (draft — pending Inspector review)",
                 f"- **Total words:** {word_count:,}",
                 "",
             ]

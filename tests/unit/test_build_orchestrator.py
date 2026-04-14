@@ -40,6 +40,7 @@ def config() -> ExpeditionConfig:
         {
             "name": "test-exp",
             "description": "Test expedition",
+            "purpose": "Build a technical reference for ML engineers",
             "scope": {
                 "description": "ML research",
                 "keywords": ["ML", "BTC"],
@@ -754,6 +755,96 @@ class TestBuildExecution:
         prompt = client.calls[0]["messages"][0]["content"]
         assert "wiki/concept/test.md" in prompt
         assert "EXACT" in prompt
+
+    def test_purpose_in_captain_planning_prompt(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Purpose appears in the Captain's planning prompt."""
+        client = FakeLLMClient(responses=["no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.plan_iteration(IterationPhase.DISCOVERY)
+
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "Build a technical reference for ML engineers" in prompt
+
+    def test_purpose_in_verification_prompt(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Purpose appears in the Captain's verification prompt."""
+        article = workspace / "wiki" / "concept" / "test.md"
+        article.write_text("# Test\n\nContent.")
+
+        client = FakeLLMClient(responses=["VERIFIED"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-purpose",
+            agent="compiler",
+            mission_type="compile_article",
+            inputs={},
+            acceptance_criteria=["Article compiled"],
+            created_by="captain",
+        )
+        orch._verify_mission(mission, task_output_paths=[str(article)])
+
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "Build a technical reference for ML engineers" in prompt
+
+    def test_compiler_plan_mode_called_in_structuring(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Structuring runs Compiler plan mode before Captain planning."""
+        raw_dir = workspace / "raw" / "articles"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        (raw_dir / "source.md").write_text("# Source\n\nContent.")
+
+        # First call: Compiler plan mode; second call: Captain planning
+        client = FakeLLMClient(responses=["no yaml", "no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.plan_iteration(IterationPhase.STRUCTURING)
+
+        assert len(client.calls) >= 2
+        # First call should be Compiler's plan mode (has "Analyze" or "article types")
+        plan_prompt = client.calls[0]["messages"][0]["content"]
+        assert "article types" in plan_prompt.lower() or "Analyze" in plan_prompt
+
+    def test_structuring_prompt_excludes_curator(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Structuring prompt tells Captain not to plan Curator missions."""
+        raw_dir = workspace / "raw" / "articles"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        (raw_dir / "source.md").write_text("# Source")
+
+        client = FakeLLMClient(responses=["no yaml", "no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.plan_iteration(IterationPhase.STRUCTURING)
+
+        captain_prompt = client.calls[1]["messages"][0]["content"]
+        assert "Do NOT plan Curator" in captain_prompt
 
     def test_describe_sources_resolves_glob(
         self,

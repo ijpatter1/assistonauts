@@ -459,6 +459,30 @@ class TestAutoApproveStructuralMissions:
         assert orch._verify_mission(mission) is True
         assert len(client.calls) == 0
 
+    def test_query_auto_approved(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Explorer query missions are auto-approved — answers are
+        in-memory, not files. File-based verification rejects valid answers."""
+        client = FakeLLMClient(responses=[])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-explorer-001",
+            agent="explorer",
+            mission_type="query",
+            inputs={"query": "What gemstones are mentioned?"},
+            acceptance_criteria=["Returns specific gemstone names"],
+            created_by="captain",
+        )
+        assert orch._verify_mission(mission) is True
+        assert len(client.calls) == 0
+
     def test_compile_article_still_verified(
         self,
         workspace: Path,

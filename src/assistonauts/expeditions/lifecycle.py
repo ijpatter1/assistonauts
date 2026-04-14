@@ -18,6 +18,13 @@ def create_expedition(
     Sets up: expeditions/<name>/expedition.yaml, missions/, review/.
     Raises FileExistsError if the expedition already exists.
     """
+    if not config.purpose.strip():
+        msg = (
+            "Expedition purpose is required. Add a 'purpose' field "
+            "describing why this knowledge base exists and who it serves."
+        )
+        raise ValueError(msg)
+
     exp_dir = expeditions_dir / config.name
     if exp_dir.exists():
         msg = f"Expedition already exists: {exp_dir}"

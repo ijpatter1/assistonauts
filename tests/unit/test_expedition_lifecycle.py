@@ -220,6 +220,7 @@ class TestExpeditionCreate:
 expedition:
   name: from-file
   description: "Created from file"
+  purpose: "Test purpose for file creation"
   scope:
     description: "Test scope"
     keywords: [test]
@@ -246,9 +247,22 @@ expedition:
             create_expedition,
         )
 
-        config = ExpeditionConfig.from_dict({"name": "dup"})
+        config = ExpeditionConfig.from_dict({"name": "dup", "purpose": "Test purpose"})
         (tmp_path / "expeditions").mkdir()
         exp_base = tmp_path / "expeditions"
         create_expedition(config, exp_base)
         with pytest.raises(FileExistsError):
             create_expedition(config, exp_base)
+
+    def test_create_expedition_requires_purpose(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from assistonauts.expeditions.lifecycle import (
+            create_expedition,
+        )
+
+        config = ExpeditionConfig.from_dict({"name": "no-purpose"})
+        (tmp_path / "expeditions").mkdir()
+        with pytest.raises(ValueError, match="purpose is required"):
+            create_expedition(config, tmp_path / "expeditions")
