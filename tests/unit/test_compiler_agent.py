@@ -349,9 +349,7 @@ class TestCompilerAgent:
         assert isinstance(result, CompilationResult)
         assert result.success is True
 
-    def test_run_task_resolves_relative_multi_paths(
-        self, workspace: Path
-    ) -> None:
+    def test_run_task_resolves_relative_multi_paths(self, workspace: Path) -> None:
         """Workspace-relative paths in source_paths resolve correctly."""
         # Create a second source file
         second_source = workspace / "raw" / "articles" / "second-source.md"

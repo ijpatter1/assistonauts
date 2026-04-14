@@ -42,11 +42,13 @@ class TestLLMClientCallback:
             system="You are helpful.",
         )
         (tmp_path / f"{fixture_key}.json").write_text(
-            json.dumps({
-                "content": "Hi there!",
-                "model": "test-model",
-                "usage": {"prompt_tokens": 10, "completion_tokens": 5},
-            })
+            json.dumps(
+                {
+                    "content": "Hi there!",
+                    "model": "test-model",
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+                }
+            )
         )
 
         client.complete(
@@ -222,17 +224,17 @@ class TestOrchestratorTraceFile:
         from assistonauts.expeditions.orchestrator import BuildOrchestrator
         from assistonauts.models.config import ExpeditionConfig
 
-        config = ExpeditionConfig.from_dict({
-            "name": "test-exp",
-            "description": "Test",
-            "scope": {"description": "Test", "keywords": ["test"]},
-            "sources": {"local": [{"path": "/tmp/t", "pattern": "*.md"}]},
-        })
+        config = ExpeditionConfig.from_dict(
+            {
+                "name": "test-exp",
+                "description": "Test",
+                "scope": {"description": "Test", "keywords": ["test"]},
+                "sources": {"local": [{"path": "/tmp/t", "pattern": "*.md"}]},
+            }
+        )
 
         # Captain plans no missions → quick exit
-        plan_response = (
-            "```yaml\nmissions: []\n```\n"
-        )
+        plan_response = "```yaml\nmissions: []\n```\n"
         client = FakeLLMClient(responses=[plan_response] * 5)
         orch = BuildOrchestrator(
             workspace_root=workspace,
@@ -249,12 +251,14 @@ class TestOrchestratorTraceFile:
         from assistonauts.expeditions.orchestrator import BuildOrchestrator
         from assistonauts.models.config import ExpeditionConfig
 
-        config = ExpeditionConfig.from_dict({
-            "name": "test-exp",
-            "description": "Test",
-            "scope": {"description": "Test scope", "keywords": ["test"]},
-            "sources": {"local": [{"path": "/tmp/t", "pattern": "*.md"}]},
-        })
+        config = ExpeditionConfig.from_dict(
+            {
+                "name": "test-exp",
+                "description": "Test",
+                "scope": {"description": "Test scope", "keywords": ["test"]},
+                "sources": {"local": [{"path": "/tmp/t", "pattern": "*.md"}]},
+            }
+        )
 
         plan_response = "```yaml\nmissions: []\n```\n"
         client = FakeLLMClient(responses=[plan_response] * 5)
@@ -286,12 +290,14 @@ class TestOrchestratorTraceFile:
         from assistonauts.expeditions.orchestrator import BuildOrchestrator
         from assistonauts.models.config import ExpeditionConfig
 
-        config = ExpeditionConfig.from_dict({
-            "name": "test-exp",
-            "description": "Test",
-            "scope": {"description": "Test", "keywords": ["test"]},
-            "sources": {"local": [{"path": "/tmp/t", "pattern": "*.md"}]},
-        })
+        config = ExpeditionConfig.from_dict(
+            {
+                "name": "test-exp",
+                "description": "Test",
+                "scope": {"description": "Test", "keywords": ["test"]},
+                "sources": {"local": [{"path": "/tmp/t", "pattern": "*.md"}]},
+            }
+        )
 
         plan_response = "```yaml\nmissions: []\n```\n"
         client = FakeLLMClient(responses=[plan_response] * 5)
@@ -309,7 +315,5 @@ class TestOrchestratorTraceFile:
             if line.strip()
         ]
         # At least the Discovery planning call should have context
-        has_context = any(
-            e.get("context", {}).get("phase") for e in entries
-        )
+        has_context = any(e.get("context", {}).get("phase") for e in entries)
         assert has_context, "No trace entries have phase context"
