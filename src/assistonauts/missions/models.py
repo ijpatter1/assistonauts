@@ -69,6 +69,7 @@ class Mission:
     failure: FailureRecord | None = None
     stale_reason: str = ""
     output_paths: list[str] = field(default_factory=list)
+    last_rejection_reason: str = ""
 
     # --- State transitions ---
 
@@ -165,6 +166,8 @@ class Mission:
             d["stale_reason"] = self.stale_reason
         if self.output_paths:
             d["output_paths"] = self.output_paths
+        if self.last_rejection_reason:
+            d["last_rejection_reason"] = self.last_rejection_reason
         if self.failure:
             d["failure"] = {
                 "type": self.failure.error_type,
@@ -249,6 +252,7 @@ class Mission:
                 if isinstance(md.get("output_paths"), list)
                 else []
             ),
+            last_rejection_reason=str(md.get("last_rejection_reason", "")),
             tasks=tasks,
             failure=failure,
         )

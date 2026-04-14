@@ -63,12 +63,24 @@ def _resolve_agent(
     agent_name: str,
     workspace_root: Path,
     llm_client: LLMClientProtocol,
+    agent_context: dict[str, object] | None = None,
 ) -> Agent:
-    """Create an agent instance by name."""
+    """Create an agent instance by name.
+
+    agent_context provides optional dependencies (archivist, embedding_client)
+    that certain agents require. When not provided, agents that need them
+    will fail gracefully via their own validation.
+    """
+    ctx = agent_context or {}
     if agent_name == "compiler":
         from assistonauts.agents.compiler import CompilerAgent
 
-        return CompilerAgent(llm_client=llm_client, workspace_root=workspace_root)
+        return CompilerAgent(
+            llm_client=llm_client,
+            workspace_root=workspace_root,
+            expedition_scope=str(ctx.get("expedition_scope", "")),
+            expedition_purpose=str(ctx.get("expedition_purpose", "")),
+        )
     elif agent_name == "scout":
         from assistonauts.agents.scout import ScoutAgent
 
@@ -80,11 +92,21 @@ def _resolve_agent(
     elif agent_name == "curator":
         from assistonauts.agents.curator import CuratorAgent
 
-        return CuratorAgent(llm_client=llm_client, workspace_root=workspace_root)
+        return CuratorAgent(
+            llm_client=llm_client,
+            workspace_root=workspace_root,
+            archivist=ctx.get("archivist"),  # type: ignore[arg-type]
+            embedding_client=ctx.get("embedding_client"),  # type: ignore[arg-type]
+        )
     elif agent_name == "explorer":
         from assistonauts.agents.explorer import ExplorerAgent
 
-        return ExplorerAgent(llm_client=llm_client, workspace_root=workspace_root)
+        return ExplorerAgent(
+            llm_client=llm_client,
+            workspace_root=workspace_root,
+            archivist=ctx.get("archivist"),  # type: ignore[arg-type]
+            embedding_client=ctx.get("embedding_client"),  # type: ignore[arg-type]
+        )
     else:
         raise DeterministicError(f"Unknown agent: {agent_name}")
 
@@ -104,11 +126,13 @@ class TaskRunner:
         tasks_dir: Path,
         max_retries: int = 3,
         auto_commit: bool = False,
+        agent_context: dict[str, object] | None = None,
     ) -> None:
         self._workspace_root = workspace_root
         self._tasks_dir = tasks_dir
         self._max_retries = max_retries
         self._auto_commit = auto_commit
+        self._agent_context = agent_context or {}
 
     def run(
         self,
@@ -123,7 +147,9 @@ class TaskRunner:
 
         # Resolve agent
         try:
-            agent = _resolve_agent(task.agent, self._workspace_root, llm_client)
+            agent = _resolve_agent(
+                task.agent, self._workspace_root, llm_client, self._agent_context
+            )
         except DeterministicError as e:
             task.status = TaskStatus.FAILED
             result = TaskResult(
@@ -141,6 +167,20 @@ class TaskRunner:
             while True:
                 try:
                     agent_output = agent.run_task(task.params)
+                    # Check agent-level success (e.g. CuratorResult.success)
+                    if hasattr(agent_output, "success") and not agent_output.success:
+                        task.status = TaskStatus.FAILED
+                        msg = getattr(agent_output, "message", "Agent reported failure")
+                        result = TaskResult(
+                            success=False,
+                            status=TaskStatus.FAILED,
+                            error_type="deterministic",
+                            error_message=str(msg),
+                            retry_count=retry_count,
+                            agent_output=agent_output,
+                        )
+                        self._write_audit(task, started_at, result)
+                        return result
                     task.status = TaskStatus.COMPLETED
                     result = TaskResult(
                         success=True,

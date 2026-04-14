@@ -63,6 +63,7 @@ class TestExpeditionConfigExtended:
 expedition:
   name: autotrader-research
   description: "BTC/USD prediction research"
+  purpose: "Build a technical reference for ML engineers evaluating regime-detection approaches"
   phase: build
   scope:
     description: "ML approaches to crypto prediction"
@@ -98,6 +99,7 @@ expedition:
         config = ExpeditionConfig.from_dict(data.get("expedition", {}))
 
         assert config.name == "autotrader-research"
+        assert config.purpose.startswith("Build a technical reference")
         assert config.phase == "build"
         assert config.scope.keywords == ["ML", "trading", "BTC"]
         assert len(config.sources.local) == 1
@@ -118,6 +120,20 @@ expedition:
         }
         config = ExpeditionConfig.from_dict(data)
         assert config.stationed.reporting == {"station_log": "weekly"}
+
+    def test_purpose_field_parsed(self) -> None:
+        data = {
+            "name": "test",
+            "purpose": "Build a guide for active treasure hunters",
+            "scope": {"description": "Treasure hunt", "keywords": ["gems"]},
+        }
+        config = ExpeditionConfig.from_dict(data)
+        assert config.purpose == "Build a guide for active treasure hunters"
+
+    def test_purpose_defaults_empty(self) -> None:
+        data = {"name": "test"}
+        config = ExpeditionConfig.from_dict(data)
+        assert config.purpose == ""
 
     def test_minimal_config(self) -> None:
         data = {"name": "test", "description": "test expedition"}
@@ -171,6 +187,7 @@ class TestExpeditionCreate:
             {
                 "name": "test-exp",
                 "description": "A test expedition",
+                "purpose": "Build a guide for treasure hunters",
             }
         )
         exp_dir = create_expedition(config, tmp_path)
@@ -180,11 +197,12 @@ class TestExpeditionCreate:
         assert (exp_dir / "missions").is_dir()
         assert (exp_dir / "review").is_dir()
 
-        # Verify expedition.yaml has full config
+        # Verify expedition.yaml has full config including purpose
         loaded = yaml.safe_load(
             (exp_dir / "expedition.yaml").read_text(),
         )
         assert loaded["expedition"]["name"] == "test-exp"
+        assert loaded["expedition"]["purpose"] == "Build a guide for treasure hunters"
         assert "sources" in loaded["expedition"]
         assert "stationed" in loaded["expedition"]
         assert "scaling" in loaded["expedition"]
@@ -202,6 +220,7 @@ class TestExpeditionCreate:
 expedition:
   name: from-file
   description: "Created from file"
+  purpose: "Test purpose for file creation"
   scope:
     description: "Test scope"
     keywords: [test]
@@ -228,9 +247,22 @@ expedition:
             create_expedition,
         )
 
-        config = ExpeditionConfig.from_dict({"name": "dup"})
+        config = ExpeditionConfig.from_dict({"name": "dup", "purpose": "Test purpose"})
         (tmp_path / "expeditions").mkdir()
         exp_base = tmp_path / "expeditions"
         create_expedition(config, exp_base)
         with pytest.raises(FileExistsError):
             create_expedition(config, exp_base)
+
+    def test_create_expedition_requires_purpose(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from assistonauts.expeditions.lifecycle import (
+            create_expedition,
+        )
+
+        config = ExpeditionConfig.from_dict({"name": "no-purpose"})
+        (tmp_path / "expeditions").mkdir()
+        with pytest.raises(ValueError, match="purpose is required"):
+            create_expedition(config, tmp_path / "expeditions")

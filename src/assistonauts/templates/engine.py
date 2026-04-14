@@ -28,11 +28,12 @@ def render_template(
     template = schema.get_template(article_type)
     now = datetime.now(UTC).isoformat()
 
-    # Build frontmatter
+    # Build frontmatter — quote title if it contains YAML-breaking chars
+    safe_title = f'"{title}"' if ":" in title else title
     sources_yaml = "\n".join(f"  - {s}" for s in sources)
     frontmatter = (
         "---\n"
-        f"title: {title}\n"
+        f"title: {safe_title}\n"
         f"type: {article_type.value}\n"
         f"sources:\n{sources_yaml}\n"
         f"created_at: {now}\n"

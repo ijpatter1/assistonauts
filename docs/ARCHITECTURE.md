@@ -192,6 +192,7 @@ class LLMClient:
 - `record` mode: calls litellm, saves request/response pairs to `fixture_dir`
 - `replay` mode: returns saved responses keyed by `SHA-256(model + system + messages)`, no API calls
 - Stale fixture detection: hash the system prompt, warn if prompt changed since fixture was recorded
+- **Call tracing**: optional `on_llm_call` callback fires on every `complete()` call with the full request (messages, system prompt, model) and response (content, usage). The orchestrator wires this to `expeditions/<name>/llm-trace.jsonl` during builds. The callback receives a context dict that callers can populate with mission/agent metadata via a `trace_context` thread-local, allowing end-to-end tracing without coupling the LLM client to orchestration concerns.
 
 ### Config System
 
@@ -233,6 +234,9 @@ cache:
 expedition:
   name: autotrader-research
   description: "Research knowledge base for BTC/USD prediction system"
+  purpose: >
+    Build a technical reference for ML engineers evaluating
+    regime-detection approaches to BTC/USD trading signals.
   phase: build
   scope:
     description: >
@@ -243,6 +247,12 @@ expedition:
       - path: ~/research/papers/
         pattern: "*.pdf"
 ```
+
+The `purpose` field is required and distinct from scope. Scope describes the domain (what the KB covers); purpose describes the intent (why it exists and who it serves). Purpose flows through to:
+
+- **Captain planning prompts** — informs scope decisions and acceptance criteria
+- **Compiler system prompt** — as editorial lens for article content, tone, and level of detail
+- **Verification** — criteria evaluated against the expedition's stated purpose
 
 Config models are validated with dataclasses (or Pydantic if warranted by complexity). Unknown keys warn, missing required keys error.
 
@@ -422,16 +432,16 @@ Explorer agent (`agents/explorer.py`) with query flow via multi-pass retrieval. 
 
 **Iterative planning:** Named iteration phases:
 
-- **Discovery:** Scout ingests all sources, Compiler compiles first batch, Archivist indexes
-- **Structuring:** Captain LLM reads compiled summaries, identifies foundational concepts, sequences remaining compilations with dependency ordering
-- **Refinement:** Curator retroactive cross-referencing (batched, not incremental — multi-pass against incomplete corpus is wasteful), Inspector sweep as hook/placeholder for Phase 6
+- **Discovery:** Scout ingests all sources
+- **Structuring:** Captain identifies which raw sources need compilation (scope decision, guided by expedition purpose); Compiler plan mode proposes how to compile them (editorial decision — article types, groupings, titles, guided by expedition purpose as editorial lens); Captain reviews, sequences, and creates missions from the Compiler's plan with dependency ordering
+- **Refinement:** Archivist indexes compiled articles, Curator retroactive cross-referencing (batched, not incremental — multi-pass against incomplete corpus is wasteful), Inspector sweep as hook/placeholder for Phase 6
 - Iteration count is variable. Exit condition: all sources processed, all linking passes done.
 
 **Scaling:** Deterministic, config-driven, no LLM calls. Parses `scaling` config block. Singleton enforcement for Captain, Curator, Inspector. Auto-scale for Scout, Compiler, Explorer (queue_depth trigger, max_instances, cooldown). WAL mode on all SQLite databases. Archivist excluded from scaling (system component).
 
 **Budget:** Reads from `scaling.budget`. Warning threshold + hard cap. Per-agent and per-expedition tracking with daily reset.
 
-**Expedition lifecycle:** `expedition.yaml` parsed into extended `ExpeditionConfig` (scope, sources including local/rss/github/web, stationed.resources, scaling). `expedition create` sets up `expeditions/<name>/` with plan.yaml, missions/, review/. Build→stationed transition as explicit human decision with build report.
+**Expedition lifecycle:** `expedition.yaml` parsed into extended `ExpeditionConfig` (purpose, scope, sources including local/rss/github/web, stationed.resources, scaling). Purpose is required — it directs all agent behavior. `expedition create` sets up `expeditions/<name>/` with plan.yaml, missions/, review/. Build→stationed transition as explicit human decision with build report.
 
 ### Phase 6 — Inspector + Quality + Review
 

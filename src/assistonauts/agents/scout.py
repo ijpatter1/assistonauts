@@ -185,5 +185,7 @@ class ScoutAgent(Agent):
         Expects task dict with 'source_path' and optional 'category'.
         """
         source_path = Path(task["source_path"])
+        if not source_path.is_absolute():
+            source_path = self._workspace_root / source_path
         category = task.get("category", "articles")
         return self.ingest(source_path, category=category)

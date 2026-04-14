@@ -40,6 +40,7 @@ def config() -> ExpeditionConfig:
         {
             "name": "test-exp",
             "description": "Test expedition",
+            "purpose": "Build a technical reference for ML engineers",
             "scope": {
                 "description": "ML research",
                 "keywords": ["ML", "BTC"],
@@ -92,6 +93,140 @@ class TestBuildIteration:
             missions_failed=0,
         )
         assert not it.is_complete()
+
+
+# --- Mission ID Deduplication ---
+
+
+class TestMissionIdDeduplication:
+    """Captain may reuse mission IDs across iterations. The orchestrator
+    must remap collisions to prevent ledger corruption."""
+
+    def test_duplicate_ids_remapped(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Second iteration with same IDs gets remapped."""
+        client = FakeLLMClient(
+            responses=[
+                # Iteration 1: plans mission-101
+                "```yaml\nmissions:\n"
+                "  - id: mission-101\n"
+                "    agent: compiler\n"
+                "    type: compile_article\n"
+                "    inputs:\n"
+                "      sources: [a.md]\n"
+                "    acceptance_criteria: [Compiled]\n"
+                "    priority: normal\n```\n",
+                # Iteration 2: reuses mission-101
+                "```yaml\nmissions:\n"
+                "  - id: mission-101\n"
+                "    agent: curator\n"
+                "    type: cross_reference\n"
+                "    inputs:\n"
+                "      article_path: wiki/concept/a.md\n"
+                "    acceptance_criteria: [Linked]\n"
+                "    priority: normal\n```\n",
+            ]
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        it1 = orch.plan_iteration(IterationPhase.STRUCTURING)
+        it2 = orch.plan_iteration(IterationPhase.REFINEMENT)
+
+        assert it1.missions[0].mission_id == "mission-101"
+        assert it2.missions[0].mission_id == "mission-101-r1"
+
+    def test_dependencies_updated_on_remap(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Dependency references update when IDs are remapped."""
+        client = FakeLLMClient(
+            responses=[
+                # Iteration 1
+                "```yaml\nmissions:\n"
+                "  - id: m-001\n"
+                "    agent: scout\n"
+                "    type: ingest_sources\n"
+                "    inputs: {paths: [a.md]}\n"
+                "    acceptance_criteria: [Done]\n"
+                "    priority: normal\n```\n",
+                # Iteration 2: reuses m-001, m-002 depends on m-001
+                "```yaml\nmissions:\n"
+                "  - id: m-001\n"
+                "    agent: compiler\n"
+                "    type: compile_article\n"
+                "    inputs: {sources: [a.md]}\n"
+                "    acceptance_criteria: [Done]\n"
+                "    priority: normal\n"
+                "  - id: m-002\n"
+                "    agent: curator\n"
+                "    type: cross_reference\n"
+                "    inputs: {article_path: a.md}\n"
+                "    acceptance_criteria: [Done]\n"
+                "    priority: normal\n"
+                "    depends_on: [m-001]\n```\n",
+            ]
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        orch.plan_iteration(IterationPhase.DISCOVERY)
+        it2 = orch.plan_iteration(IterationPhase.STRUCTURING)
+
+        # m-001 was remapped to m-001-r1
+        remapped = it2.missions[0]
+        assert remapped.mission_id == "m-001-r1"
+        # m-002's dependency on m-001 should now point to m-001-r1
+        assert it2.graph is not None
+        deps = it2.graph.dependencies("m-002")
+        assert "m-001-r1" in deps
+
+    def test_no_remap_when_ids_unique(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Unique IDs pass through unchanged."""
+        client = FakeLLMClient(
+            responses=[
+                "```yaml\nmissions:\n"
+                "  - id: m-100\n"
+                "    agent: scout\n"
+                "    type: ingest_sources\n"
+                "    inputs: {paths: [a.md]}\n"
+                "    acceptance_criteria: [Done]\n"
+                "    priority: normal\n```\n",
+                "```yaml\nmissions:\n"
+                "  - id: m-200\n"
+                "    agent: compiler\n"
+                "    type: compile_article\n"
+                "    inputs: {sources: [a.md]}\n"
+                "    acceptance_criteria: [Done]\n"
+                "    priority: normal\n```\n",
+            ]
+        )
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+
+        it1 = orch.plan_iteration(IterationPhase.DISCOVERY)
+        it2 = orch.plan_iteration(IterationPhase.STRUCTURING)
+
+        assert it1.missions[0].mission_id == "m-100"
+        assert it2.missions[0].mission_id == "m-200"
 
 
 # --- BuildOrchestrator ---
@@ -585,7 +720,8 @@ class TestBuildExecution:
         (raw_dir / "cover.md").write_text("# Cover")
         (raw_dir / "intro.md").write_text("# Intro")
 
-        client = FakeLLMClient(responses=["no yaml"])
+        # Two LLM calls: Compiler plan mode + Captain planning
+        client = FakeLLMClient(responses=["no yaml", "no yaml"])
         orch = BuildOrchestrator(
             workspace_root=workspace,
             config=config,
@@ -593,10 +729,11 @@ class TestBuildExecution:
         )
         orch.plan_iteration(IterationPhase.STRUCTURING)
 
-        prompt = client.calls[0]["messages"][0]["content"]
-        assert "raw/articles/cover.md" in prompt
-        assert "raw/articles/intro.md" in prompt
-        assert "EXACT" in prompt
+        # First call is Compiler plan mode, second is Captain planning
+        assert len(client.calls) >= 2
+        captain_prompt = client.calls[1]["messages"][0]["content"]
+        assert "raw/articles/cover.md" in captain_prompt
+        assert "raw/articles/intro.md" in captain_prompt
 
     def test_refinement_prompt_includes_wiki_article_paths(
         self,
@@ -618,6 +755,96 @@ class TestBuildExecution:
         prompt = client.calls[0]["messages"][0]["content"]
         assert "wiki/concept/test.md" in prompt
         assert "EXACT" in prompt
+
+    def test_purpose_in_captain_planning_prompt(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Purpose appears in the Captain's planning prompt."""
+        client = FakeLLMClient(responses=["no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.plan_iteration(IterationPhase.DISCOVERY)
+
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "Build a technical reference for ML engineers" in prompt
+
+    def test_purpose_in_verification_prompt(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Purpose appears in the Captain's verification prompt."""
+        article = workspace / "wiki" / "concept" / "test.md"
+        article.write_text("# Test\n\nContent.")
+
+        client = FakeLLMClient(responses=["VERIFIED"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-purpose",
+            agent="compiler",
+            mission_type="compile_article",
+            inputs={},
+            acceptance_criteria=["Article compiled"],
+            created_by="captain",
+        )
+        orch._verify_mission(mission, task_output_paths=[str(article)])
+
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "Build a technical reference for ML engineers" in prompt
+
+    def test_compiler_plan_mode_called_in_structuring(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Structuring runs Compiler plan mode before Captain planning."""
+        raw_dir = workspace / "raw" / "articles"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        (raw_dir / "source.md").write_text("# Source\n\nContent.")
+
+        # First call: Compiler plan mode; second call: Captain planning
+        client = FakeLLMClient(responses=["no yaml", "no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.plan_iteration(IterationPhase.STRUCTURING)
+
+        assert len(client.calls) >= 2
+        # First call should be Compiler's plan mode (has "Analyze" or "article types")
+        plan_prompt = client.calls[0]["messages"][0]["content"]
+        assert "article types" in plan_prompt.lower() or "Analyze" in plan_prompt
+
+    def test_structuring_prompt_excludes_curator(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Structuring prompt tells Captain not to plan Curator missions."""
+        raw_dir = workspace / "raw" / "articles"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        (raw_dir / "source.md").write_text("# Source")
+
+        client = FakeLLMClient(responses=["no yaml", "no yaml"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.plan_iteration(IterationPhase.STRUCTURING)
+
+        captain_prompt = client.calls[1]["messages"][0]["content"]
+        assert "Do NOT plan Curator" in captain_prompt
 
     def test_describe_sources_resolves_glob(
         self,
@@ -644,6 +871,35 @@ class TestBuildExecution:
         assert "a.pdf" in prompt
         assert "b.pdf" in prompt
         assert "2 files" in prompt
+
+    def test_discovery_prompt_is_scout_only(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Discovery prompt instructs Scout-only missions, not Compiler."""
+        plan_response = (
+            "```yaml\n"
+            "missions:\n"
+            "  - id: m-scout-001\n"
+            "    agent: scout\n"
+            "    type: ingest_sources\n"
+            "    inputs:\n"
+            "      paths: [/tmp/a.pdf]\n"
+            "    acceptance_criteria: []\n"
+            "    priority: high\n"
+            "```\n"
+        )
+        client = FakeLLMClient(responses=[plan_response])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        orch.plan_iteration(IterationPhase.DISCOVERY)
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "scout" in prompt.lower()
+        assert "compiler" not in prompt.lower()
 
     def test_structuring_prompt_includes_discovery_results(
         self,
@@ -1408,6 +1664,38 @@ class TestTwoLevelCompletion:
         assert "Criterion Alpha" in prompt
         assert "Criterion Beta" in prompt
         assert "m-test" in prompt
+
+    def test_verify_prompt_includes_output_content_snippets(
+        self,
+        workspace: Path,
+        config: ExpeditionConfig,
+    ) -> None:
+        """Verification prompt includes content from output files."""
+        # Create an output file with known content
+        output_file = workspace / "wiki" / "concept" / "test-output.md"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text("# Test Output\n\nCompiled content here.")
+
+        client = FakeLLMClient(responses=["VERIFIED"])
+        orch = BuildOrchestrator(
+            workspace_root=workspace,
+            config=config,
+            llm_client=client,
+        )
+        mission = Mission(
+            mission_id="m-snip",
+            agent="compiler",
+            mission_type="compile_article",
+            inputs={},
+            acceptance_criteria=["Content compiled"],
+            created_by="captain",
+        )
+        orch._verify_mission(
+            mission,
+            task_output_paths=[str(output_file)],
+        )
+        prompt = client.calls[0]["messages"][0]["content"]
+        assert "Compiled content here" in prompt
 
     def test_completed_mission_has_captain_verification(
         self,

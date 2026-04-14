@@ -25,6 +25,7 @@ class TestExpeditionCreateCLI:
                     "expedition": {
                         "name": "test-exp",
                         "description": "Test expedition",
+                        "purpose": "Test purpose for CLI",
                         "scope": {
                             "description": "Test",
                             "keywords": ["test"],
@@ -66,6 +67,7 @@ class TestExpeditionCreateCLI:
                     "expedition": {
                         "name": "dup",
                         "description": "Dup",
+                        "purpose": "Test purpose for dup check",
                     },
                 }
             ),

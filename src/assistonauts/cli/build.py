@@ -154,10 +154,15 @@ def build(
             "quality.\n",
         )
 
+    pending = result.total_missions - result.total_completed - result.total_failed
+    status_parts = [
+        f"{result.total_completed}/{result.total_missions} missions completed",
+        f"{result.total_failed} failed",
+    ]
+    if pending > 0:
+        status_parts.append(f"{pending} pending")
     console.print(
-        f"\n[bold]Build complete:[/bold] "
-        f"{result.total_completed}/{result.total_missions} missions "
-        f"completed, {result.total_failed} failed\n",
+        f"\n[bold]Build complete:[/bold] {', '.join(status_parts)}\n",
     )
 
     for iteration in result.iterations:

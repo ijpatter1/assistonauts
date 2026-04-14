@@ -209,6 +209,35 @@ def _strip_code_fences(text: str) -> str:
     return stripped.strip()
 
 
+def _fix_frontmatter_quoting(content: str) -> str:
+    """Ensure the title field in YAML frontmatter is quoted if needed.
+
+    LLMs often produce unquoted titles with colons, e.g.:
+        title: The Treasure Hunt: Overview
+    This is invalid YAML. Fix by quoting the title value.
+    """
+    lines = content.split("\n")
+    in_frontmatter = False
+    for i, line in enumerate(lines):
+        if line.strip() == "---":
+            if not in_frontmatter:
+                in_frontmatter = True
+                continue
+            break  # end of frontmatter
+        if in_frontmatter and line.startswith("title:"):
+            value = line.split(":", 1)[1].strip()
+            # Already quoted
+            if (value.startswith('"') and value.endswith('"')) or (
+                value.startswith("'") and value.endswith("'")
+            ):
+                continue
+            # Needs quoting if it contains YAML-breaking characters
+            if ":" in value:
+                escaped = value.replace('"', '\\"')
+                lines[i] = f'title: "{escaped}"'
+    return "\n".join(lines)
+
+
 def _slugify(title: str, separator: str = "-", max_length: int = 80) -> str:
     """Convert a title to a URL-friendly slug."""
     slug = title.lower().strip()
@@ -243,15 +272,22 @@ class CompilerAgent(Agent):
         llm_client: LLMClientProtocol,
         workspace_root: Path,
         expedition_scope: str = "",
+        expedition_purpose: str = "",
     ) -> None:
         wiki_dir = workspace_root / "wiki"
         raw_dir = workspace_root / "raw"
         index_dir = workspace_root / "index"
 
         system_prompt = _COMPILER_SYSTEM_PROMPT
+        if expedition_purpose:
+            system_prompt += (
+                f"\n\nExpedition purpose (this is your primary "
+                f"editorial lens — all content decisions should "
+                f"serve this purpose):\n{expedition_purpose}\n"
+            )
         if expedition_scope:
             system_prompt += (
-                f"\n\nExpedition scope (use as editorial lens):\n{expedition_scope}\n"
+                f"\n\nExpedition scope (domain context):\n{expedition_scope}\n"
             )
 
         super().__init__(
@@ -268,6 +304,7 @@ class CompilerAgent(Agent):
         self._manifest_path = index_dir / "manifest.json"
         self._schema = get_default_schema()
         self._expedition_scope = expedition_scope
+        self._expedition_purpose = expedition_purpose
         self._setup_persistent_logger(workspace_root)
 
     def _log_llm_response(self, response: object) -> None:
@@ -386,6 +423,7 @@ class CompilerAgent(Agent):
                 messages=[{"role": "user", "content": compile_msg}],
             )
         )
+        article_content = _fix_frontmatter_quoting(article_content)
 
         # Write article
         self.write_file(output_path, article_content)
@@ -548,6 +586,7 @@ class CompilerAgent(Agent):
                 messages=[{"role": "user", "content": compile_msg}],
             )
         )
+        article_content = _fix_frontmatter_quoting(article_content)
 
         # Write article
         self.write_file(output_path, article_content)
@@ -636,16 +675,19 @@ class CompilerAgent(Agent):
         sources_text = "\n\n".join(source_summaries)
 
         # Build the planning prompt
-        scope_line = self._expedition_scope
-
         prompt = (
             f"Analyze these {len(resolved)} source documents "
             f"and propose a compilation plan.\n\n"
             f"Available article types: concept, entity, log, "
             f"exploration\n\n"
         )
-        if scope_line:
-            prompt += f"Expedition scope: {scope_line}\n\n"
+        if self._expedition_purpose:
+            prompt += (
+                f"Expedition purpose (guide all editorial "
+                f"decisions by this):\n{self._expedition_purpose}\n\n"
+            )
+        if self._expedition_scope:
+            prompt += f"Expedition scope: {self._expedition_scope}\n\n"
         prompt += f"Source documents:\n\n{sources_text}"
 
         # Call LLM with plan-specific system prompt.
@@ -702,9 +744,14 @@ class CompilerAgent(Agent):
         # Support multi-source via comma-separated paths
         if "source_paths" in task:
             paths = [Path(p.strip()) for p in task["source_paths"].split(",")]
+            paths = [
+                self._workspace_root / p if not p.is_absolute() else p for p in paths
+            ]
             title = task.get("title", paths[0].stem)
             return self.compile_multi(paths, article_type=article_type, title=title)
 
         source_path = Path(task["source_path"])
+        if not source_path.is_absolute():
+            source_path = self._workspace_root / source_path
         title = task.get("title", source_path.stem)
         return self.compile(source_path, article_type=article_type, title=title)

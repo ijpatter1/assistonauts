@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 from assistonauts.cache.llm_cache import LLMResponseCache
+from assistonauts.llm.tracing import get_trace_context
 
 
 @dataclass
@@ -75,6 +79,7 @@ class LLMClient:
         default_model: str = "ollama/gemma4:e2b",
         base_url: str | None = None,
         cache_path: Path | None = None,
+        on_llm_call: Callable[[dict[str, object]], None] | None = None,
     ) -> None:
         if mode not in _VALID_MODES:
             raise ValueError(f"Invalid mode '{mode}'. Must be one of: {_VALID_MODES}")
@@ -89,6 +94,7 @@ class LLMClient:
         self._cache: LLMResponseCache | None = (
             LLMResponseCache(cache_path) if cache_path else None
         )
+        self._on_llm_call = on_llm_call
         self.total_tokens_used: int = 0
 
     @property
@@ -115,50 +121,77 @@ class LLMClient:
         When a cache_path was provided at init, the cache is checked
         before making API calls (in live/record modes) and responses
         are stored after successful calls.
+
+        If on_llm_call was provided, fires the callback with the full
+        request/response data on every call, regardless of mode or
+        cache status.
         """
         resolved_model = model or self._default_model
         if self._base_url and "base_url" not in kwargs:
             kwargs["base_url"] = self._base_url
 
+        response: LLMResponse | None = None
+
         if self._mode == "replay":
             response = self._replay(messages, system=system)
-            self._track_tokens(response.usage)
-            return response
-
-        # Check cache before making API call (live and record modes)
-        if self._cache is not None:
+        elif self._cache is not None:
+            # Check cache before making API call (live and record modes)
             cached = self._cache.get(resolved_model, system, messages)
             if cached is not None:
                 usage = cached["usage"] if isinstance(cached["usage"], dict) else {}
-                self._track_tokens(usage)
-                return LLMResponse(
+                response = LLMResponse(
                     content=str(cached["content"]),
                     model=resolved_model,
                     usage=usage,
                 )
 
-        if self._mode == "record":
-            response = _call_litellm(
-                messages, model=resolved_model, system=system, **kwargs
-            )
-            self._save_fixture(messages, system=system, response=response)
-        else:  # live
-            response = _call_litellm(
-                messages, model=resolved_model, system=system, **kwargs
-            )
+        if response is None:
+            if self._mode == "record":
+                response = _call_litellm(
+                    messages, model=resolved_model, system=system, **kwargs
+                )
+                self._save_fixture(messages, system=system, response=response)
+            else:  # live
+                response = _call_litellm(
+                    messages, model=resolved_model, system=system, **kwargs
+                )
 
-        # Store in cache after successful call
-        if self._cache is not None:
-            self._cache.put(
-                model=resolved_model,
-                system=system,
-                messages=messages,
-                content=response.content,
-                usage=response.usage,
-            )
+            # Store in cache after successful API call
+            if self._cache is not None:
+                self._cache.put(
+                    model=resolved_model,
+                    system=system,
+                    messages=messages,
+                    content=response.content,
+                    usage=response.usage,
+                )
 
         self._track_tokens(response.usage)
+        self._fire_callback(messages, system, response)
         return response
+
+    def _fire_callback(
+        self,
+        messages: list[dict[str, object]],
+        system: str | None,
+        response: LLMResponse,
+    ) -> None:
+        """Fire the on_llm_call callback if configured."""
+        if self._on_llm_call is None:
+            return
+        record: dict[str, object] = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "messages": messages,
+            "system": system,
+            "model": response.model,
+            "response": response.content,
+            "usage": response.usage,
+            "context": get_trace_context(),
+        }
+        try:
+            self._on_llm_call(record)
+        except Exception:
+            logging.getLogger(__name__).debug("Tracing callback failed", exc_info=True)
 
     def _track_tokens(self, usage: dict[str, int]) -> None:
         """Accumulate token usage from any response path."""

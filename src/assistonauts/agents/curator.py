@@ -18,6 +18,7 @@ from pathlib import Path
 from assistonauts.agents.base import Agent, LLMClientProtocol
 from assistonauts.archivist.embeddings import EmbeddingClient
 from assistonauts.archivist.service import Archivist
+from assistonauts.cache.content import Manifest, ManifestEntry
 from assistonauts.rag.multi_pass import MultiPassRetriever, RetrievalLog
 from assistonauts.tools.curator import analyze_graph, parse_links, scan_backlink_targets
 
@@ -225,6 +226,10 @@ class CuratorAgent(Agent):
             backlinks_added.append(slug)
             modified_paths.append(backlink_path)
 
+        # Update manifest hashes for modified articles so the
+        # compiler's skip-if-unchanged logic sees accurate state.
+        self._update_manifest_hashes(modified_paths)
+
         result = CuratorResult(
             success=True,
             output_path=full_path,
@@ -286,6 +291,41 @@ class CuratorAgent(Agent):
             logging.getLogger(__name__).warning(
                 "Failed to write curator audit log", exc_info=True
             )
+
+    def _update_manifest_hashes(self, modified_paths: list[Path]) -> None:
+        """Update manifest hashes for articles modified by cross-referencing.
+
+        Without this, the compiler's has_changed() sees stale hashes and
+        thinks all articles need recompilation.
+        """
+        import hashlib
+
+        manifest_path = self._workspace_root / "index" / "manifest.json"
+        if not manifest_path.exists():
+            return
+        manifest = Manifest(manifest_path)
+        for path in modified_paths:
+            try:
+                rel_path = str(path.relative_to(self._workspace_root))
+            except ValueError:
+                continue
+            if not path.exists():
+                continue
+            new_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+            existing = manifest.get(rel_path)
+            if existing:
+                existing.hash = new_hash
+                manifest.set(rel_path, existing)
+            else:
+                manifest.set(
+                    rel_path,
+                    ManifestEntry(
+                        hash=new_hash,
+                        last_processed=datetime.now(UTC).isoformat(),
+                        processed_by="curator",
+                    ),
+                )
+        manifest.save()
 
     def _write_see_also(self, path: Path, slugs: list[str]) -> None:
         """Append wiki-links to an article's See Also section via write_file."""

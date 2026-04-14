@@ -1,7 +1,7 @@
 # Phase Status Tracker
 
 > **Current Phase: 5 — Captain + Expedition Orchestration**
-> Last updated: 2026-04-10, session-2026-04-10-001
+> Last updated: 2026-04-14, session-2026-04-13-001
 > Phase 1 merged to main 2026-04-07
 > Phase 2 merged to main 2026-04-08
 > Phase 3 merged to main 2026-04-09
@@ -91,14 +91,15 @@ _Goal: Build the Captain agent for expedition orchestration, the mission state m
 
 - ✅ 2026-04-09, session-2026-04-09-004 — Captain agent — planning + operations modes, owns `expeditions/` + `station-logs/`, reads everything, frontier model via config, human directive routing
 - ✅ 2026-04-09, session-2026-04-09-004 — Captain toolkit — (a) mission queue manager with dependency graph + topological sort, (b) mission ledger (SQLite source of truth, dual-write YAML audit), (c) token budget tracker (per-agent + per-expedition), (d) schedule runner (cron eval), (e) status aggregator (LLM-digestible structured summaries)
-- ✅ 2026-04-09, session-2026-04-09-004 — Iterative planning — named iterations: Discovery (ingest + first compile), Structuring (Captain LLM reads summaries, identifies foundational concepts, dependency ordering), Refinement (Curator batch cross-ref, Inspector hook). Variable iteration count, observe step is LLM call
-- ✅ 2026-04-09, session-2026-04-09-004 — Expedition lifecycle — full `expedition.yaml` parsing (scope, sources, stationed.resources, scaling config), directory setup under `expeditions/<name>/`, build phase orchestration, build→stationed transition as human decision
+- ✅ 2026-04-13, session-2026-04-13-001 — Iterative planning — Discovery (Scout ingests), Structuring (Captain scopes + Compiler plan mode proposes editorial approach + Captain sequences), Refinement (Archivist indexes + Curator batch cross-ref, Inspector hook). Purpose field directs scope and editorial decisions. Variable iteration count
+- ✅ 2026-04-13, session-2026-04-13-001 — Expedition lifecycle — full `expedition.yaml` parsing with required `purpose` field (why the KB exists, who it serves), scope, sources, stationed.resources, scaling config. Purpose threaded through Captain prompts, Compiler editorial lens, and verification criteria
 - ✅ 2026-04-09, session-2026-04-09-004 — Mission state machine — full model (id, agent, type, status incl. STALE, priority, inputs, acceptance_criteria, checklist, created_by/at), two-level completion (agent declares, Captain verifies), failure rollup, missions contain ordered task sequences via TaskRunner
 - ✅ 2026-04-09, session-2026-04-09-004 — Task dependency resolution — topological sort, Captain LLM identifies foundational concepts, cascading chain infrastructure (compile→reindex→link)
 - ✅ 2026-04-09, session-2026-04-09-004 — Deterministic scaling system — config-driven (no LLM), singleton enforcement for Captain+Curator+Inspector, auto_scale rules, WAL mode on SQLite
 - ✅ 2026-04-09, session-2026-04-09-004 — Deterministic budget system — warning threshold (default 0.8) + hard cap at daily_token_limit, per-agent + per-expedition + date tracking
 - ✅ 2026-04-09, session-2026-04-09-004 — CLI: `assistonauts expedition create --config <path>`, `assistonauts build <expedition-name>`
 - ✅ 2026-04-10, session-2026-04-10-001 — CLI: `assistonauts build --dry-run` — show Discovery plan without executing
+- ✅ 2026-04-13, session-2026-04-13-001 — LLM call tracing — TracingLLMClient wrapper writes full prompt/response to `expeditions/<name>/llm-trace.jsonl` for every non-deterministic operation; trace_context thread-local carries agent/mission/phase metadata
 
 ---
 

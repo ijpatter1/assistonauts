@@ -220,17 +220,20 @@ else
     SOURCE_PATTERN="*.md"
     SCOPE_DESC="Test dry run"
     SCOPE_KEYWORDS="[test]"
+    PURPOSE="Build a test knowledge base for UAT validation"
   else
     echo "  Copied $COPIED page images from $INPUT_DIR"
     SOURCE_PATTERN="*.png"
     SCOPE_DESC="A treasure hunt book with hidden clues, gemstones, and adventure guidance"
     SCOPE_KEYWORDS="[treasure, gems, clues, adventure, preparation]"
+    PURPOSE="Build a reference guide for active treasure hunters preparing for a physical search of the five hidden treasure boxes described in There's Treasure Inside by Jon Collins-Black"
   fi
 
   cat > /tmp/uat-dryrun.yaml << DRYEOF
 expedition:
   name: dryrun-test
   description: "Dry run test"
+  purpose: "$PURPOSE"
   scope:
     description: "$SCOPE_DESC"
     keywords: $SCOPE_KEYWORDS
@@ -285,6 +288,7 @@ DRYEOF
 expedition:
   name: treasure-uat
   description: "UAT expedition — There's Treasure Inside"
+  purpose: "$PURPOSE"
   phase: build
   scope:
     description: "$SCOPE_DESC"
@@ -408,6 +412,7 @@ HAPEOF
 expedition:
   name: budget-test
   description: "Budget enforcement test"
+  purpose: "$PURPOSE"
   phase: build
   scope:
     description: "$SCOPE_DESC"

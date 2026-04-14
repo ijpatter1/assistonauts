@@ -413,6 +413,33 @@ class TestMissionSerialization:
         assert m2.failure.retries == 0
         assert m2.failure.failed_at is not None
 
+    def test_last_rejection_reason_roundtrip(self) -> None:
+        m = Mission(
+            mission_id="m-rej",
+            agent="compiler",
+            mission_type="compile",
+            inputs={},
+            acceptance_criteria=["Compiled"],
+            created_by="captain",
+            last_rejection_reason="Output was off-topic",
+        )
+        d = m.to_dict()
+        assert d["mission"]["last_rejection_reason"] == "Output was off-topic"
+        m2 = Mission.from_dict(d)
+        assert m2.last_rejection_reason == "Output was off-topic"
+
+    def test_last_rejection_reason_empty_omitted(self) -> None:
+        m = Mission(
+            mission_id="m-ok",
+            agent="compiler",
+            mission_type="compile",
+            inputs={},
+            acceptance_criteria=[],
+            created_by="captain",
+        )
+        d = m.to_dict()
+        assert "last_rejection_reason" not in d["mission"]
+
     def test_started_at_preserved_on_retry(self) -> None:
         m = Mission(
             mission_id="m-retry",

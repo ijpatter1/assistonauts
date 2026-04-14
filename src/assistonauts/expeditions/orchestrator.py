@@ -24,8 +24,14 @@ import yaml
 
 from assistonauts.agents.base import LLMClientProtocol
 from assistonauts.agents.captain import CaptainAgent, parse_plan_response
+from assistonauts.archivist.service import Archivist
 from assistonauts.expeditions.budget import BudgetEnforcer
 from assistonauts.expeditions.scaling import ScalingManager
+from assistonauts.llm.tracing import (
+    clear_trace_context,
+    get_trace_context,
+    set_trace_context,
+)
 from assistonauts.missions.dependencies import (
     DependencyGraph,
     build_graph_from_plan,
@@ -72,6 +78,85 @@ class BuildPhaseResult:
     total_failed: int = 0
 
 
+class TracingLLMClient:
+    """Wrapper that intercepts LLM calls and writes trace records.
+
+    Delegates all calls to the wrapped client while writing a JSONL
+    trace entry for every complete() call. This captures all non-
+    deterministic operations regardless of which agent or layer
+    makes the call, without modifying any existing LLM client class.
+    """
+
+    def __init__(
+        self,
+        delegate: LLMClientProtocol,
+        trace_path: Path,
+    ) -> None:
+        self._delegate = delegate
+        self._trace_path = trace_path
+        self._trace_path.parent.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def total_tokens_used(self) -> int:
+        return getattr(self._delegate, "total_tokens_used", 0)
+
+    @total_tokens_used.setter
+    def total_tokens_used(self, value: int) -> None:
+        if hasattr(self._delegate, "total_tokens_used"):
+            self._delegate.total_tokens_used = value  # type: ignore[attr-defined]
+
+    def complete(
+        self,
+        messages: list[dict[str, str]],
+        model: str | None = None,
+        system: str | None = None,
+        **kwargs: object,
+    ) -> object:
+        """Delegate to wrapped client, then write trace record."""
+        from datetime import UTC, datetime
+
+        response = self._delegate.complete(
+            messages, model=model, system=system, **kwargs
+        )
+
+        record = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "messages": messages,
+            "system": system,
+            "model": getattr(response, "model", "unknown"),
+            "response": getattr(response, "content", ""),
+            "usage": getattr(response, "usage", {}),
+            "context": get_trace_context(),
+        }
+        self._write_record(record)
+
+        return response
+
+    def write_event(self, event: str, **data: object) -> None:
+        """Write a non-LLM lifecycle event to the trace file.
+
+        Used for mission_start, mission_complete, mission_failed, etc.
+        so that missions completing without LLM calls are still visible.
+        """
+        from datetime import UTC, datetime
+
+        record: dict[str, object] = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "event": event,
+            "context": get_trace_context(),
+            **data,
+        }
+        self._write_record(record)
+
+    def _write_record(self, record: dict[str, object]) -> None:
+        """Append a JSON record to the trace file."""
+        try:
+            with open(self._trace_path, "a") as f:
+                f.write(json.dumps(record, default=str) + "\n")
+        except OSError:
+            logger.warning("Failed to write trace record")
+
+
 class BuildOrchestrator:
     """Orchestrates the build phase with named iterations.
 
@@ -87,9 +172,16 @@ class BuildOrchestrator:
     ) -> None:
         self.workspace_root = workspace_root
         self.config = config
-        self.llm_client = llm_client
+
+        # Wrap the LLM client with tracing — every call across all
+        # agents gets a full prompt/response record in llm-trace.jsonl.
+        exp_dir = workspace_root / "expeditions" / config.name
+        trace_path = exp_dir / "llm-trace.jsonl"
+        tracing_client = TracingLLMClient(llm_client, trace_path)
+        self.llm_client = tracing_client  # type: ignore[assignment]
+
         self.captain = CaptainAgent(
-            llm_client=llm_client,
+            llm_client=tracing_client,  # type: ignore[arg-type]
             workspace_root=workspace_root,
         )
         exp_dir = workspace_root / "expeditions" / config.name
@@ -106,11 +198,116 @@ class BuildOrchestrator:
             exp_dir / "budget.db",
         )
         self.scaling = ScalingManager(config.scaling)
+
+        # Create Archivist for curator cross-referencing and indexing
+        embedding_dims = self._get_embedding_dimensions()
+        self.archivist = Archivist(
+            workspace=workspace_root,
+            embedding_dimensions=embedding_dims,
+        )
+        self._embedding_client = self._create_embedding_client()
+
         self.task_runner = TaskRunner(
             workspace_root=workspace_root,
             tasks_dir=workspace_root / ".assistonauts" / "tasks",
+            agent_context={
+                "archivist": self.archivist,
+                "embedding_client": self._embedding_client,
+                "expedition_scope": config.scope.description,
+                "expedition_purpose": config.purpose,
+            },
         )
         self._iterations: list[BuildIteration] = []
+        self._seen_mission_ids: set[str] = set()
+
+    def _get_embedding_dimensions(self) -> int:
+        """Get embedding dimensions from workspace config, or default."""
+        try:
+            from assistonauts.archivist.embeddings import get_embedding_dimensions
+            from assistonauts.config.loader import load_config
+
+            app_config = load_config(self.workspace_root)
+            return get_embedding_dimensions(app_config.embedding)
+        except Exception:
+            return 3072
+
+    def _create_embedding_client(self) -> object | None:
+        """Create embedding client from workspace config, or None."""
+        try:
+            from assistonauts.archivist.embeddings import create_embedding_client
+            from assistonauts.config.loader import load_config
+
+            app_config = load_config(self.workspace_root)
+            return create_embedding_client(app_config.embedding)
+        except Exception:
+            return None
+
+    def _index_wiki_articles(self) -> None:
+        """Index all wiki articles so the Curator can find them.
+
+        Runs FTS indexing (and embedding indexing when an embedding client
+        is available) for every article in wiki/. Called before Refinement
+        iterations so the multi-pass retriever has data to work with.
+        """
+        wiki_dir = self.workspace_root / "wiki"
+        if not wiki_dir.exists():
+            return
+        articles = sorted(wiki_dir.rglob("*.md"))
+        if not articles:
+            return
+        indexed = 0
+        for article_path in articles:
+            rel_path = str(article_path.relative_to(self.workspace_root))
+            try:
+                if self._embedding_client is not None:
+                    changed = self.archivist.index_with_embeddings(
+                        rel_path, embedding_client=self._embedding_client
+                    )
+                else:
+                    changed = self.archivist.index(rel_path)
+                if changed:
+                    indexed += 1
+            except Exception as exc:
+                logger.warning("Failed to index %s: %s", rel_path, exc)
+        logger.info("Indexed %d wiki articles before Refinement", indexed)
+
+    def _deduplicate_mission_ids(
+        self,
+        missions: list[Mission],
+        dependencies: list[tuple[str, str]],
+    ) -> tuple[list[Mission], list[tuple[str, str]]]:
+        """Remap any mission IDs that collide with previously seen IDs.
+
+        The Captain may reuse IDs across iterations (e.g. mission-301 in
+        both Structuring and Refinement). Without dedup, the ledger's
+        INSERT OR REPLACE overwrites the earlier mission, corrupting data.
+        """
+        remap: dict[str, str] = {}
+        for mission in missions:
+            original_id = mission.mission_id
+            new_id = original_id
+            suffix = 1
+            while new_id in self._seen_mission_ids:
+                new_id = f"{original_id}-r{suffix}"
+                suffix += 1
+            if new_id != original_id:
+                remap[original_id] = new_id
+                mission.mission_id = new_id
+                logger.info(
+                    "Remapped duplicate mission ID: %s → %s",
+                    original_id,
+                    new_id,
+                )
+            self._seen_mission_ids.add(new_id)
+
+        if remap:
+            # Update dependency references to use new IDs
+            dependencies = [
+                (remap.get(dep, dep), remap.get(target, target))
+                for dep, target in dependencies
+            ]
+
+        return missions, dependencies
 
     @staticmethod
     def iteration_sequence() -> list[IterationPhase]:
@@ -136,9 +333,13 @@ class BuildOrchestrator:
             0,
         )
         prompt = self._build_prompt(phase)
-        response = self.captain.call_llm(
-            [{"role": "user", "content": prompt}],
-        )
+        set_trace_context(agent="captain", phase=phase.value, step="planning")
+        try:
+            response = self.captain.call_llm(
+                [{"role": "user", "content": prompt}],
+            )
+        finally:
+            clear_trace_context()
         # Record Captain planning tokens to budget tracker
         tokens_after = getattr(
             self.llm_client,
@@ -166,6 +367,12 @@ class BuildOrchestrator:
                 "the LLM response could not be parsed into a valid plan",
                 phase.value,
             )
+
+        # Deduplicate mission IDs — the Captain may reuse IDs across
+        # iterations, which corrupts the ledger (INSERT OR REPLACE).
+        # Remap collisions with a suffix before they enter the system.
+        missions, dependencies = self._deduplicate_mission_ids(missions, dependencies)
+
         graph = build_graph_from_plan(dependencies)
 
         iteration = BuildIteration(
@@ -284,49 +491,56 @@ class BuildOrchestrator:
         all_completed: set[str] = set()
         iteration_count = 0
 
-        if dry_run:
-            iteration = self.plan_iteration(IterationPhase.DISCOVERY)
-            result.iterations.append(iteration)
-            result.total_missions += iteration.missions_planned
+        try:
+            if dry_run:
+                iteration = self.plan_iteration(IterationPhase.DISCOVERY)
+                result.iterations.append(iteration)
+                result.total_missions += iteration.missions_planned
+                self._write_build_report(result)
+                return result
+
+            # Discovery always runs first
+            iteration_count += 1
+            self._run_and_record(
+                IterationPhase.DISCOVERY,
+                result,
+                all_completed,
+            )
+
+            # Structuring → Refinement cycles until exit condition
+            while iteration_count < max_iterations:
+                iteration_count += 1
+                has_work = self._run_and_record(
+                    IterationPhase.STRUCTURING,
+                    result,
+                    all_completed,
+                )
+                if not has_work:
+                    break
+
+                if iteration_count >= max_iterations:
+                    break
+
+                # Index compiled articles before Refinement so the
+                # Curator's multi-pass retriever can find them.
+                self._index_wiki_articles()
+
+                iteration_count += 1
+                has_work = self._run_and_record(
+                    IterationPhase.REFINEMENT,
+                    result,
+                    all_completed,
+                )
+                if not has_work:
+                    break
+
             self._write_build_report(result)
-            self.ledger.close()
-            self.budget.tracker.close()
-            return result
+        finally:
+            try:
+                self.ledger.close()
+            finally:
+                self.budget.tracker.close()
 
-        # Discovery always runs first
-        iteration_count += 1
-        self._run_and_record(
-            IterationPhase.DISCOVERY,
-            result,
-            all_completed,
-        )
-
-        # Structuring → Refinement cycles until exit condition
-        while iteration_count < max_iterations:
-            iteration_count += 1
-            has_work = self._run_and_record(
-                IterationPhase.STRUCTURING,
-                result,
-                all_completed,
-            )
-            if not has_work:
-                break
-
-            if iteration_count >= max_iterations:
-                break
-
-            iteration_count += 1
-            has_work = self._run_and_record(
-                IterationPhase.REFINEMENT,
-                result,
-                all_completed,
-            )
-            if not has_work:
-                break
-
-        self._write_build_report(result)
-        self.ledger.close()
-        self.budget.tracker.close()
         return result
 
     def _run_and_record(
@@ -373,6 +587,39 @@ class BuildOrchestrator:
         Retries transient failures up to max_retries times.
         Deterministic failures fail-fast with no retry.
         """
+        set_trace_context(
+            agent=mission.agent,
+            mission_id=mission.mission_id,
+            mission_type=mission.mission_type,
+            step="execution",
+        )
+        tracing = self.llm_client
+        if hasattr(tracing, "write_event"):
+            tracing.write_event(  # type: ignore[union-attr]
+                "mission_start",
+                mission_id=mission.mission_id,
+                agent=mission.agent,
+                mission_type=mission.mission_type,
+            )
+        try:
+            self._execute_mission_inner(mission, max_retries)
+        finally:
+            if hasattr(tracing, "write_event"):
+                tracing.write_event(  # type: ignore[union-attr]
+                    f"mission_{mission.status.value}",
+                    mission_id=mission.mission_id,
+                    agent=mission.agent,
+                    mission_type=mission.mission_type,
+                    status=mission.status.value,
+                )
+            clear_trace_context()
+
+    def _execute_mission_inner(
+        self,
+        mission: Mission,
+        max_retries: int,
+    ) -> None:
+        """Inner execution loop — separated for trace context management."""
         for attempt in range(max_retries + 1):
             if mission.status == MissionStatus.PENDING:
                 mission.start()
@@ -486,10 +733,16 @@ class BuildOrchestrator:
                         output_paths = [
                             str(p) for p in task_result.agent_output.output_paths
                         ]
+                    # Save execution context before verification
+                    # overwrites it with captain/verification context
+                    exec_context = get_trace_context()
                     verified = self._verify_mission(
                         mission,
                         task_output_paths=output_paths,
                     )
+                    # Restore execution context for lifecycle events
+                    clear_trace_context()
+                    set_trace_context(**exec_context)
 
                     # Record verification tokens (captain)
                     tokens_after = getattr(
@@ -508,16 +761,32 @@ class BuildOrchestrator:
                     if verified:
                         mission.complete(verified_by="captain")
                         if task_result.agent_output:
-                            mission.output_paths = [
-                                str(p.relative_to(self.workspace_root))
-                                for p in task_result.agent_output.output_paths
-                                if p.is_absolute()
-                            ]
+                            mission.output_paths = []
+                            for p in task_result.agent_output.output_paths:
+                                if not p.is_absolute():
+                                    mission.output_paths.append(str(p))
+                                elif p.resolve().is_relative_to(self.workspace_root):
+                                    mission.output_paths.append(
+                                        str(
+                                            p.resolve().relative_to(self.workspace_root)
+                                        )
+                                    )
+                                else:
+                                    mission.output_paths.append(str(p))
                     else:
+                        reason = (
+                            mission.last_rejection_reason
+                            or "acceptance criteria not met"
+                        )
+                        # Clean up output files so rejected content
+                        # doesn't persist in the knowledge base.
+                        self._cleanup_rejected_outputs(output_paths)
                         mission.fail(
                             error_type="deterministic",
                             error_message=(
-                                "Captain rejected: acceptance criteria not met"
+                                f"Captain rejected after "
+                                f"{self._MAX_VERIFY_ATTEMPTS} attempts: "
+                                f"{reason}"
                             ),
                             retries=0,
                         )
@@ -702,6 +971,23 @@ class BuildOrchestrator:
                 )
                 params["article_type"] = corrected
 
+    # Mission types where agent success=True is sufficient verification.
+    # Cross-referencing and ingestion are structural operations — the agent
+    # already validates its own output (e.g. no broken links, valid
+    # frontmatter). Captain verification adds cost without value here.
+    # Mission types where agent success=True is sufficient verification.
+    # - cross_reference/ingest_sources: structural ops, agent validates own output
+    # - query: explorer produces answers in memory, not files — file-based
+    #   Captain verification sees "no output" and rejects valid answers
+    _AUTO_APPROVE_TYPES: ClassVar[set[str]] = {
+        "cross_reference",
+        "ingest_sources",
+        "query",
+    }
+
+    # Maximum verification attempts before final rejection.
+    _MAX_VERIFY_ATTEMPTS: ClassVar[int] = 3
+
     def _verify_mission(
         self,
         mission: Mission,
@@ -713,37 +999,196 @@ class BuildOrchestrator:
         the Captain evaluates whether the acceptance criteria are met.
         Returns True if verified, False if rejected.
         Missions with no acceptance criteria are auto-approved.
+        Structural mission types (cross_reference, ingest_sources) are
+        auto-approved because the agent's own validation is sufficient.
+
+        Uses a retry-with-feedback loop: if the Captain rejects, the
+        rejection reason is fed back for reconsideration. This handles
+        LLM non-determinism where borderline articles are sometimes
+        rejected on first pass but accepted when the Captain reconsiders
+        with its own reasoning as context.
         """
         if not mission.acceptance_criteria:
+            return True
+
+        if mission.mission_type in self._AUTO_APPROVE_TYPES:
+            logger.info(
+                "Auto-approving %s (%s) — structural operation",
+                mission.mission_id,
+                mission.mission_type,
+            )
             return True
 
         criteria_text = "\n".join(f"- {c}" for c in mission.acceptance_criteria)
         output_text = "(no output details available)"
         if task_output_paths:
             output_text = "\n".join(f"- {p}" for p in task_output_paths)
-        prompt = (
-            "MISSION VERIFICATION\n\n"
-            f"Mission: {mission.mission_id}\n"
-            f"Agent: {mission.agent}\n"
-            f"Type: {mission.mission_type}\n\n"
-            f"Acceptance criteria:\n{criteria_text}\n\n"
-            f"Agent output files:\n{output_text}\n\n"
-            "The agent has declared this mission complete.\n"
-            "Based on the criteria and outputs above, is this "
-            "mission verified?\n\n"
-            "Respond with VERIFIED or REJECTED followed by a "
-            "brief reason."
-        )
-        response = self.captain.call_llm(
-            [{"role": "user", "content": prompt}],
-        )
-        return "VERIFIED" in response.upper()
+            snippets = self._read_output_snippets(task_output_paths)
+            if snippets:
+                output_text += "\n\nOutput content:\n" + snippets
+
+        # Build the conversation for multi-turn verification
+        messages: list[dict[str, str]] = [
+            {
+                "role": "user",
+                "content": (
+                    "MISSION VERIFICATION\n\n"
+                    f"Expedition purpose: {self.config.purpose}\n\n"
+                    f"Mission: {mission.mission_id}\n"
+                    f"Agent: {mission.agent}\n"
+                    f"Type: {mission.mission_type}\n\n"
+                    f"Acceptance criteria:\n{criteria_text}\n\n"
+                    f"Agent output files:\n{output_text}\n\n"
+                    "The agent has declared this mission complete.\n"
+                    "Review the output against the acceptance criteria. "
+                    "The criteria are aspirational guidelines for draft "
+                    "content — VERIFY if the output makes a reasonable "
+                    "attempt at meeting them given the available source "
+                    "material. Minor gaps or thin coverage are acceptable "
+                    "for first-draft articles. Only REJECT if the output "
+                    "is fundamentally off-topic, empty, or missing the "
+                    "majority of required elements.\n\n"
+                    "Respond with VERIFIED or REJECTED followed by a "
+                    "brief reason."
+                ),
+            },
+        ]
+
+        for attempt in range(self._MAX_VERIFY_ATTEMPTS):
+            set_trace_context(
+                agent="captain",
+                mission_id=mission.mission_id,
+                step="verification",
+                attempt=str(attempt + 1),
+            )
+            response = self.captain.call_llm(messages)
+
+            if response.upper().lstrip().startswith("VERIFIED"):
+                if attempt > 0:
+                    logger.info(
+                        "Verification succeeded on retry %d for %s",
+                        attempt,
+                        mission.mission_id,
+                    )
+                    if self.captain.logger:
+                        messages.append({"role": "assistant", "content": response})
+                        self.captain.logger.log(
+                            "verification_retried",
+                            mission_id=mission.mission_id,
+                            mission_type=mission.mission_type,
+                            agent=mission.agent,
+                            attempts=attempt + 1,
+                            conversation=[
+                                {"role": m["role"], "content": m["content"]}
+                                for m in messages
+                            ],
+                        )
+                return True
+
+            # Extract rejection reason for feedback
+            reason = response.strip()
+            logger.info(
+                "Verification attempt %d/%d rejected %s: %s",
+                attempt + 1,
+                self._MAX_VERIFY_ATTEMPTS,
+                mission.mission_id,
+                reason[:120],
+            )
+
+            if attempt < self._MAX_VERIFY_ATTEMPTS - 1:
+                # Feed rejection back for reconsideration
+                messages.append({"role": "assistant", "content": response})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Reconsider this rejection. The agent worked "
+                            "from limited source material and may not have "
+                            "had access to all the information the criteria "
+                            "request. The acceptance criteria describe the "
+                            "ideal output — partial coverage is expected "
+                            "for draft articles.\n\n"
+                            "Given that this is a first draft compiled from "
+                            "raw sources, does the output demonstrate a "
+                            "genuine, substantive attempt at the criteria? "
+                            "If so, respond VERIFIED. Only maintain REJECTED "
+                            "if the output is fundamentally inadequate.\n\n"
+                            "Respond with VERIFIED or REJECTED followed by "
+                            "a brief reason."
+                        ),
+                    },
+                )
+
+        # Log the full verification conversation for debugging
+        if self.captain.logger:
+            self.captain.logger.log(
+                "verification_rejected",
+                mission_id=mission.mission_id,
+                mission_type=mission.mission_type,
+                agent=mission.agent,
+                attempts=self._MAX_VERIFY_ATTEMPTS,
+                final_reason=reason,
+                conversation=[
+                    {"role": m["role"], "content": m["content"]} for m in messages
+                ],
+            )
+
+        # Store the final rejection reason on the mission for debugging
+        mission.last_rejection_reason = reason
+        return False
+
+    def _cleanup_rejected_outputs(self, output_paths: list[str]) -> None:
+        """Delete output files from a rejected mission.
+
+        When the Captain rejects a compiled article, the files must not
+        persist in the knowledge base — otherwise they get cross-referenced
+        and indexed as if they passed verification.
+        """
+        for path_str in output_paths:
+            p = Path(path_str)
+            if not p.is_absolute():
+                p = self.workspace_root / p
+            # Enforce workspace boundary — don't delete files outside workspace
+            if not p.resolve().is_relative_to(self.workspace_root):
+                logger.warning("Skipping cleanup outside workspace: %s", path_str)
+                continue
+            if p.exists() and p.is_file():
+                try:
+                    p.unlink()
+                    logger.info("Cleaned up rejected output: %s", path_str)
+                except OSError as exc:
+                    logger.warning("Failed to clean up %s: %s", path_str, exc)
+
+    def _read_output_snippets(
+        self,
+        output_paths: list[str],
+        max_lines: int = 80,
+    ) -> str:
+        """Read content snippets from output files for verification."""
+        parts: list[str] = []
+        for path_str in output_paths:
+            p = Path(path_str)
+            if not p.is_absolute():
+                p = self.workspace_root / p
+            if not p.exists() or not p.is_file():
+                continue
+            try:
+                lines = p.read_text(encoding="utf-8").splitlines()
+                snippet = "\n".join(lines[:max_lines])
+                if len(lines) > max_lines:
+                    snippet += f"\n... ({len(lines) - max_lines} more lines)"
+                parts.append(f"--- {p.name} ---\n{snippet}")
+            except (OSError, UnicodeDecodeError):
+                continue
+        return "\n\n".join(parts)
 
     def _build_prompt(self, phase: IterationPhase) -> str:
         """Build a phase-specific prompt for the Captain."""
         scope = self.config.scope
+        purpose = self.config.purpose
         scope_text = (
             f"Expedition: {self.config.name}\n"
+            f"Purpose: {purpose}\n"
             f"Scope: {scope.description}\n"
             f"Keywords: {', '.join(scope.keywords)}\n"
         )
@@ -753,12 +1198,12 @@ class BuildOrchestrator:
                 f"{scope_text}\n"
                 "ITERATION PHASE: Discovery\n\n"
                 "This is the first iteration. Plan Scout missions "
-                "to ingest all configured sources, and initial "
-                "Compiler missions for the first batch. "
-                "The Archivist will index articles automatically.\n\n"
+                "to ingest all configured sources into raw/. "
+                "Do NOT plan any other agent missions — "
+                "the Structuring iteration will handle "
+                "article compilation after ingestion is complete.\n\n"
                 f"Sources: {self._describe_sources()}\n\n"
-                "Create a mission plan with correct dependencies. "
-                "Scout missions should run first, then Compiler."
+                "Create a mission plan for Scout ingestion only."
             )
 
         elif phase == IterationPhase.STRUCTURING:
@@ -770,23 +1215,37 @@ class BuildOrchestrator:
             )
             prior_results = self._describe_prior_iterations()
             raw_listing = self._list_raw_articles()
+            compiler_plan = self._get_compiler_plan_text()
             return (
                 f"{scope_text}\n"
                 "ITERATION PHASE: Structuring\n\n"
                 f"Prior iteration results:\n{prior_results}\n\n"
-                "Review the compiled articles and their summaries "
-                "below. Identify foundational concepts that other "
-                "articles will reference. Sequence remaining Compiler "
-                "missions with correct dependency ordering — "
-                "foundational concepts first.\n\n"
                 f"Compiled article summaries:\n{summaries_text}\n\n"
-                f"Available raw source files (use these EXACT "
-                f"paths in compiler inputs.sources):\n"
-                f"{raw_listing}\n\n"
-                "Identify structural needs: are there concepts "
-                "that need dedicated entity pages or category "
-                "articles?\n\n"
-                "Create a mission plan for the remaining work."
+                f"Available raw source files:\n{raw_listing}\n\n"
+                + (
+                    f"The Compiler has proposed the following "
+                    f"editorial plan for the remaining sources. "
+                    f"Review this plan and create missions to "
+                    f"execute it. You may adjust sequencing and "
+                    f"dependency ordering, but defer to the "
+                    f"Compiler's editorial decisions (article "
+                    f"types, groupings, titles).\n\n"
+                    f"Compiler's editorial plan:\n{compiler_plan}"
+                    "\n\n"
+                    if compiler_plan
+                    else "No Compiler editorial plan available. "
+                    "Identify which raw sources still need "
+                    "compilation and create Compiler missions "
+                    "with correct dependency ordering.\n\n"
+                )
+                + "Create a mission plan for Compiler and Explorer "
+                "missions ONLY. Do NOT plan Curator cross-reference "
+                "missions here — cross-referencing runs in the "
+                "Refinement iteration after articles are compiled "
+                "and indexed. Your role is sequencing and "
+                "orchestration. The expedition purpose should guide "
+                "what missions are worth creating — only plan "
+                "articles that serve the stated purpose."
             )
 
         else:  # REFINEMENT
@@ -845,13 +1304,88 @@ class BuildOrchestrator:
             if source_dir.is_dir():
                 files = sorted(source_dir.glob(ls.pattern))
                 if files:
-                    file_list = ", ".join(str(f) for f in files)
+                    file_list = ", ".join(
+                        str(
+                            f.relative_to(self.workspace_root)
+                            if f.is_relative_to(self.workspace_root)
+                            else f.name
+                        )
+                        for f in files
+                    )
                     parts.append(f"Local ({len(files)} files): {file_list}")
                 else:
                     parts.append(f"Local: {ls.path} ({ls.pattern}) — no matching files")
             else:
                 parts.append(f"Local: {ls.path} ({ls.pattern})")
         return "; ".join(parts) if parts else "No sources configured"
+
+    def _get_compiler_plan_text(self) -> str:
+        """Run Compiler plan mode on uncompiled raw sources.
+
+        Returns a text summary of the Compiler's editorial proposal
+        (article types, groupings, titles, rationale) that the Captain
+        can use to create missions. Returns empty string if no raw
+        sources exist or if plan mode fails.
+        """
+        from assistonauts.agents.compiler import CompilerAgent
+
+        raw_dir = self.workspace_root / "raw" / "articles"
+        if not raw_dir.exists():
+            return ""
+        raw_files = sorted(raw_dir.glob("*.md"))
+        if not raw_files:
+            return ""
+
+        # Filter to sources not yet compiled (no wiki article references them)
+        manifest_path = self.workspace_root / "index" / "manifest.json"
+        compiled_sources: set[str] = set()
+        if manifest_path.exists():
+            import json as _json
+
+            manifest_data = _json.loads(manifest_path.read_text())
+            for _key, entry in manifest_data.items():
+                if isinstance(entry, dict):
+                    for ds in entry.get("downstream", []):
+                        compiled_sources.add(str(ds))
+        # Include sources that haven't been compiled yet
+        uncompiled = [
+            f
+            for f in raw_files
+            if str(f.relative_to(self.workspace_root)) not in compiled_sources
+        ]
+        # On first structuring, all are uncompiled; on later iterations,
+        # pass all raw files to let the compiler see full context
+        plan_sources = uncompiled if uncompiled else raw_files
+
+        set_trace_context(agent="compiler", step="plan_mode", phase="structuring")
+        try:
+            compiler = CompilerAgent(
+                llm_client=self.llm_client,
+                workspace_root=self.workspace_root,
+                expedition_scope=self.config.scope.description,
+                expedition_purpose=self.config.purpose,
+            )
+            plan = compiler.plan(plan_sources)
+        except Exception as exc:
+            logger.warning("Compiler plan mode failed: %s", exc)
+            return ""
+        finally:
+            clear_trace_context()
+
+        if not plan.articles:
+            return ""
+
+        # Format the plan as text for the Captain's prompt
+        lines: list[str] = []
+        for article in plan.articles:
+            src_names = ", ".join(p.name for p in article.source_paths)
+            lines.append(
+                f"- title: {article.title}\n"
+                f"  type: {article.article_type.value}\n"
+                f"  sources: [{src_names}]\n"
+                f"  rationale: {article.rationale}"
+            )
+        return "\n".join(lines)
 
     def _list_raw_articles(self) -> str:
         """List raw article files with workspace-relative paths."""
@@ -925,6 +1459,15 @@ class BuildOrchestrator:
         except OSError:
             logger.warning("Failed to write plan.yaml — continuing")
 
+    @staticmethod
+    def _count_unique_missions(result: BuildPhaseResult) -> int:
+        """Count unique mission IDs across all iterations."""
+        seen: set[str] = set()
+        for iteration in result.iterations:
+            for m in iteration.missions:
+                seen.add(m.mission_id)
+        return len(seen)
+
     def _write_build_report(self, result: BuildPhaseResult) -> None:
         """Write a build report to expeditions/<name>/build-report.md."""
         exp_dir = self.workspace_root / "expeditions" / self.config.name
@@ -933,6 +1476,7 @@ class BuildOrchestrator:
         lines = [
             f"# Build Report — {self.config.name}",
             "",
+            f"**Purpose:** {self.config.purpose}",
             f"**Scope:** {self.config.scope.description}",
             f"**Keywords:** {', '.join(self.config.scope.keywords)}",
             "",
@@ -942,12 +1486,19 @@ class BuildOrchestrator:
             "",
             "## Mission Summary",
             "",
-            f"- **Total missions:** {result.total_missions}",
-            f"- **Completed:** {result.total_completed}",
-            f"- **Failed:** {result.total_failed}",
-            f"- **Iterations:** {len(result.iterations)}",
-            "",
         ]
+        unique_count = self._count_unique_missions(result)
+        pending_count = unique_count - result.total_completed - result.total_failed
+        lines.extend(
+            [
+                f"- **Total missions:** {unique_count}",
+                f"- **Completed:** {result.total_completed}",
+                f"- **Failed:** {result.total_failed}",
+                f"- **Pending:** {pending_count}",
+                f"- **Iterations:** {len(result.iterations)}",
+                "",
+            ]
+        )
 
         # Knowledge base article counts
         wiki_dir = self.workspace_root / "wiki"
@@ -961,7 +1512,7 @@ class BuildOrchestrator:
             [
                 "## Knowledge Base",
                 "",
-                f"- **Articles:** {article_count}",
+                f"- **Articles:** {article_count} (draft — pending Inspector review)",
                 f"- **Total words:** {word_count:,}",
                 "",
             ]
@@ -1026,16 +1577,25 @@ class BuildOrchestrator:
         for it in result.iterations:
             status = "complete" if it.is_complete() else "partial"
             lines.append(f"### {it.phase.value.title()} ({status})")
+            it_pending = (
+                it.missions_planned - it.missions_completed - it.missions_failed
+            )
             lines.append(
                 f"- Planned: {it.missions_planned}, "
                 f"Completed: {it.missions_completed}, "
-                f"Failed: {it.missions_failed}"
+                f"Failed: {it.missions_failed}, "
+                f"Pending: {it_pending}"
             )
             for m in it.missions:
-                lines.append(
+                detail = (
                     f"  - [{m.mission_id}] {m.agent}/{m.mission_type}"
                     f" — {m.status.value}"
                 )
+                if m.status == MissionStatus.PENDING and it.graph:
+                    deps = it.graph.dependencies(m.mission_id)
+                    if deps:
+                        detail += f" (blocked by: {', '.join(sorted(deps))})"
+                lines.append(detail)
             lines.append("")
 
         try:
