@@ -181,9 +181,11 @@ Note: The codebase currently uses "mission" where it means "task" (the Phase 2 `
 7. Pause/resume support — `assistonauts pause` halts all agent activity, `assistonauts resume` restarts from current state
 8. CLI: `assistonauts station`, `assistonauts log`, `assistonauts pause`, `assistonauts resume`
 
+**Design intent — purpose convergence:** The build phase (Phase 5) achieves _coverage_ — all input sources compiled, cross-referenced, indexed. Purpose guides the editorial lens during build but does not determine when build is "done." Stationed mode is where _purpose convergence_ happens. The Explorer surfaces knowledge gaps when users ask questions the KB can't answer. These gaps become new Scout missions (web searches, supplementary sources) routed via the trigger system. The feedback loop is: Explorer query → gap identified → Scout ingests new source → Compiler compiles → Curator cross-references → Explorer can now answer. For bounded purposes ("document this specific book"), this loop converges quickly — a few supplementary sources fill the gaps, then the system goes quiet. For open-ended purposes ("comprehensive guide to treasure hunting"), the loop runs indefinitely as new sources keep appearing. The Captain's station log should track purpose-convergence metrics: Explorer query success rate, gap-to-resolution time, new source incorporation rate.
+
 **Why this is Phase 7:** Stationed mode orchestrates all agents in a continuous loop. Every component must be functional and validated before enabling autonomous operation. This is the capstone phase that transforms the framework from a manual tool into a self-maintaining system.
 
-**Validation:** Station agents on autotrader expedition, add new experiment results, observe the full pipeline fire automatically (Scout → Compiler → Archivist → Curator → Inspector). Verify station log produces accurate health metrics. Test pause/resume.
+**Validation:** Station agents on autotrader expedition, add new experiment results, observe the full pipeline fire automatically (Scout → Compiler → Archivist → Curator → Inspector). Verify station log produces accurate health metrics. Test pause/resume. Verify Explorer gap → Scout mission feedback loop converges for a bounded-purpose expedition.
 
 ---
 
