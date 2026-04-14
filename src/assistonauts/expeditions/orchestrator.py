@@ -975,9 +975,14 @@ class BuildOrchestrator:
     # Cross-referencing and ingestion are structural operations — the agent
     # already validates its own output (e.g. no broken links, valid
     # frontmatter). Captain verification adds cost without value here.
+    # Mission types where agent success=True is sufficient verification.
+    # - cross_reference/ingest_sources: structural ops, agent validates own output
+    # - query: explorer produces answers in memory, not files — file-based
+    #   Captain verification sees "no output" and rejects valid answers
     _AUTO_APPROVE_TYPES: ClassVar[set[str]] = {
         "cross_reference",
         "ingest_sources",
+        "query",
     }
 
     # Maximum verification attempts before final rejection.
@@ -1235,11 +1240,14 @@ class BuildOrchestrator:
                     "compilation and create Compiler missions "
                     "with correct dependency ordering.\n\n"
                 )
-                + "Create a mission plan. Remember: your role "
-                "is sequencing and orchestration. The expedition "
-                "purpose should guide what missions are worth "
-                "creating — only plan articles that serve the "
-                "stated purpose."
+                + "Create a mission plan for Compiler and Explorer "
+                "missions ONLY. Do NOT plan Curator cross-reference "
+                "missions here — cross-referencing runs in the "
+                "Refinement iteration after articles are compiled "
+                "and indexed. Your role is sequencing and "
+                "orchestration. The expedition purpose should guide "
+                "what missions are worth creating — only plan "
+                "articles that serve the stated purpose."
             )
 
         else:  # REFINEMENT
